@@ -1,0 +1,24 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "InvokeGeoAgentCoreRuntime",
+      "Effect": "Allow",
+      "Action": "bedrock-agentcore:InvokeAgentRuntime",
+      "Resource": [
+        "arn:aws:bedrock-agentcore:us-east-1:632930644527:runtime/geo_intelligence_agent-hyVRs073Db",
+        "arn:aws:bedrock-agentcore:us-east-1:632930644527:runtime/geo_intelligence_agent-hyVRs073Db/runtime-endpoint/DEFAULT"
+      ]
+    },
+    {
+      "Sid": "LambdaLogs",
+      "Effect": "Allow",
+      "Action": [
+        "logs:CreateLogGroup",
+        "logs:CreateLogStream",
+        "logs:PutLogEvents"
+      ],
+      "Resource": "arn:aws:logs:us-east-1:632930644527:*"
+    }
+  ]
+}

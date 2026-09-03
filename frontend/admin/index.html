@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="robots" content="noindex, nofollow" />
+    <title>Aperture Control · GEO 管理后台</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <svg class="icon-sprite" aria-hidden="true">
+      <symbol id="i-dashboard" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="2"></rect><rect x="14" y="3" width="7" height="7" rx="2"></rect><rect x="3" y="14" width="7" height="7" rx="2"></rect><rect x="14" y="14" width="7" height="7" rx="2"></rect></symbol>
+      <symbol id="i-content" viewBox="0 0 24 24"><path d="M6 3h9l3 3v15H6zM15 3v4h4M9 12h6M9 16h6M9 8h2"></path></symbol>
+      <symbol id="i-agent" viewBox="0 0 24 24"><rect x="4" y="7" width="16" height="12" rx="4"></rect><path d="M12 3v4M8 12h.01M16 12h.01M9 16h6M2 11h2M20 11h2"></path></symbol>
+      <symbol id="i-jobs" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"></circle><path d="M12 7v5l3 2"></path></symbol>
+      <symbol id="i-settings" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"></circle><path d="M19 14.5l2 1-2 3.5-2-1a8 8 0 0 1-3 1.7V22h-4v-2.3A8 8 0 0 1 7 18l-2 1-2-3.5 2-1A8 8 0 0 1 5 11L3 10l2-3.5 2 1A8 8 0 0 1 10 5.8V3h4v2.8A8 8 0 0 1 17 7.5l2-1L21 10l-2 1a8 8 0 0 1 0 3.5z"></path></symbol>
+      <symbol id="i-trend" viewBox="0 0 24 24"><path d="M3 17l6-6 4 4 7-8M15 7h5v5"></path></symbol>
+      <symbol id="i-users" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3"></circle><path d="M3 20v-2a6 6 0 0 1 12 0v2M16 6a3 3 0 0 1 0 6M17 15a5 5 0 0 1 4 5"></path></symbol>
+      <symbol id="i-citation" viewBox="0 0 24 24"><path d="M8 10H4V6h6v6a6 6 0 0 1-6 6M18 10h-4V6h6v6a6 6 0 0 1-6 6"></path></symbol>
+      <symbol id="i-wallet" viewBox="0 0 24 24"><path d="M4 6h14a2 2 0 0 1 2 2v11H5a3 3 0 0 1-3-3V6a3 3 0 0 1 3-3h12M15 11h5v5h-5a2.5 2.5 0 0 1 0-5z"></path></symbol>
+      <symbol id="i-play" viewBox="0 0 24 24"><path d="M8 5l11 7-11 7z"></path></symbol>
+      <symbol id="i-pause" viewBox="0 0 24 24"><path d="M8 5v14M16 5v14"></path></symbol>
+      <symbol id="i-more" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1"></circle><circle cx="12" cy="12" r="1"></circle><circle cx="19" cy="12" r="1"></circle></symbol>
+      <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M5 12h14M14 7l5 5-5 5"></path></symbol>
+      <symbol id="i-check" viewBox="0 0 24 24"><path d="M5 12l4 4L19 6"></path></symbol>
+      <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20 7v5h-5M4 17v-5h5M6.1 8a7 7 0 0 1 11.5-1.5L20 12M4 12l2.4 5.5A7 7 0 0 0 18 16"></path></symbol>
+    </svg>
+
+    <section class="login-screen" id="loginScreen" aria-labelledby="loginTitle">
+      <div class="login-atmosphere"><i></i><i></i><i></i></div>
+      <div class="login-panel">
+        <div class="login-brand">
+          <span class="brand-mark"><i></i><i></i><i></i></span>
+          <div><strong>APERTURE</strong><span>CONTROL CENTER</span></div>
+        </div>
+        <div class="login-copy">
+          <p>SECURE ADMIN ACCESS</p>
+          <h1 id="loginTitle">登录管理控制台</h1>
+          <span>管理 GEO 内容、研究 Agent、流量统计与发布流程。</span>
+        </div>
+        <form id="loginForm" class="login-form">
+          <label>
+            用户名
+            <input name="username" autocomplete="username" required autofocus />
+          </label>
+          <label>
+            密码
+            <input name="password" type="password" autocomplete="current-password" required />
+          </label>
+          <p class="login-error" id="loginError" role="alert"></p>
+          <button class="login-button" id="loginButton" type="submit">
+            登录控制台 <svg><use href="#i-arrow"></use></svg>
+          </button>
+        </form>
+        <div class="login-security">
+          <span><i></i> PostgreSQL 用户与加密会话</span>
+          <span>会话有效期 12 小时</span>
+        </div>
+      </div>
+    </section>
+
+    <div class="admin-shell" id="adminShell" hidden>
+      <aside class="sidebar">
+        <div class="brand">
+          <span class="brand-mark"><i></i><i></i><i></i></span>
+          <div><strong>APERTURE</strong><span>CONTROL CENTER</span></div>
+        </div>
+        <nav>
+          <p>工作台</p>
+          <button class="nav-item active" data-view="dashboard"><svg><use href="#i-dashboard"></use></svg><span>GEO 总览</span></button>
+          <button class="nav-item" data-view="content"><svg><use href="#i-content"></use></svg><span>内容管理</span><b id="contentCount">—</b></button>
+          <button class="nav-item" data-view="research"><svg><use href="#i-citation"></use></svg><span>研究输出</span><b id="researchCount">—</b></button>
+          <button class="nav-item" data-view="crawlers"><svg><use href="#i-agent"></use></svg><span>爬虫 Agent</span><i></i></button>
+          <button class="nav-item" data-view="jobs"><svg><use href="#i-jobs"></use></svg><span>任务记录</span></button>
+          <p class="nav-space">系统</p>
+          <button class="nav-item" data-view="settings"><svg><use href="#i-settings"></use></svg><span>数据与设置</span></button>
+        </nav>
+        <div class="runtime-card">
+          <div><i></i><span>AGENTCORE RUNTIME</span></div>
+          <strong>AWS 生产运行时正常</strong>
+          <small>Aurora Data API · GPT-5.6 Sol</small>
+        </div>
+        <button class="admin-profile" id="logoutButton" title="退出登录">
+          <span id="adminInitials">AD</span>
+          <div><strong id="adminDisplayName">Administrator</strong><small id="adminRole">Administrator</small></div>
+          <svg><use href="#i-arrow"></use></svg>
+        </button>
+      </aside>
+
+      <main>
+        <header class="topbar">
+          <div>
+            <p>APERTURE INTELLIGENCE</p>
+            <h1 id="pageTitle">GEO 运营总览</h1>
+          </div>
+          <div class="top-actions">
+            <span class="last-sync"><i></i> 数据已同步</span>
+            <button class="icon-button" id="refreshButton" title="刷新数据"><svg><use href="#i-refresh"></use></svg></button>
+            <button class="primary-button" id="runAllButton"><svg><use href="#i-play"></use></svg>运行全部 Agent</button>
+          </div>
+        </header>
+        <div id="adminApp">
+          <div class="loading"><span></span><p>正在读取运营数据</p></div>
+        </div>
+      </main>
+    </div>
+
+    <div class="toast" id="toast"><span><svg><use href="#i-check"></use></svg></span><div><strong id="toastTitle">操作成功</strong><small id="toastCopy"></small></div></div>
+
+    <div class="modal-backdrop" id="articleModal" aria-hidden="true">
+      <div class="modal">
+        <div class="modal-header">
+          <div><span>CONTENT WORKFLOW</span><h2>创建研究内容</h2></div>
+          <button type="button" id="closeArticleModal">×</button>
+        </div>
+        <form id="createArticleForm">
+          <label>研究标题<input name="title" required placeholder="输入清晰、可引用的标题" /></label>
+          <div class="form-grid">
+            <label>内容分类<select name="categorySlug" id="articleCategory" required></select></label>
+            <label>发布状态<select name="status"><option value="draft">草稿</option><option value="review">待审核</option><option value="published">立即发布</option></select></label>
+          </div>
+          <div class="form-grid">
+            <label>作者<input name="author" required placeholder="作者姓名" /></label>
+            <label>英文 Slug<input name="slug" placeholder="留空自动生成" pattern="[a-z0-9-]*" /></label>
+          </div>
+          <label>内容摘要<textarea name="dek" required rows="3" placeholder="说明核心判断及其重要性"></textarea></label>
+          <div class="modal-actions">
+            <button type="button" class="ghost-button" id="cancelArticleModal">取消</button>
+            <button type="submit" class="primary-button">保存到 PostgreSQL</button>
+          </div>
+        </form>
+      </div>
+    </div>
+    <script src="/app.js?v=20260903-10"></script>
+  </body>
+</html>

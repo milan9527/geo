@@ -1,0 +1,20 @@
+{
+  "name": "aperture-geo-agent-runtime",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "x402:wallet": "node x402_test.mjs --wallet-only",
+    "x402:probe": "node x402_test.mjs",
+    "x402:test": "node x402_test.mjs --pay"
+  },
+  "dependencies": {
+    "@aws-sdk/client-bedrock-agentcore": "^3.1125.0",
+    "@aws-sdk/client-bedrock-agentcore-control": "^3.1125.0",
+    "@openai/codex-sdk": "^0.152.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.9.0"
+  }
+}

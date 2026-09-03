@@ -1,0 +1,102 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "BedrockGPT56Sol",
+      "Effect": "Allow",
+      "Action": [
+        "bedrock:InvokeModel",
+        "bedrock:InvokeModelWithResponseStream"
+      ],
+      "Resource": [
+        "arn:aws:bedrock:us-east-1:632930644527:application-inference-profile/jiuyqf37o67n",
+        "arn:aws:bedrock:us-east-1::foundation-model/openai.gpt-5.6-sol",
+        "arn:aws:bedrock:us-east-2::foundation-model/openai.gpt-5.6-sol",
+        "arn:aws:bedrock:us-west-2::foundation-model/openai.gpt-5.6-sol"
+      ]
+    },
+    {
+      "Sid": "AuroraDataApi",
+      "Effect": "Allow",
+      "Action": [
+        "rds-data:BeginTransaction",
+        "rds-data:CommitTransaction",
+        "rds-data:RollbackTransaction",
+        "rds-data:ExecuteStatement",
+        "rds-data:BatchExecuteStatement"
+      ],
+      "Resource": "arn:aws:rds:us-east-1:632930644527:cluster:geo-intelligence-demo"
+    },
+    {
+      "Sid": "AuroraManagedCredentials",
+      "Effect": "Allow",
+      "Action": "secretsmanager:GetSecretValue",
+      "Resource": "arn:aws:secretsmanager:us-east-1:632930644527:secret:rds!cluster-5781692e-74a2-45db-a7a0-5c97200f9e7f-*"
+    },
+    {
+      "Sid": "AgentCoreBrowser",
+      "Effect": "Allow",
+      "Action": [
+        "bedrock-agentcore:GetBrowser",
+        "bedrock-agentcore:StartBrowserSession",
+        "bedrock-agentcore:StopBrowserSession",
+        "bedrock-agentcore:GetBrowserSession",
+        "bedrock-agentcore:ListBrowserSessions",
+        "bedrock-agentcore:ConnectBrowserAutomationStream",
+        "bedrock-agentcore:ConnectBrowserLiveViewStream",
+        "bedrock-agentcore:UpdateBrowserStream"
+      ],
+      "Resource": [
+        "arn:aws:bedrock-agentcore:us-east-1:632930644527:browser/*",
+        "arn:aws:bedrock-agentcore:us-east-1:632930644527:browser-custom/*"
+      ]
+    },
+    {
+      "Sid": "AgentCoreCodeInterpreter",
+      "Effect": "Allow",
+      "Action": [
+        "bedrock-agentcore:GetCodeInterpreter",
+        "bedrock-agentcore:StartCodeInterpreterSession",
+        "bedrock-agentcore:InvokeCodeInterpreter",
+        "bedrock-agentcore:StopCodeInterpreterSession",
+        "bedrock-agentcore:GetCodeInterpreterSession",
+        "bedrock-agentcore:ListCodeInterpreterSessions"
+      ],
+      "Resource": [
+        "arn:aws:bedrock-agentcore:us-east-1:632930644527:code-interpreter/*",
+        "arn:aws:bedrock-agentcore:us-east-1:632930644527:code-interpreter-custom/*"
+      ]
+    },
+    {
+      "Sid": "ECRPull",
+      "Effect": "Allow",
+      "Action": [
+        "ecr:GetDownloadUrlForLayer",
+        "ecr:BatchGetImage",
+        "ecr:BatchCheckLayerAvailability"
+      ],
+      "Resource": "arn:aws:ecr:us-east-1:632930644527:repository/geo-intelligence-agent"
+    },
+    {
+      "Sid": "ECRAuthorization",
+      "Effect": "Allow",
+      "Action": "ecr:GetAuthorizationToken",
+      "Resource": "*"
+    },
+    {
+      "Sid": "Observability",
+      "Effect": "Allow",
+      "Action": [
+        "logs:CreateLogGroup",
+        "logs:CreateLogStream",
+        "logs:PutLogEvents",
+        "logs:DescribeLogStreams",
+        "logs:DescribeLogGroups",
+        "xray:PutTraceSegments",
+        "xray:PutTelemetryRecords",
+        "cloudwatch:PutMetricData"
+      ],
+      "Resource": "*"
+    }
+  ]
+}

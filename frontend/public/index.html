@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="Aperture Intelligence 提供 AI、Agent、云计算、电商媒体与金融市场的深度研究。"
+    />
+    <meta name="robots" content="index, follow, max-snippet:-1" />
+    <title>Aperture Intelligence · 面向 AI 时代的技术与商业研究</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <svg class="icon-sprite" aria-hidden="true">
+      <symbol id="icon-arrow" viewBox="0 0 24 24">
+        <path d="M5 12h14M14 7l5 5-5 5"></path>
+      </symbol>
+      <symbol id="icon-search" viewBox="0 0 24 24">
+        <circle cx="11" cy="11" r="7"></circle><path d="M16 16l5 5"></path>
+      </symbol>
+      <symbol id="icon-menu" viewBox="0 0 24 24">
+        <path d="M4 7h16M4 12h16M4 17h16"></path>
+      </symbol>
+      <symbol id="icon-close" viewBox="0 0 24 24">
+        <path d="M6 6l12 12M18 6L6 18"></path>
+      </symbol>
+      <symbol id="icon-clock" viewBox="0 0 24 24">
+        <circle cx="12" cy="12" r="9"></circle><path d="M12 7v5l3 2"></path>
+      </symbol>
+      <symbol id="icon-source" viewBox="0 0 24 24">
+        <path d="M7 3h10v18H7zM10 7h4M10 11h4M10 15h4"></path>
+      </symbol>
+      <symbol id="icon-agent" viewBox="0 0 24 24">
+        <rect x="4" y="7" width="16" height="12" rx="4"></rect>
+        <path d="M12 3v4M8 12h.01M16 12h.01M9 16h6"></path>
+      </symbol>
+    </svg>
+
+    <div class="site-shell">
+      <header class="site-header">
+        <div class="header-inner">
+          <a class="brand" href="/" data-link aria-label="Aperture Intelligence 首页">
+            <span class="brand-mark"><i></i><i></i><i></i></span>
+            <span class="brand-type"><b>APERTURE</b><small>INTELLIGENCE</small></span>
+          </a>
+
+          <nav class="primary-nav" id="primaryNav" aria-label="研究分类"></nav>
+
+          <div class="header-actions">
+            <span class="freshness"><i></i> 持续更新</span>
+            <button class="search-button" id="searchButton" aria-label="搜索研究内容">
+              <svg><use href="#icon-search"></use></svg>
+            </button>
+            <button class="menu-button" id="menuButton" aria-label="打开导航">
+              <svg><use href="#icon-menu"></use></svg>
+            </button>
+          </div>
+        </div>
+      </header>
+
+      <main id="app" tabindex="-1">
+        <div class="page-loading">
+          <span></span>
+          <p>正在加载研究内容</p>
+        </div>
+      </main>
+
+      <footer class="site-footer">
+        <div class="footer-primary">
+          <div class="footer-brand">
+            <a class="brand light" href="/" data-link>
+              <span class="brand-mark"><i></i><i></i><i></i></span>
+              <span class="brand-type"><b>APERTURE</b><small>INTELLIGENCE</small></span>
+            </a>
+            <p>把复杂技术变化转化为可验证、可行动的专业判断。</p>
+          </div>
+          <div class="footer-links">
+            <div>
+              <strong>研究领域</strong>
+              <a href="/category/ai" data-link>AI 行业动向</a>
+              <a href="/category/agent" data-link>Agent 技术</a>
+              <a href="/category/cloud" data-link>云计算</a>
+            </div>
+            <div>
+              <strong>行业观察</strong>
+              <a href="/category/commerce" data-link>电商与媒体</a>
+              <a href="/category/finance" data-link>金融市场</a>
+              <a href="/methodology" data-link>研究方法</a>
+            </div>
+            <div>
+              <strong>机器访问</strong>
+              <span>结构化内容 API</span>
+              <span>来源与声明映射</span>
+              <span>x402 授权内容</span>
+            </div>
+          </div>
+        </div>
+        <div class="footer-bottom">
+          <span>© 2026 Aperture Intelligence</span>
+          <span>研究内容不构成投资建议 · Demo 数据</span>
+        </div>
+      </footer>
+    </div>
+
+    <div class="search-overlay" id="searchOverlay" aria-hidden="true">
+      <div class="search-panel">
+        <div class="search-top">
+          <div class="search-input-wrap">
+            <svg><use href="#icon-search"></use></svg>
+            <input id="searchInput" type="search" placeholder="搜索主题、公司、技术或研究观点…" autocomplete="off" />
+          </div>
+          <button id="closeSearch" aria-label="关闭搜索">
+            <svg><use href="#icon-close"></use></svg>
+          </button>
+        </div>
+        <div class="search-prompt" id="searchPrompt">
+          <span>热门主题</span>
+          <div>
+            <button data-search-term="Agent Runtime">Agent Runtime</button>
+            <button data-search-term="GEO">GEO</button>
+            <button data-search-term="云计算">云计算</button>
+            <button data-search-term="机器支付">机器支付</button>
+          </div>
+        </div>
+        <div class="search-results" id="searchResults"></div>
+      </div>
+    </div>
+
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+    <script src="/app.js?v=20260903-2"></script>
+  </body>
+</html>
