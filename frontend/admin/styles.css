@@ -165,6 +165,11 @@ main { grid-column: 2; min-width: 0; padding: 0 28px 34px; }
 .range-tabs button { min-width: 42px; height: 27px; border: 0; color: #7e8986; font-size: 8px; background: transparent; border-radius: 5px; }
 .range-tabs button.active { color: #1a302c; font-weight: 700; background: #fff; box-shadow: 0 2px 7px rgba(18,35,32,.08); }
 .metric-grid { display: grid; grid-template-columns: repeat(4,1fr); gap: 13px; }
+.ab-panel { margin-top: 13px; }
+.ab-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+.ab-grid > div { padding: 16px; background: #f7f9fb; border: 1px solid #e7ebef; border-radius: 6px; }
+.ab-grid span, .ab-grid small { display: block; color: #72808c; font-size: 10px; }
+.ab-grid strong { display: block; margin: 7px 0 4px; color: #172532; font-family: Georgia, serif; font-size: 24px; font-weight: 500; }
 .metric-card, .panel { background: rgba(255,255,255,.93); border: 1px solid var(--line); border-radius: 13px; box-shadow: 0 9px 25px rgba(16,34,42,.035); }
 .metric-card { position: relative; min-height: 145px; overflow: hidden; padding: 17px; }
 .metric-card-header { display: flex; align-items: center; gap: 9px; }
@@ -317,4 +322,4 @@ main { grid-column: 2; min-width: 0; padding: 0 28px 34px; }
 .modal-header{display:flex;align-items:flex-start;justify-content:space-between;padding-bottom:17px;border-bottom:1px solid var(--line)}.modal-header span{color:#159783;font-size:7px;font-weight:700;letter-spacing:1.3px}.modal-header h2{margin:5px 0 0;font-size:18px}.modal-header button{width:30px;height:30px;border:0;color:#64716d;font-size:19px;background:#edf1ef;border-radius:50%}
 .modal form{display:grid;gap:14px;margin-top:19px}.modal label{display:grid;gap:6px;color:#53605c;font-size:8px;font-weight:700}.modal input,.modal select,.modal textarea{width:100%;padding:10px 11px;border:1px solid #dce3df;outline:0;color:var(--ink);font-size:9px;background:#f9fbfa;border-radius:6px}.modal textarea{resize:vertical;line-height:1.6}.modal input:focus,.modal select:focus,.modal textarea:focus{border-color:#69c9bb;box-shadow:0 0 0 3px rgba(37,178,156,.09)}
 .form-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}.modal-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:5px}
-@media(max-width:1260px){.metric-grid{grid-template-columns:repeat(2,1fr)}.crawler-card-grid{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:1260px){.metric-grid,.ab-grid{grid-template-columns:repeat(2,1fr)}.crawler-card-grid{grid-template-columns:repeat(2,1fr)}}

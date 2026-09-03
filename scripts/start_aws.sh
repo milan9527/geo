@@ -11,6 +11,9 @@ fi
 
 set -a
 source .env.aws
+if [ -f ".env.deploy.aws" ]; then
+  source .env.deploy.aws
+fi
 set +a
 
 exec ./scripts/start.sh

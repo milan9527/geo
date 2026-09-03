@@ -6,8 +6,6 @@
 .venv
 __pycache__
 *.py[cod]
-agent_runtime
-aws_runtime
 aws_scheduler
 frontend
 infrastructure

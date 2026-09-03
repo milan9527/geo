@@ -20,6 +20,9 @@ agent_runtime     Codex SDK 爬虫生成器
 
 ## 本地 PostgreSQL 启动
 
+本地需要 Python 3.10+（推荐 3.13）、Node.js 24+ 和 Docker。启动脚本会优先选择
+Python 3.13；若检测到旧版 `.venv`，会先归档旧环境再重建。
+
 使用一键脚本创建 Python 虚拟环境、安装 `psycopg`、启动 PostgreSQL 并运行三个应用服务：
 
 ```bash
@@ -32,7 +35,8 @@ agent_runtime     Codex SDK 爬虫生成器
 - 管理后台：`http://127.0.0.1:4174`
 - API 健康检查：`http://127.0.0.1:8000/api/health`
 
-首次启动会创建 PostgreSQL Docker 持久化卷、自动建表，并写入演示内容和 120 天统计数据。
+首次启动会创建 PostgreSQL Docker 持久化卷、自动建表，并写入带官方来源的起始内容。
+流量、点击、Agent 访问、引用和支付统计只从真实 `traffic_events` 聚合，不生成模拟统计。
 数据库连接可通过 `DATABASE_URL` 覆盖，默认值为：
 
 ```text
@@ -131,7 +135,7 @@ Python 3.13 Alpine ARM64 镜像，以非 root UID `10001` 运行；当前 ECR �
 | Aurora | `geo-intelligence-demo-writer` | `db.serverless` 写节点 |
 | Secrets Manager | Aurora 托管主凭证 | 应用只保存 Secret ARN |
 | Bedrock | `geo-intelligence-sol` | GPT-5.6 Sol 应用推理配置 |
-| AgentCore Runtime | `geo_intelligence_agent` | HTTP、PUBLIC、ARM64、非 root、READY |
+| AgentCore Runtime | `geo_intelligence_agent` | HTTP、PUBLIC、ARM64、非 root、不可变 digest、READY |
 | AgentCore Browser | `geo_intelligence_browser` | PUBLIC、Web Bot Auth 签名已开启 |
 | AgentCore Code Interpreter | `geo_intelligence_code` | PUBLIC、READY |
 | AgentCore Payments | `DemoPaymentManager` | Stripe Privy 钱包 ACTIVE、Base Sepolia x402 已验证 |
@@ -140,7 +144,7 @@ Python 3.13 Alpine ARM64 镜像，以非 root UID `10001` 运行；当前 ECR �
 | ECS Fargate | `geo-intelligence-api` | ARM64、1/1 healthy、Container Insights |
 | ALB | `geo-intelligence-alb` | 仅允许 CloudFront origin-facing 网络 |
 | ECR | `geo-intelligence-api` | Alpine 镜像扫描 0 findings |
-| ECR | `geo-intelligence-agent` | 镜像扫描 0 Critical / 0 High / 0 Medium |
+| ECR | `geo-intelligence-agent` | 固定 digest 的 Alpine 镜像，扫描 0 findings |
 | IAM | `geo-intelligence-agentcore-role` | 项目资源范围内的 Bedrock、Data API、工具和日志权限 |
 | EventBridge Scheduler | `geo-intelligence-crawlers` | 6 条 UTC 计划，5 条启用、1 条暂停 |
 | Lambda | `geo-intelligence-scheduler-bridge` | ARM64 Python 3.13，Scheduler 到 AgentCore 桥接 |
@@ -156,6 +160,8 @@ AgentCore Runtime 支持：
 - `{"action":"health"}`：检查 Aurora 内容数、模型与工具配置
 - `{"action":"analyze", ...}`：通过 Bedrock GPT-5.6 Sol 生成专业研究简报
 - `{"action":"tool_config"}`：返回 Browser、Code Interpreter 与行业范围
+- `{"action":"x402_fetch","url":"..."}`：通过 AgentCore Payments 购买 x402 内容
+- `{"action":"scheduled_crawl","crawlerSlug":"..."}`：执行真实抓取、研究、证据审计和入库
 
 容器实现位于 [`aws_runtime`](./aws_runtime)，镜像固定为 ECR digest，避免 `latest`
 发生非预期漂移。
@@ -181,7 +187,24 @@ EventBridge Scheduler
 
 所有计划使用 UTC、关闭 Flexible Time Window、最多重试 2 次、事件最长保留 300 秒。
 重试失败后事件进入 SQS DLQ。管理后台暂停或恢复爬虫时，会同步更新对应 Scheduler
-计划状态。
+计划状态。Lambda bridge 超时为 900 秒，异步自动重试为 0；Scheduler 事件不会因为
+长时间的模型分析而重复执行、重复付费或重复生成文章。
+
+各 Agent 的生产职责与执行工具：
+
+| Agent | 主要职责 | 真实执行链路 |
+| --- | --- | --- |
+| Research Coder | AI、基础模型、Agent 与云端 AI 基础设施 | Codex SDK 生成 Python 爬虫 → Code Interpreter 执行官方 RSS 抓取 |
+| Render Scout | 电商、支付、媒体动态页面 | AgentCore Browser + Web Bot Auth → Playwright/CDP 渲染和正文提取 |
+| Market Signal | 科技股、利率与 AI 资本开支研判 | Codex SDK → Code Interpreter → FRED 官方时间序列与变化计算 |
+| Evidence Verifier | Agent 技术与全局证据治理 | 官方来源抓取 → 每次滚动复核最久未审计的 2 篇 → 必要时最多两轮修订和复核 |
+| Cloud Release Watch | 云厂商新服务和企业 AI 架构 | AgentCore Browser 抓取 AWS、Google Cloud 前端渲染页面 |
+| Commerce Feed Miner | 电商 Feed 与机器付费数据 | Codex SDK → Code Interpreter，并可执行受预算约束的 x402 支付抓取 |
+
+Codex 使用 Runtime 的 AWS 身份和 Amazon Bedrock provider 调用
+`openai.gpt-5.6-sol`。生成源码在执行前经过 AST 安全检查；网络域名、子进程、原始
+socket、动态代码执行、云元数据和宿主文件路径均受限制。源码、Codex thread、token
+用量、Code Interpreter/Browser session 和支付交易都写入 Aurora 供后台审计。
 
 重新创建或更新计划：
 
@@ -197,29 +220,30 @@ PYTHONPATH=. .venv/bin/python scripts/provision_eventbridge.py --preflight
 
 ### AgentCore Payments / x402 验证
 
-项目已绑定 AgentCore Payment Manager、Stripe Privy connector 和 embedded crypto
-wallet。端到端测试已验证以下链路：
+项目已绑定 AgentCore Payment Manager、Stripe Privy connector 和独立的买方/出版方
+embedded crypto wallet。公开内容对每篇文章提供同内容 A/B 两个 Agent 接口：
+
+```text
+A: GET /agent/v1/articles/{slug}       -> HTTP 200，开放机器内容
+B: GET /agent/v1/articles/{slug}/paid  -> HTTP 402，支付后返回同一深度内容
+```
+
+Variant B 使用 x402 v2 `exact` scheme、Base Sepolia USDC 和官方 facilitator。出版方
+钱包地址为 `0x23a885262A89c32eB582f4439184769dA22c467c`，默认价格为
+`0.002 USDC`。端到端链路已经验证：
 
 ```text
 GET paid resource -> HTTP 402 -> AgentCore ProcessPayment
 -> Stripe Privy wallet 签名 -> Base Sepolia 结算 -> HTTP 200 paid content
 ```
 
-测试使用 AWS AgentCore Payments Quick Start 指定的 Node4All 沙箱资源，报价为
-0.002 测试 USDC，并由 0.01 USD、15 分钟有效的 Payment Session 限制总支出。
-执行前先确认当前 AWS 身份和目标环境；以下最后一个命令会产生测试网支付：
+Commerce Feed Miner 已在正常研究任务中购买本站 Variant B 内容。已验证三笔
+`0.002 USDC` 交易，出版方钱包余额增加到 `0.006 USDC`；支付 Session、金额、
+HTTP 结果和交易哈希均写入 Aurora。代表性交易：
+`0x8257af51cd0b8a1efc97dd308f68f930e0ac38a07492ee5288d5141dc612f289`。
 
-```bash
-cd agent_runtime
-npm run x402:wallet
-npm run x402:probe
-npm run x402:test
-```
-
-`x402:wallet` 只读取钱包状态和余额，`x402:probe` 只检查 402 报价，`x402:test`
-才会创建 Payment Session 并支付。实现位于
-[`agent_runtime/x402_test.mjs`](./agent_runtime/x402_test.mjs)，支付签名和钱包凭据不会
-写入项目文件或命令输出。
+为防止无人值守持续扣费，Commerce Feed Miner 的 Scheduler 默认暂停；只有后台手动
+运行并明确传入 `allowPayment=true` 才会付款。其他五个 Agent 保持自动调度。
 
 ## 用户内容站
 
@@ -236,12 +260,14 @@ npm run x402:test
 GET /agent/v1/articles/agent-runtime-control-plane
 ```
 
-接口返回声明、章节、来源、许可模式和 x402 定价信息。
+接口返回声明、章节、来源、许可模式和 x402 定价信息。对应的 `/paid` 地址返回标准
+`PAYMENT-REQUIRED` 挑战头；完成支付后返回 Variant B 内容。
 
 ## 管理后台
 
 - 7/30/90 天 GEO、人类流量和 Agent 流量统计
 - AI 引用率、Agent 来源、x402 收入与实时事件
+- A/B 页面访问、402 挑战、支付转化率和按时间范围统计
 - 内容发布状态、权威度、引用次数和访问模式管理
 - 爬虫 Agent 启停、立即运行与批量调度
 - 研究输出：原始来源、结构化数据、分析过程、专业观点、结论和未来观察指标
@@ -255,8 +281,10 @@ GET /agent/v1/articles/agent-runtime-control-plane
    - 每条一手来源的发布者、标题、原始链接、发布日期、抓取时间和结构化数据；
    - 问题定义、数据对照、因果约束识别、产业映射等分析过程；
    - 核心观点、证据矩阵、深度行业分析、结论、风险边界和未来观察指标。
-4. 研究稿通过来源、章节和结论结构校验后自动发布，并立即出现在用户内容站对应分类、
-   文章详情页和面向 Agent 的机器可读内容接口中；后台“内容管理”仍可撤回或修改。
+4. 研究稿先接受独立证据审计。存在不支持的事实、引用或因果表述时，系统会按审计结果
+   自动修订并再次审计；只有二次审计通过的内容才自动发布，并立即出现在用户内容站
+   对应分类、文章详情页和面向 Agent 的机器可读内容接口中。未通过的稿件保留在后台
+   审核区，后台“内容管理”可以继续修改、发布或撤回。
 
 “任务记录”用于查看运行状态、工具会话、证据数量和错误信息，不是研究正文入口。
 来源无变化时，任务会标记为 `skipped` 并关联上一版研究稿，避免重复消耗模型。
@@ -300,6 +328,7 @@ PYTHONPATH=. .venv/bin/python scripts/create_admin_user.py \
 | `GET` | `/api/v1/articles/{slug}` | 完整文章 |
 | `GET` | `/api/v1/search?q=` | 内容搜索 |
 | `GET` | `/agent/v1/articles/{slug}` | Agent 机器表示 |
+| `GET` | `/agent/v1/articles/{slug}/paid` | x402 Variant B 机器表示 |
 | `POST` | `/api/admin/auth/login` | 管理员登录并创建 Cookie 会话 |
 | `GET` | `/api/admin/auth/me` | 获取当前登录用户 |
 | `POST` | `/api/admin/auth/logout` | 注销并删除服务端会话 |
@@ -318,7 +347,7 @@ Code Interpreter、Browser Tool、Bedrock、AgentCore Payments 与数据链路�
 [`agent_runtime/codex_crawler.ts`](./agent_runtime/codex_crawler.ts) 提供 Codex SDK
 站点专用爬虫生成与修复骨架。
 
-当前已真实部署 Aurora、Bedrock、AgentCore Runtime、Browser 和 Code Interpreter。
-AgentCore Payments 的 Stripe Privy 钱包和 Base Sepolia x402 购买链路也已完成真实测试网
-结算。面向公开用户的 Variant B 商户收款、生产钱包策略、回调签名校验、退款与主网启用
-仍属于后续生产集成；未完成这些配置前，页面不得宣称支持生产支付。
+当前已真实部署 Aurora、Bedrock、AgentCore Runtime、Browser、Code Interpreter、
+EventBridge Scheduler、ECS、S3/CloudFront OAC 和管理后台登录。Variant B 商户收款与
+AgentCore Payments 买方链路已完成 Base Sepolia 测试网真实结算。主网资金、退款、
+财务对账和监管流程不在 Demo 范围内，启用主网前必须另行审计。

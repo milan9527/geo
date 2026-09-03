@@ -19,6 +19,15 @@ from .auth import (
     verify_password,
 )
 from .database import USE_AURORA_DATA_API, connection, init_db, utc_now
+from .x402_payment import (
+    X402_NETWORK,
+    X402_PAY_TO_ADDRESS,
+    X402ConfigurationError,
+    error_instructions,
+    paid_price,
+    process_paid_request,
+    settle_paid_request,
+)
 
 
 ADMIN_KEY = os.environ.get("GEO_ADMIN_KEY", "geo-admin-demo")
@@ -90,7 +99,13 @@ def sync_eventbridge_schedule(slug: str, status: str) -> str | None:
     return request["State"]
 
 
-def invoke_crawler_bridge(slug: str, *, asynchronous: bool = False) -> dict:
+def invoke_crawler_bridge(
+    slug: str,
+    *,
+    asynchronous: bool = False,
+    allow_payment: bool = False,
+    force_analysis: bool = False,
+) -> dict:
     client = boto3.client("lambda", region_name=AWS_REGION)
     response = client.invoke(
         FunctionName=SCHEDULER_BRIDGE_FUNCTION,
@@ -99,6 +114,9 @@ def invoke_crawler_bridge(slug: str, *, asynchronous: bool = False) -> dict:
             {
                 "crawlerSlug": slug,
                 "scheduledTime": "admin-manual",
+                "allowPayment": allow_payment,
+                "forceAnalysis": force_analysis,
+                "overridePaused": True,
             }
         ).encode("utf-8"),
     )
@@ -150,7 +168,14 @@ class ApiHandler(BaseHTTPRequestHandler):
         allowed = origin if origin.startswith(("http://127.0.0.1:", "http://localhost:")) else "*"
         self.send_header("Access-Control-Allow-Origin", allowed)
         self.send_header("Access-Control-Allow-Methods", "GET, POST, PATCH, OPTIONS")
-        self.send_header("Access-Control-Allow-Headers", "Content-Type, X-Admin-Key")
+        self.send_header(
+            "Access-Control-Allow-Headers",
+            "Content-Type, X-Admin-Key, X-Agent-Name, PAYMENT-SIGNATURE, X-PAYMENT",
+        )
+        self.send_header(
+            "Access-Control-Expose-Headers",
+            "PAYMENT-REQUIRED, PAYMENT-RESPONSE",
+        )
         if allowed != "*":
             self.send_header("Access-Control-Allow-Credentials", "true")
         self.send_header("Vary", "Origin, User-Agent")
@@ -194,8 +219,12 @@ class ApiHandler(BaseHTTPRequestHandler):
         if path == "/api/v1/search":
             self._search(query)
             return
+        paid_article_match = re.fullmatch(r"/agent/v1/articles/([^/]+)/paid", path)
+        if paid_article_match:
+            self._agent_article(paid_article_match.group(1), paid=True)
+            return
         if path.startswith("/agent/v1/articles/"):
-            self._agent_article(path.split("/")[-1])
+            self._agent_article(path.split("/")[-1], paid=False)
             return
         if path == "/api/admin/auth/me":
             self._auth_me()
@@ -301,7 +330,7 @@ class ApiHandler(BaseHTTPRequestHandler):
         if crawler_match:
             if not self._require_admin():
                 return
-            self._run_crawler(int(crawler_match.group(1)))
+            self._run_crawler(int(crawler_match.group(1)), payload)
             return
         if path == "/api/admin/crawlers/run-all":
             if not self._require_admin():
@@ -670,7 +699,32 @@ class ApiHandler(BaseHTTPRequestHandler):
         response["related"] = [public_article(dict(item)) for item in related]
         self._json(response)
 
-    def _agent_article(self, slug: str) -> None:
+    def _record_event(
+        self,
+        conn,
+        *,
+        event_type: str,
+        article_id: int,
+        agent_name: str,
+        metadata: dict,
+    ) -> None:
+        conn.execute(
+            """
+            INSERT INTO traffic_events(
+                event_type, visitor_type, agent_name, article_id, occurred_at, metadata
+            )
+            VALUES(%s, 'agent', %s, %s, %s, %s)
+            """,
+            (
+                event_type,
+                agent_name,
+                article_id,
+                utc_now(),
+                json.dumps(metadata, ensure_ascii=False),
+            ),
+        )
+
+    def _agent_article(self, slug: str, *, paid: bool) -> None:
         with connection() as conn:
             row = conn.execute(
                 """
@@ -691,18 +745,11 @@ class ApiHandler(BaseHTTPRequestHandler):
                     (row["id"],),
                 ).fetchall()
             ]
-            conn.execute(
-                """
-                INSERT INTO traffic_events(event_type, visitor_type, agent_name, article_id, occurred_at, metadata)
-                VALUES('agent_view', 'agent', %s, %s, %s, %s)
-                """,
-                (
-                    identify_visitor(self.headers.get("User-Agent", ""))[1] or "Machine client",
-                    row["id"],
-                    utc_now(),
-                    json.dumps({"endpoint": "agent"}, ensure_ascii=False),
-                ),
-            )
+        agent_name = (
+            identify_visitor(self.headers.get("User-Agent", ""))[1]
+            or self.headers.get("X-Agent-Name")
+            or "Machine client"
+        )[:120]
         sections = parse_json(row["body_json"], [])
         claims = []
         for section in sections:
@@ -728,17 +775,144 @@ class ApiHandler(BaseHTTPRequestHandler):
             "citations": sources,
             "license": {
                 "model": row["access_model"],
-                "price": row["agent_price"],
+                "price": paid_price(row["agent_price"]),
                 "currency": "USDC",
-                "paymentProtocol": "x402" if row["agent_price"] else None,
+                "paymentProtocol": "x402",
+                "network": X402_NETWORK,
+                "payTo": X402_PAY_TO_ADDRESS,
+                "variants": {
+                    "A": f"/agent/v1/articles/{row['slug']}",
+                    "B": f"/agent/v1/articles/{row['slug']}/paid",
+                },
             },
+            "accessVariant": "B" if paid else "A",
             "contentPolicy": {
                 "citationAllowed": True,
                 "attributionRequired": True,
                 "trainingUse": "contact publisher",
             },
         }
-        self._json(payload, extra_headers={"X-Robots-Tag": "index, follow"})
+        if not paid:
+            with connection() as conn:
+                self._record_event(
+                    conn,
+                    event_type="agent_view",
+                    article_id=row["id"],
+                    agent_name=agent_name,
+                    metadata={
+                        "endpoint": "agent",
+                        "variant": "A",
+                        "access": "free",
+                    },
+                )
+            self._json(payload, extra_headers={"X-Robots-Tag": "index, follow"})
+            return
+
+        paid_path = f"/agent/v1/articles/{row['slug']}/paid"
+        try:
+            payment_request = process_paid_request(
+                self,
+                path=paid_path,
+                title=row["title"],
+                configured_price=row["agent_price"],
+            )
+        except Exception as error:
+            with connection() as conn:
+                self._record_event(
+                    conn,
+                    event_type="x402_service_error",
+                    article_id=row["id"],
+                    agent_name=agent_name,
+                    metadata={"variant": "B", "error": str(error)[:500]},
+                )
+            self._send_instructions(error_instructions(error))
+            return
+
+        result = payment_request.process_result
+        if result.type != "payment-verified":
+            supplied_payment = bool(
+                self.headers.get("PAYMENT-SIGNATURE") or self.headers.get("X-PAYMENT")
+            )
+            with connection() as conn:
+                self._record_event(
+                    conn,
+                    event_type=(
+                        "x402_verification_failed"
+                        if supplied_payment
+                        else "x402_challenge"
+                    ),
+                    article_id=row["id"],
+                    agent_name=agent_name,
+                    metadata={
+                        "variant": "B",
+                        "priceUsd": payment_request.price_usd,
+                        "network": X402_NETWORK,
+                    },
+                )
+            self._send_instructions(
+                result.response
+                or error_instructions(X402ConfigurationError("Payment required"))
+            )
+            return
+
+        settlement = settle_paid_request(payment_request, response_body=payload)
+        if not settlement.success:
+            with connection() as conn:
+                self._record_event(
+                    conn,
+                    event_type="x402_settlement_failed",
+                    article_id=row["id"],
+                    agent_name=agent_name,
+                    metadata={
+                        "variant": "B",
+                        "priceUsd": payment_request.price_usd,
+                        "network": settlement.network or X402_NETWORK,
+                        "error": (settlement.error_reason or "")[:500],
+                    },
+                )
+            self._send_instructions(
+                settlement.response
+                or error_instructions(
+                    RuntimeError(settlement.error_reason or "Settlement failed")
+                )
+            )
+            return
+
+        requirements = result.payment_requirements
+        payload["settlement"] = {
+            "success": True,
+            "transactionHash": settlement.transaction,
+            "network": settlement.network or requirements.network,
+            "payer": settlement.payer,
+            "amountBaseUnits": requirements.amount,
+            "amountUsd": payment_request.price_usd,
+        }
+        with connection() as conn:
+            self._record_event(
+                conn,
+                event_type="x402_payment",
+                article_id=row["id"],
+                agent_name=agent_name,
+                metadata={
+                    "variant": "B",
+                    "priceUsd": payment_request.price_usd,
+                    "amountUsd": payment_request.price_usd,
+                    "amountBaseUnits": requirements.amount,
+                    "asset": requirements.asset,
+                    "network": settlement.network or requirements.network,
+                    "payer": settlement.payer,
+                    "payTo": requirements.pay_to,
+                    "transactionHash": settlement.transaction,
+                },
+            )
+        self._json(
+            payload,
+            extra_headers={
+                **settlement.headers,
+                "X-Robots-Tag": "noindex, noarchive",
+                "Cache-Control": "private, no-store",
+            },
+        )
 
     def _search(self, query: dict) -> None:
         term = query.get("q", [""])[0].strip()
@@ -790,30 +964,18 @@ class ApiHandler(BaseHTTPRequestHandler):
         start = (date.today() - timedelta(days=days - 1)).isoformat()
         previous_start = (date.today() - timedelta(days=days * 2 - 1)).isoformat()
         with connection() as conn:
-            daily = [
+            events = [
                 dict(row)
                 for row in conn.execute(
-                    "SELECT * FROM analytics_daily WHERE day >= %s ORDER BY day", (start,)
+                    """
+                    SELECT event_type, visitor_type, agent_name, occurred_at, metadata
+                    FROM traffic_events
+                    WHERE occurred_at >= %s
+                    ORDER BY occurred_at
+                    """,
+                    (previous_start,),
                 ).fetchall()
             ]
-            current = conn.execute(
-                """
-                SELECT SUM(human_views) human, SUM(agent_views) agent,
-                       SUM(citations) citations, SUM(clicks) clicks,
-                       SUM(payments) payments, SUM(revenue) revenue
-                FROM analytics_daily WHERE day >= %s
-                """,
-                (start,),
-            ).fetchone()
-            previous = conn.execute(
-                """
-                SELECT SUM(human_views) human, SUM(agent_views) agent,
-                       SUM(citations) citations, SUM(clicks) clicks,
-                       SUM(payments) payments, SUM(revenue) revenue
-                FROM analytics_daily WHERE day >= %s AND day < %s
-                """,
-                (previous_start, start),
-            ).fetchone()
             status_counts = {
                 row["status"]: row["count"]
                 for row in conn.execute(
@@ -828,32 +990,108 @@ class ApiHandler(BaseHTTPRequestHandler):
                 FROM crawler_agents
                 """
             ).fetchone()
-            sources = [
-                {"name": name, "value": value}
-                for name, value in [
-                    ("OpenAI Crawler", 31.4),
-                    ("ClaudeBot", 24.8),
-                    ("PerplexityBot", 18.2),
-                    ("Google-Extended", 14.6),
-                    ("其他 Agent", 11.0),
-                ]
-            ]
+        agent_event_types = {
+            "agent_view",
+            "x402_challenge",
+            "x402_payment",
+            "x402_verification_failed",
+            "x402_settlement_failed",
+        }
+
+        def empty_totals() -> dict[str, float]:
+            return {
+                "human": 0,
+                "agent": 0,
+                "citations": 0,
+                "clicks": 0,
+                "payments": 0,
+                "revenue": 0.0,
+                "variantA": 0,
+                "variantB": 0,
+                "challenges": 0,
+            }
+
+        def add_event(totals: dict[str, float], event: dict) -> None:
+            event_type = event["event_type"]
+            metadata = parse_json(event["metadata"], {})
+            if event_type == "human_view":
+                totals["human"] += 1
+            if event_type in agent_event_types:
+                totals["agent"] += 1
+            if event_type == "citation":
+                totals["citations"] += 1
+            if event_type == "human_click":
+                totals["clicks"] += 1
+            if event_type == "x402_payment":
+                totals["payments"] += 1
+                totals["revenue"] += float(
+                    metadata.get("amountUsd", metadata.get("amount", 0)) or 0
+                )
+            if metadata.get("variant") == "A" or (
+                event_type == "agent_view" and not metadata.get("variant")
+            ):
+                totals["variantA"] += 1
+            if metadata.get("variant") == "B":
+                totals["variantB"] += 1
+            if event_type == "x402_challenge":
+                totals["challenges"] += 1
+
+        current = empty_totals()
+        previous = empty_totals()
+        daily_map = {
+            (date.today() - timedelta(days=offset)).isoformat(): empty_totals()
+            for offset in range(days - 1, -1, -1)
+        }
+        source_counts: dict[str, int] = {}
+        for event in events:
+            event_day = str(event["occurred_at"])[:10]
+            target = current if event_day >= start else previous
+            add_event(target, event)
+            if event_day in daily_map:
+                add_event(daily_map[event_day], event)
+            if event_day >= start and event["event_type"] in agent_event_types:
+                name = event["agent_name"] or "Machine client"
+                source_counts[name] = source_counts.get(name, 0) + 1
+
+        daily = [
+            {
+                "day": day,
+                "human_views": int(values["human"]),
+                "agent_views": int(values["agent"]),
+                "citations": int(values["citations"]),
+                "clicks": int(values["clicks"]),
+                "payments": int(values["payments"]),
+                "revenue": round(values["revenue"], 6),
+            }
+            for day, values in daily_map.items()
+        ]
+        source_total = sum(source_counts.values())
+        sources = [
+            {
+                "name": name,
+                "count": count,
+                "value": round(count / max(1, source_total) * 100, 1),
+            }
+            for name, count in sorted(
+                source_counts.items(), key=lambda item: item[1], reverse=True
+            )[:5]
+        ]
 
         def growth(key: str) -> float:
-            current_value = current[key] or 0
-            previous_value = previous[key] or 0
+            current_value = current[key]
+            previous_value = previous[key]
             return round((current_value - previous_value) / previous_value * 100, 1) if previous_value else 0
 
         self._json(
             {
                 "range": days,
                 "summary": {
-                    "humanViews": current["human"] or 0,
-                    "agentViews": current["agent"] or 0,
-                    "citations": current["citations"] or 0,
-                    "clicks": current["clicks"] or 0,
-                    "payments": current["payments"] or 0,
-                    "revenue": round(current["revenue"] or 0, 2),
+                    "humanViews": int(current["human"]),
+                    "agentViews": int(current["agent"]),
+                    "citations": int(current["citations"]),
+                    "clicks": int(current["clicks"]),
+                    "payments": int(current["payments"]),
+                    "revenue": round(current["revenue"], 6),
                     "agentShare": round(
                         (current["agent"] or 0)
                         / max(1, (current["human"] or 0) + (current["agent"] or 0))
@@ -865,6 +1103,19 @@ class ApiHandler(BaseHTTPRequestHandler):
                 "growth": {key: growth(key) for key in ("human", "agent", "citations", "revenue")},
                 "daily": daily,
                 "agentSources": sources,
+                "abTest": {
+                    "variantAViews": int(current["variantA"]),
+                    "variantBViews": int(current["variantB"]),
+                    "challenges": int(current["challenges"]),
+                    "payments": int(current["payments"]),
+                    "conversionRate": round(
+                        current["payments"]
+                        / max(1, current["challenges"])
+                        * 100,
+                        1,
+                    ),
+                    "revenue": round(current["revenue"], 6),
+                },
                 "content": status_counts,
                 "crawlers": {
                     "total": agents["total"] or 0,
@@ -925,7 +1176,12 @@ class ApiHandler(BaseHTTPRequestHandler):
                 ORDER BY j.started_at DESC LIMIT 20
                 """
             ).fetchall()
-        self._json([dict(row) for row in rows])
+        result = []
+        for row in rows:
+            item = dict(row)
+            item["toolTrace"] = parse_json(item.pop("tool_trace_json", "{}"), {})
+            result.append(item)
+        self._json(result)
 
     def _admin_research(self) -> None:
         with connection() as conn:
@@ -948,6 +1204,10 @@ class ApiHandler(BaseHTTPRequestHandler):
                 item = dict(run)
                 item["analysisProcess"] = parse_json(
                     item.pop("analysis_process_json"), []
+                )
+                item["toolTrace"] = parse_json(item.pop("tool_trace_json"), {})
+                item["verification"] = parse_json(
+                    item.pop("verification_json"), {}
                 )
                 item["sections"] = parse_json(item.pop("body_json"), [])
                 item["evidence"] = [
@@ -988,6 +1248,8 @@ class ApiHandler(BaseHTTPRequestHandler):
             item["analysisProcess"] = parse_json(
                 item.pop("analysis_process_json"), []
             )
+            item["toolTrace"] = parse_json(item.pop("tool_trace_json"), {})
+            item["verification"] = parse_json(item.pop("verification_json"), {})
             item["sections"] = parse_json(item.pop("body_json"), [])
             item["evidence"] = [
                 dict(evidence)
@@ -1201,7 +1463,7 @@ class ApiHandler(BaseHTTPRequestHandler):
             )
         self._json({"ok": True, "key": key, "value": payload["value"]})
 
-    def _run_crawler(self, crawler_id: int) -> None:
+    def _run_crawler(self, crawler_id: int, payload: dict) -> None:
         now = utc_now()
         with connection() as conn:
             crawler = conn.execute(
@@ -1212,7 +1474,11 @@ class ApiHandler(BaseHTTPRequestHandler):
                 return
         if USE_AURORA_DATA_API:
             try:
-                result = invoke_crawler_bridge(crawler["slug"])
+                result = invoke_crawler_bridge(
+                    crawler["slug"],
+                    allow_payment=bool(payload.get("allowPayment")),
+                    force_analysis=bool(payload.get("forceAnalysis")),
+                )
             except Exception as error:
                 self._json(
                     {"error": "AgentCore invocation failed", "detail": str(error)},
@@ -1337,9 +1603,33 @@ class ApiHandler(BaseHTTPRequestHandler):
         self.send_response(status)
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Content-Length", str(len(body)))
-        self.send_header("Cache-Control", "no-store")
+        if not extra_headers or not any(
+            key.lower() == "cache-control" for key in extra_headers
+        ):
+            self.send_header("Cache-Control", "no-store")
         if extra_headers:
             for key, value in extra_headers.items():
+                self.send_header(key, value)
+        self.end_headers()
+        self.wfile.write(body)
+
+    def _send_instructions(self, instructions) -> None:
+        payload = instructions.body
+        if instructions.is_html:
+            body = (
+                payload.encode("utf-8")
+                if isinstance(payload, str)
+                else bytes(payload or b"")
+            )
+            content_type = "text/html; charset=utf-8"
+        else:
+            body = json.dumps(payload or {}, ensure_ascii=False).encode("utf-8")
+            content_type = "application/json; charset=utf-8"
+        self.send_response(instructions.status)
+        self.send_header("Content-Type", content_type)
+        self.send_header("Content-Length", str(len(body)))
+        for key, value in instructions.headers.items():
+            if key.lower() not in {"content-type", "content-length"}:
                 self.send_header(key, value)
         self.end_headers()
         self.wfile.write(body)

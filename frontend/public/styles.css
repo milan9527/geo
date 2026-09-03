@@ -475,6 +475,8 @@ main { min-height: 70vh; }
 .machine-card-header svg { width: 15px; }
 .machine-card p { margin: 10px 0 14px; color: #8fa2ad; font-size: 9px; line-height: 1.65; }
 .machine-card button { width: 100%; padding: 9px; border: 1px solid rgba(104,219,202,.24); color: #80ded0; font-size: 8px; background: rgba(74,195,177,.07); border-radius: 4px; }
+.machine-card button + button { margin-top: 8px; }
+.machine-card .paid-machine-url { color: #071b23; background: #72dfcf; border-color: #72dfcf; }
 .source-list { margin-top: 32px; }
 .source-list h3 { margin: 0 0 12px; font-size: 11px; }
 .source-item { display: block; padding: 12px 0; border-top: 1px solid #e3e7e5; }

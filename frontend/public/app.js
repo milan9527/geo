@@ -315,13 +315,14 @@ async function renderArticle(slug) {
                 <div class="authority-meter"><div><span style="width:${article.authorityScore}%"></span></div><small>来源、时效、专业度综合评分</small></div>
                 <div class="fact-row"><span>AI 引用</span><b>${formatNumber(article.citationCount)}</b></div>
                 <div class="fact-row"><span>证据来源</span><b>${article.sources.length} 个</b></div>
-                <div class="fact-row"><span>访问模式</span><b>${article.accessModel === "open" ? "开放" : "开放 + x402"}</b></div>
+                <div class="fact-row"><span>访问模式</span><b>开放 A 页 + x402 B 页</b></div>
                 <div class="fact-row"><span>最后更新</span><b>${formatDate(article.updatedAt)}</b></div>
               </div>
               <div class="machine-card">
                 <div class="machine-card-header"><svg><use href="#icon-agent"></use></svg> AGENT-READY CONTENT</div>
-                <p>获取包含声明、来源、实体与许可信息的机器可读版本。</p>
-                <button data-machine-url="${API}/agent/v1/articles/${article.slug}">复制 Agent API 地址</button>
+                <p>同一研究提供开放 A 页和由 Stripe Privy 收款钱包结算的 x402 B 页，用于真实 GEO 与付费转化对比。</p>
+                <button data-machine-url="${API}/agent/v1/articles/${article.slug}">复制开放 A 页地址</button>
+                <button class="paid-machine-url" data-machine-url="${API}/agent/v1/articles/${article.slug}/paid">复制 x402 B 页地址 · $${Number(article.agentPrice > 0 ? article.agentPrice : 0.002).toFixed(3)}</button>
               </div>
               <div class="source-list">
                 <h3>主要来源</h3>

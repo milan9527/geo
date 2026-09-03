@@ -11,7 +11,7 @@ Lambda Scheduler Bridge（已部署）
         v
 AgentCore Runtime — GEO Orchestrator（已部署）
         |
-        +-- Codex SDK worker（代码骨架）
+        +-- Codex SDK worker（已部署）
         |     生成与修复站点专用爬虫程序
         |     输出 CrawlPlan + executable artifact
         |
@@ -41,7 +41,7 @@ GEO Publisher
         |
         +-- Variant A: 开放页面 + JSON-LD + 引用块
         +-- Variant B: HTTP 402 + x402 payment requirements
-                      Stripe / Privy wallet（测试网购买已验证）
+                      Stripe / Privy 独立买方与出版方钱包（已验证）
         |
         v
 Event stream -> traffic attribution -> A/B metrics -> dashboard
@@ -49,8 +49,9 @@ Event stream -> traffic attribution -> A/B metrics -> dashboard
 
 云数据库使用 Aurora PostgreSQL 17.7 Serverless v2（0.5–2 ACU，不自动暂停）与 Data API。Runtime 健康调用、
 Aurora 查询、GPT-5.6 Sol 分析调用，以及 Stripe Privy 钱包在 Base Sepolia 上购买 x402
-内容均已通过。Codex SDK 自动生成爬虫和 Browser Tool 自动化流消费仍属于后续集成层；
-生产收款、主网钱包策略、回调与退款流程也尚未启用。
+内容均已通过。Codex SDK 自动生成爬虫、Code Interpreter 执行、Browser Tool 自动化、
+证据复核、文章入库与 Variant B 商户收款已经接入生产 Demo。主网钱包、退款、财务对账
+与监管流程尚未启用。
 
 EventBridge Scheduler 使用 UTC Cron，通过 ARM64 Python 3.13 Lambda 调用 AgentCore
 Runtime。每次运行先在 Aurora 创建任务，再启动对应 Browser、Code Interpreter 或
@@ -64,9 +65,9 @@ Bedrock 校验线程，最后写回完成/失败状态。失败事件最多重�
 输出是版本化 `CrawlPlan`、爬虫程序、测试样例与风险说明。生产环境应把生成代码放入隔离
 工作目录，并在进入 Code Interpreter 前运行静态检查和资源策略检查。
 
-当前生产 Runtime 通过 Bedrock Converse API 调用项目专用 GPT-5.6 Sol 应用推理配置。
-Codex SDK worker 保留为独立 TypeScript 服务，正式启用时应单独配置其支持的模型端点与
-认证方式，不与 Runtime 的 AWS 身份或行业分析线程混用。
+当前生产 Runtime 使用 Codex SDK，并通过 Amazon Bedrock provider 调用
+`openai.gpt-5.6-sol`。Codex 生成的站点爬虫经过 AST 安全检查后交给 AgentCore Code
+Interpreter 执行；源码、thread、token 用量与工具 session 都写入 Aurora。
 
 ### Code Interpreter worker
 
@@ -122,9 +123,10 @@ GET premium resource
   -> payment + content delivery events
 ```
 
-当前测试实现位于 `x402_test.mjs`。它只接受 Base Sepolia
-（`eip155:84532`）USDC 报价，检查报价上限，并使用短时 Payment Session 约束总支出。
-2026-09-03 的端到端验证成功支付 0.002 测试 USDC，并获得 HTTP 200 内容和链上交易哈希。
+商户实现位于 `backend/x402_payment.py`，买方实现位于
+`aws_runtime/crawler_tools.py`。链路只接受 Base Sepolia（`eip155:84532`）USDC 报价，
+检查报价上限，并使用短时 Payment Session 约束总支出。2026-09-03 已完成三笔
+`0.002 USDC` 端到端结算，出版方钱包收到 `0.006 USDC`，支付后均获得 HTTP 200 内容。
 
 建议把 `request_id`、`agent_identity`、`variant`、`content_id`、`payment_id` 和
 `delivery_status` 写入同一条追踪链。不要仅以支付成功计算转化，还应确认内容已完整交付。

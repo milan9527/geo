@@ -31,7 +31,7 @@ not call CloudFormation, CDK, or SAM:
 - ECS cluster/service: `geo-intelligence` / `geo-intelligence-api`
 - ALB: `geo-intelligence-alb-136542997.us-east-1.elb.amazonaws.com`
 - ECR repository: `632930644527.dkr.ecr.us-east-1.amazonaws.com/geo-intelligence-api`
-- Active task definition: `geo-intelligence-api:3`
+- Active task definition: `geo-intelligence-api:8`
 
 Both buckets block every form of public access and grant object reads only to their CloudFront
 distribution through OAC. The ALB security group accepts port 80 only from the AWS-managed
@@ -64,6 +64,14 @@ The container is Linux ARM64, runs as UID `10001`, listens on port `8080`, and i
 The ECR image is deployed by immutable digest. The deployed image scan completed with no Critical,
 High, or Medium findings.
 
+The active Runtime is version 18 and uses image digest
+`sha256:cceba82eea931c4857cb553dba3fa3a35e13ba0209287311f64e54b2361dfa19`.
+It runs Codex SDK through the Amazon Bedrock provider, AgentCore Code Interpreter, AgentCore
+Browser with Web Bot Auth, evidence remediation, and budgeted AgentCore Payments.
+
+CloudFront forwards the standard `PAYMENT-SIGNATURE`, legacy `X-PAYMENT`, and `X-Agent-Name`
+headers to ECS for x402 settlement and Agent traffic attribution. API cache TTL is zero.
+
 ## Policy files
 
 - `agentcore-trust-policy.json`: AgentCore service trust
@@ -85,3 +93,6 @@ Scheduler -> Lambda bridge -> AgentCore Runtime -> Aurora
 
 The one-time preflight created Aurora job `36`, completed a real AgentCore Code Interpreter session,
 deleted itself after completion, and left zero messages in the DLQ.
+
+The Lambda bridge timeout is 900 seconds. Its asynchronous retry count is zero so a long-running
+AgentCore invocation cannot be replayed and create duplicate crawls, model usage, or x402 payments.

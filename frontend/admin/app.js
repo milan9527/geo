@@ -3,7 +3,7 @@ const state = { view: "dashboard", range: "30d", user: null, metrics: null, arti
 const $ = (selector, root = document) => root.querySelector(selector);
 const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
 const fmt = (value) => new Intl.NumberFormat("zh-CN").format(value || 0);
-const money = (value) => `$${Number(value || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+const money = (value) => `$${Number(value || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 6 })}`;
 const relativeTime = (value) => {
   const minutes = Math.max(0, Math.floor((Date.now() - new Date(value).getTime()) / 60000));
   if (minutes < 1) return "刚刚";
@@ -145,6 +145,7 @@ function renderChart(daily) {
 function renderDashboard() {
   const data = state.metrics;
   const summary = data.summary;
+  const ab = data.abTest;
   const total = summary.humanViews + summary.agentViews;
   $("#pageTitle").textContent = "GEO 运营总览";
   $("#adminApp").innerHTML = `
@@ -158,6 +159,15 @@ function renderDashboard() {
       ${metricCard("i-trend", "blue", "人类访问", fmt(summary.humanViews), data.growth.human, "含 AI 引荐访问")}
       ${metricCard("i-wallet", "amber", "x402 收入", money(summary.revenue), data.growth.revenue, `${fmt(summary.payments)} 笔支付`)}
     </section>
+    <section class="panel ab-panel">
+      <div class="panel-header"><div><p>GEO + X402 EXPERIMENT</p><h2>Agent 内容 A/B 实测</h2></div><span>${data.range} 天真实事件</span></div>
+      <div class="ab-grid">
+        <div><span>A · 开放机器页</span><strong>${fmt(ab.variantAViews)}</strong><small>无需支付的 Agent 请求</small></div>
+        <div><span>B · x402 付费页</span><strong>${fmt(ab.variantBViews)}</strong><small>${fmt(ab.challenges)} 次支付挑战</small></div>
+        <div><span>支付转化</span><strong>${ab.conversionRate}%</strong><small>${fmt(ab.payments)} 笔链上结算</small></div>
+        <div><span>机器流量收入</span><strong>${money(ab.revenue)}</strong><small>由 PAYMENT-RESPONSE 结算事件确认</small></div>
+      </div>
+    </section>
     <section class="dashboard-grid">
       <article class="panel">
         <div class="panel-header"><div><p>TRAFFIC INTELLIGENCE</p><h2>人类与 Agent 流量趋势</h2></div><span>总访问 ${fmt(total)}</span></div>
@@ -170,9 +180,9 @@ function renderDashboard() {
       </article>
       <article class="panel">
         <div class="panel-header"><div><p>AGENT ATTRIBUTION</p><h2>Agent 来源分布</h2></div><span>${summary.agentShare}% share</span></div>
-        <div class="sources-list">${data.agentSources.map((source, index) => `
+        <div class="sources-list">${data.agentSources.length ? data.agentSources.map((source, index) => `
           <div class="source-row"><div class="source-name"><span class="source-avatar ${["","a","p","g","o"][index]}">${source.name[0]}</span>${source.name}</div><div class="source-bar"><span style="width:${source.value}%"></span></div><b>${source.value}%</b></div>
-        `).join("")}</div>
+        `).join("") : '<div class="empty-state">所选周期暂无 Agent 访问。</div>'}</div>
       </article>
     </section>
     <section class="secondary-grid">
@@ -240,7 +250,7 @@ function renderCrawlers() {
           <div class="crawler-card-top"><span class="crawler-logo">${crawler.kind.split(" ").map((v) => v[0]).join("").slice(0,2)}</span><div><strong>${crawler.name}</strong><small>${crawler.kind} · ${crawler.schedule}${crawler.eventbridge ? ` · EventBridge ${crawler.eventbridge.state}` : ""}</small></div><span class="status-pill ${crawler.status}">${statusLabel(crawler.status)}</span></div>
           <div class="crawler-tags">${crawler.industries.map((tag) => `<span>${tag}</span>`).join("")}</div>
           <div class="crawler-metrics"><div><strong>${fmt(crawler.pages_today)}</strong><span>今日文档</span></div><div><strong>${crawler.success_rate}%</strong><span>成功率</span></div><div><strong>$${crawler.cost_per_doc}</strong><span>单文档成本</span></div></div>
-          <div class="crawler-card-actions"><button class="ghost-button" data-run-crawler="${crawler.id}"><svg><use href="#i-play"></use></svg>立即运行</button><button class="ghost-button" data-toggle-crawler="${crawler.id}" data-status="${crawler.status}"><svg><use href="#${crawler.status === "paused" ? "i-play" : "i-pause"}"></use></svg>${crawler.status === "paused" ? "恢复" : "暂停"}</button></div>
+          <div class="crawler-card-actions"><button class="ghost-button" data-run-crawler="${crawler.id}" data-paid="${crawler.slug === "commerce-feed-miner" ? "true" : "false"}"><svg><use href="#i-play"></use></svg>${crawler.slug === "commerce-feed-miner" ? "运行并测试 x402" : "立即运行"}</button><button class="ghost-button" data-toggle-crawler="${crawler.id}" data-status="${crawler.status}"><svg><use href="#${crawler.status === "paused" ? "i-play" : "i-pause"}"></use></svg>${crawler.status === "paused" ? "恢复" : "暂停"}</button></div>
         </article>
       `).join("")}</div>
     </section>
@@ -253,7 +263,7 @@ function renderJobs() {
     <section class="view-page">
       <div class="view-header"><div><h2>任务执行历史</h2><p>查看每个 Agent 的调度、吞吐与运行结果。</p></div><div class="view-actions"><button class="ghost-button" id="refreshJobs"><svg><use href="#i-refresh"></use></svg>刷新</button></div></div>
       <article class="panel"><div class="panel-header"><div><p>AURORA JOB QUEUE</p><h2>最近 20 次任务</h2></div></div>
-        <div class="job-timeline">${state.jobs.map((job) => `<div class="job-row"><i class="job-dot"></i><div><strong>${job.agent_name}</strong><span>${job.agent_kind}</span></div><span>${job.message}</span><b class="status-pill ${job.status}">${statusLabel(job.status)}</b><small>${relativeTime(job.started_at)}</small></div>`).join("")}</div>
+        <div class="job-timeline">${state.jobs.map((job) => `<div class="job-row"><i class="job-dot"></i><div><strong>${job.agent_name}</strong><span>${job.agent_kind}${job.toolTrace?.sessionId ? ` · ${job.toolTrace.provider} · ${job.toolTrace.sessionId}` : ""}</span></div><span>${job.message}</span><b class="status-pill ${job.status}">${statusLabel(job.status)}</b><small>${relativeTime(job.started_at)}</small></div>`).join("")}</div>
       </article>
     </section>
   `;
@@ -272,6 +282,8 @@ function renderResearch() {
               <span class="status-pill ${run.status === "completed" ? "running" : run.status}">${run.status === "completed" ? "已生成" : run.status === "skipped" ? "证据未变化" : run.status}</span>
             </div>
             <p class="research-summary">${run.summary || run.error_message || "研究任务正在执行。"}</p>
+            ${run.toolTrace?.provider ? `<div class="research-process"><h3>真实工具执行</h3><div><b>${run.toolTrace.provider}</b><span>Session ${run.toolTrace.sessionId || "n/a"}</span><p>${run.toolTrace.documents || 0} 条文档${run.toolTrace.codexThreadId ? ` · Codex Thread ${run.toolTrace.codexThreadId}` : ""}${run.toolTrace.webBotAuth ? " · Web Bot Auth" : ""}</p></div></div>` : ""}
+            ${run.verification?.status ? `<div class="research-process"><h3>证据审计</h3><div><b>${run.verification.status === "verified" ? "已通过" : "需要人工复核"} · ${run.verification.score || 0}</b><span>${run.verification.notes || ""}</span><p>${(run.verification.unsupportedClaims || []).join("；") || "未发现无证据支持的关键表述"}</p></div></div>` : ""}
             ${run.analysisProcess?.length ? `<div class="research-process"><h3>分析过程</h3>${run.analysisProcess.map((step, index) => `<div><b>0${index + 1} ${step.step}</b><span>${step.method}</span><p>${step.result}</p><small>${step.evidence}</small></div>`).join("")}</div>` : ""}
             ${run.sections?.length ? `<div class="research-sections"><h3>观点与结论</h3>${run.sections.map((section) => `<div><b>${section.heading}</b>${(section.paragraphs || []).slice(0, 2).map((text) => `<p>${text}</p>`).join("")}${(section.bullets || []).length ? `<ul>${section.bullets.map((item) => `<li>${item}</li>`).join("")}</ul>` : ""}</div>`).join("")}</div>` : ""}
             <div class="research-evidence"><h3>数据与来源</h3>${run.evidence.map((source, index) => `<a href="${source.url}" target="_blank" rel="noreferrer"><span>[S${index + 1}] ${source.publisher} · ${source.source_type}</span><b>${source.title}</b><small>${source.published_at}</small><p>${source.content_excerpt.slice(0, 260)}</p></a>`).join("")}</div>
@@ -383,7 +395,7 @@ function bindEvents() {
     }
     const run = event.target.closest("[data-run-crawler]");
     if (run) {
-      const result = await api(`/api/admin/crawlers/${run.dataset.runCrawler}/run`, { method: "POST", body: "{}" });
+      const result = await api(`/api/admin/crawlers/${run.dataset.runCrawler}/run`, { method: "POST", body: JSON.stringify({ allowPayment: run.dataset.paid === "true" }) });
       showToast("任务已提交", result.agent);
       state.crawlers = await api("/api/admin/crawlers");
       state.jobs = await api("/api/admin/jobs");

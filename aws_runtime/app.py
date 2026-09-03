@@ -17,6 +17,13 @@ from xml.etree import ElementTree
 
 import boto3
 from botocore.exceptions import ClientError
+from crawler_tools import (
+    build_codex_request,
+    codex_request,
+    run_browser_crawler,
+    run_generated_crawler,
+    run_x402_crawler,
+)
 
 
 REGION = os.environ.get("AWS_REGION", "us-east-1")
@@ -29,6 +36,10 @@ CODE_INTERPRETER_ID = os.environ.get("AGENTCORE_CODE_INTERPRETER_ID", "")
 AUTO_PUBLISH_RESEARCH = os.environ.get(
     "RESEARCH_AUTO_PUBLISH", "true"
 ).lower() in {"1", "true", "yes"}
+CRAWLER_CONTACT_URL = os.environ.get(
+    "CRAWLER_CONTACT_URL",
+    "https://d1tsbnft7iv51.cloudfront.net/",
+)
 
 bedrock = boto3.client("bedrock-runtime", region_name=REGION)
 rds_data = boto3.client("rds-data", region_name=REGION)
@@ -37,6 +48,7 @@ agentcore = boto3.client("bedrock-agentcore", region_name=REGION)
 SOURCE_PROFILES = {
     "research-coder": {
         "category": "ai",
+        "crawlStyle": "research",
         "topic": "AI 基础模型、Agent 与云端 AI 基础设施的最新产业进展",
         "sources": [
             {
@@ -53,22 +65,26 @@ SOURCE_PROFILES = {
     },
     "render-scout": {
         "category": "commerce",
+        "crawlStyle": "browser-rendered",
         "topic": "电商、支付与媒体平台采用 AI 和 Agent Commerce 的最新变化",
         "sources": [
             {
                 "publisher": "Stripe",
-                "url": "https://stripe.com/blog/feed.rss",
-                "sourceType": "官方发布",
+                "url": "https://stripe.com/blog",
+                "sourceType": "动态官方页面",
+                "maxItems": 3,
             },
             {
                 "publisher": "Shopify",
                 "url": "https://www.shopify.com/news",
-                "sourceType": "官方新闻",
+                "sourceType": "动态官方新闻",
+                "maxItems": 3,
             },
         ],
     },
     "market-signal": {
         "category": "finance",
+        "crawlStyle": "financial-timeseries",
         "topic": "科技股、利率与 AI 资本开支周期的最新市场研判",
         "sources": [
             {
@@ -90,6 +106,7 @@ SOURCE_PROFILES = {
     },
     "evidence-verifier": {
         "category": "agent",
+        "crawlStyle": "evidence-verification",
         "topic": "Agent 运行时、工具执行、证据治理与机器身份的技术进展",
         "sources": [
             {
@@ -106,22 +123,26 @@ SOURCE_PROFILES = {
     },
     "cloud-release-watch": {
         "category": "cloud",
+        "crawlStyle": "browser-rendered",
         "topic": "主要云计算厂商最新服务发布及其对企业 AI 架构的影响",
         "sources": [
             {
                 "publisher": "AWS What's New",
-                "url": "https://aws.amazon.com/about-aws/whats-new/recent/feed/",
-                "sourceType": "官方发布",
+                "url": "https://aws.amazon.com/new/",
+                "sourceType": "动态官方发布页面",
+                "maxItems": 3,
             },
             {
                 "publisher": "Google Cloud",
-                "url": "https://cloud.google.com/feeds/gcp-release-notes.xml",
-                "sourceType": "官方发布说明",
+                "url": "https://cloud.google.com/release-notes",
+                "sourceType": "动态官方发布说明",
+                "maxItems": 3,
             },
         ],
     },
     "commerce-feed-miner": {
         "category": "commerce",
+        "crawlStyle": "research",
         "topic": "电商平台、支付基础设施与 AI 购物 Agent 的商业模式变化",
         "sources": [
             {
@@ -134,6 +155,17 @@ SOURCE_PROFILES = {
                 "url": "https://www.shopify.com/news",
                 "sourceType": "官方新闻",
             },
+        ],
+        "paidSources": [
+            {
+                "publisher": "Aperture GEO",
+                "title": "Agent买方进入定价议程",
+                "url": (
+                    "https://d1tsbnft7iv51.cloudfront.net/agent/v1/articles/"
+                    "commerce-research-20260903-0927-212/paid"
+                ),
+                "sourceType": "本站 x402 付费深度分析",
+            }
         ],
     },
 }
@@ -232,7 +264,7 @@ def fetch_source(source: dict[str, str]) -> list[dict[str, Any]]:
     request = Request(
         source["url"],
         headers={
-            "User-Agent": "ApertureGEOResearchBot/1.0 (+https://example.com/bot)",
+            "User-Agent": f"ApertureGEOResearchBot/1.0 (+{CRAWLER_CONTACT_URL})",
             "Accept": "application/rss+xml, application/xml, text/xml, text/csv, text/html",
         },
     )
@@ -347,18 +379,198 @@ def fetch_source(source: dict[str, str]) -> list[dict[str, Any]]:
     ]
 
 
-def collect_evidence(slug: str) -> tuple[dict[str, Any], list[dict[str, Any]], list[str]]:
+def profile_source_hash(profile: dict[str, Any]) -> str:
+    payload = {
+        "style": profile.get("crawlStyle"),
+        "sources": profile.get("sources") or [],
+    }
+    return hashlib.sha256(
+        json.dumps(payload, ensure_ascii=False, sort_keys=True).encode("utf-8")
+    ).hexdigest()
+
+
+def load_or_generate_artifact(
+    crawler: dict[str, Any],
+    profile: dict[str, Any],
+) -> dict[str, Any]:
+    source_hash = profile_source_hash(profile)
+    existing = rows(
+        execute_sql(
+            """
+            SELECT id, thread_id, source_code, test_plan, safety_notes_json,
+                   usage_json
+            FROM crawler_artifacts
+            WHERE agent_id = :agent_id AND source_hash = :source_hash
+              AND status = 'active'
+            ORDER BY id DESC LIMIT 1
+            """,
+            {"agent_id": crawler["id"], "source_hash": source_hash},
+        )
+    )
+    if existing:
+        item = existing[0]
+        return {
+            "id": item["id"],
+            "threadId": item["thread_id"],
+            "sourceCode": item["source_code"],
+            "testPlan": item["test_plan"],
+            "safetyNotes": json.loads(item["safety_notes_json"] or "[]"),
+            "usage": json.loads(item["usage_json"] or "{}"),
+            "sourceHash": source_hash,
+            "cached": True,
+        }
+
+    artifact = codex_request(
+        "generate",
+        request=build_codex_request(profile),
+    )
+    created_at = now()
+    persisted = rows(
+        execute_sql(
+            """
+            INSERT INTO crawler_artifacts(
+                agent_id, source_hash, crawl_style, thread_id, source_code,
+                test_plan, safety_notes_json, usage_json, status,
+                created_at, updated_at
+            ) VALUES(
+                :agent_id, :source_hash, :crawl_style, :thread_id, :source_code,
+                :test_plan, :safety_notes_json, :usage_json, 'active',
+                :created_at, :updated_at
+            ) RETURNING id
+            """,
+            {
+                "agent_id": crawler["id"],
+                "source_hash": source_hash,
+                "crawl_style": profile.get("crawlStyle", "research"),
+                "thread_id": artifact["threadId"],
+                "source_code": artifact["sourceCode"],
+                "test_plan": artifact.get("testPlan", ""),
+                "safety_notes_json": json.dumps(
+                    artifact.get("safetyNotes") or [], ensure_ascii=False
+                ),
+                "usage_json": json.dumps(
+                    artifact.get("usage") or {}, ensure_ascii=False
+                ),
+                "created_at": created_at,
+                "updated_at": created_at,
+            },
+        )
+    )[0]
+    artifact.update(
+        {
+            "id": persisted["id"],
+            "sourceHash": source_hash,
+            "cached": False,
+        }
+    )
+    return artifact
+
+
+def update_artifact(artifact: dict[str, Any]) -> None:
+    execute_sql(
+        """
+        UPDATE crawler_artifacts
+        SET thread_id = :thread_id, source_code = :source_code,
+            test_plan = :test_plan, safety_notes_json = :safety_notes_json,
+            usage_json = :usage_json, updated_at = :updated_at,
+            last_used_at = :last_used_at
+        WHERE id = :artifact_id
+        """,
+        {
+            "thread_id": artifact["threadId"],
+            "source_code": artifact["sourceCode"],
+            "test_plan": artifact.get("testPlan", ""),
+            "safety_notes_json": json.dumps(
+                artifact.get("safetyNotes") or [], ensure_ascii=False
+            ),
+            "usage_json": json.dumps(artifact.get("usage") or {}, ensure_ascii=False),
+            "updated_at": now(),
+            "last_used_at": now(),
+            "artifact_id": artifact["id"],
+        },
+    )
+
+
+def normalize_evidence(evidence: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    normalized: list[dict[str, Any]] = []
+    prioritized = sorted(
+        evidence,
+        key=lambda item: bool(
+            isinstance(item, dict)
+            and isinstance(item.get("data"), dict)
+            and item["data"].get("paid")
+        ),
+        reverse=True,
+    )
+    for item in prioritized[:10]:
+        if not isinstance(item, dict) or not item.get("url"):
+            continue
+        normalized.append(
+            {
+                "publisher": str(item.get("publisher") or "Unknown publisher")[:300],
+                "title": str(item.get("title") or "Untitled source")[:800],
+                "url": str(item["url"])[:4000],
+                "publishedAt": str(item.get("publishedAt") or now()[:10])[:100],
+                "retrievedAt": str(item.get("retrievedAt") or now())[:100],
+                "sourceType": str(item.get("sourceType") or "官方来源")[:200],
+                "excerpt": str(item.get("excerpt") or "")[:12_000],
+                "data": item.get("data") if isinstance(item.get("data"), dict) else {},
+            }
+        )
+    return normalized
+
+
+def collect_evidence(
+    crawler: dict[str, Any],
+    payload: dict[str, Any],
+) -> tuple[dict[str, Any], list[dict[str, Any]], list[str], dict[str, Any]]:
+    slug = str(crawler["slug"])
     profile = SOURCE_PROFILES.get(slug)
     if not profile:
         raise ValueError(f"No source profile configured for {slug}")
-    evidence: list[dict[str, Any]] = []
     errors: list[str] = []
-    for source in profile["sources"]:
-        try:
-            evidence.extend(fetch_source(source))
-        except Exception as error:
-            errors.append(f"{source['publisher']}: {type(error).__name__}: {error}")
-    return profile, evidence[:10], errors
+    session_name = f"{slug}-{datetime.now(timezone.utc).strftime('%Y%m%d-%H%M%S')}"
+
+    if crawler["kind"] == "Browser Tool":
+        evidence, trace = run_browser_crawler(
+            profile,
+            session_name=session_name,
+        )
+    else:
+        artifact = load_or_generate_artifact(crawler, profile)
+        evidence, trace, final_artifact = run_generated_crawler(
+            profile,
+            artifact,
+            session_name=session_name,
+        )
+        final_artifact["id"] = artifact["id"]
+        update_artifact(final_artifact)
+        trace.update(
+            {
+                "codexThreadId": final_artifact["threadId"],
+                "codexArtifactId": artifact["id"],
+                "codexArtifactCached": artifact.get("cached", False),
+                "codexUsage": final_artifact.get("usage") or {},
+            }
+        )
+
+    payment_traces: list[dict[str, Any]] = []
+    if payload.get("allowPayment"):
+        for paid_source in profile.get("paidSources") or []:
+            try:
+                paid_evidence, payment_trace = run_x402_crawler(
+                    paid_source,
+                    session_name=session_name,
+                )
+                evidence.append(paid_evidence)
+                payment_traces.append(payment_trace)
+            except Exception as error:
+                errors.append(
+                    f"{paid_source['publisher']}: {type(error).__name__}: {error}"
+                )
+    if payment_traces:
+        trace["payments"] = payment_traces
+    return profile, normalize_evidence(evidence), errors, trace
 
 
 def ensure_research_schema() -> None:
@@ -380,7 +592,10 @@ def ensure_research_schema() -> None:
             analysis_process_json TEXT NOT NULL DEFAULT '[]',
             summary TEXT NOT NULL DEFAULT '',
             output_article_id BIGINT REFERENCES articles(id),
-            error_message TEXT NOT NULL DEFAULT ''
+            error_message TEXT NOT NULL DEFAULT '',
+            tool_trace_json TEXT NOT NULL DEFAULT '{}',
+            verification_status TEXT NOT NULL DEFAULT 'pending',
+            verification_json TEXT NOT NULL DEFAULT '{}'
         )
         """,
         """
@@ -397,8 +612,31 @@ def ensure_research_schema() -> None:
             data_json TEXT NOT NULL DEFAULT '{}'
         )
         """,
+        """
+        CREATE TABLE IF NOT EXISTS crawler_artifacts (
+            id BIGSERIAL PRIMARY KEY,
+            agent_id BIGINT NOT NULL REFERENCES crawler_agents(id),
+            source_hash TEXT NOT NULL,
+            crawl_style TEXT NOT NULL,
+            thread_id TEXT NOT NULL,
+            source_code TEXT NOT NULL,
+            test_plan TEXT NOT NULL DEFAULT '',
+            safety_notes_json TEXT NOT NULL DEFAULT '[]',
+            usage_json TEXT NOT NULL DEFAULT '{}',
+            status TEXT NOT NULL DEFAULT 'active',
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            last_used_at TEXT,
+            UNIQUE(agent_id, source_hash)
+        )
+        """,
+        "ALTER TABLE research_runs ADD COLUMN IF NOT EXISTS tool_trace_json TEXT NOT NULL DEFAULT '{}'",
+        "ALTER TABLE research_runs ADD COLUMN IF NOT EXISTS verification_status TEXT NOT NULL DEFAULT 'pending'",
+        "ALTER TABLE research_runs ADD COLUMN IF NOT EXISTS verification_json TEXT NOT NULL DEFAULT '{}'",
+        "ALTER TABLE crawler_jobs ADD COLUMN IF NOT EXISTS tool_trace_json TEXT NOT NULL DEFAULT '{}'",
         "CREATE INDEX IF NOT EXISTS idx_research_runs_started ON research_runs(started_at)",
         "CREATE INDEX IF NOT EXISTS idx_research_evidence_run ON research_evidence(run_id)",
+        "CREATE INDEX IF NOT EXISTS idx_crawler_artifacts_agent ON crawler_artifacts(agent_id)",
     ]
     for statement in statements:
         execute_sql(statement)
@@ -689,6 +927,356 @@ JSON 结构：
             ), usage
 
 
+def verify_research_output(
+    output: dict[str, Any],
+    evidence: list[dict[str, Any]],
+) -> dict[str, Any]:
+    audited_output = {
+        key: value
+        for key, value in output.items()
+        if key not in {"authorityScore", "keywords"}
+    }
+    evidence_text = "\n".join(
+        f"[S{index}] {item['publisher']} | {item['title']} | "
+        f"{item['publishedAt']} | {item['excerpt'][:1200]}"
+        for index, item in enumerate(evidence, start=1)
+    )
+    prompt = f"""
+你是独立证据审计员。核验研究稿中的事实、数字、日期与给定证据是否一致。
+不要评价文风，只检查可证实性、引用映射、时间边界和因果表述。
+
+输出严格 JSON：
+{{
+  "status":"verified 或 needs_review",
+  "score":0到100整数,
+  "supportedClaims":整数,
+  "unsupportedClaims":["最多8条，每条不超过180字"],
+  "citationIssues":["最多8条，每条不超过180字"],
+  "causalityRisks":["最多8条，每条不超过180字"],
+  "notes":"不超过300字的审计结论"
+}}
+
+证据：
+{evidence_text}
+
+研究稿：
+{json.dumps(audited_output, ensure_ascii=False)[:48_000]}
+"""
+    response = bedrock.converse(
+        modelId=MODEL_ID,
+        messages=[{"role": "user", "content": [{"text": prompt}]}],
+        inferenceConfig={"maxTokens": 3200},
+    )
+    text = "".join(
+        part.get("text", "")
+        for part in response["output"]["message"]["content"]
+        if "text" in part
+    )
+    try:
+        verification = parse_research_json(text)
+    except (ValueError, json.JSONDecodeError):
+        repair_prompt = f"""
+把下面被截断或格式错误的证据审计压缩成一个合法 JSON 对象。不要增加新判断。
+数组各保留最重要的最多8条，每条不超过180字，notes不超过300字。
+只输出以下结构，不要 Markdown：
+{{
+  "status":"verified 或 needs_review",
+  "score":0到100整数,
+  "supportedClaims":整数,
+  "unsupportedClaims":[],
+  "citationIssues":[],
+  "causalityRisks":[],
+  "notes":""
+}}
+
+原始审计：
+{text[:14_000]}
+"""
+        repair = bedrock.converse(
+            modelId=MODEL_ID,
+            messages=[{"role": "user", "content": [{"text": repair_prompt}]}],
+            inferenceConfig={"maxTokens": 1800},
+        )
+        repair_text = "".join(
+            part.get("text", "")
+            for part in repair["output"]["message"]["content"]
+            if "text" in part
+        )
+        try:
+            verification = parse_research_json(repair_text)
+        except (ValueError, json.JSONDecodeError):
+            return {
+                "status": "needs_review",
+                "score": 0,
+                "supportedClaims": 0,
+                "unsupportedClaims": ["证据审计模型未返回合法 JSON"],
+                "citationIssues": [],
+                "causalityRisks": [],
+                "notes": repair_text[:1000] or text[:1000],
+                "usage": {
+                    key: response.get("usage", {}).get(key, 0)
+                    + repair.get("usage", {}).get(key, 0)
+                    for key in set(response.get("usage", {}))
+                    | set(repair.get("usage", {}))
+                },
+            }
+        response_usage = {
+            key: response.get("usage", {}).get(key, 0)
+            + repair.get("usage", {}).get(key, 0)
+            for key in set(response.get("usage", {}))
+            | set(repair.get("usage", {}))
+        }
+    else:
+        response_usage = response.get("usage", {})
+    score = max(0, min(100, int(verification.get("score") or 0)))
+    unsupported = verification.get("unsupportedClaims")
+    citation_issues = verification.get("citationIssues")
+    causality_risks = verification.get("causalityRisks")
+    verification["score"] = score
+    verification["unsupportedClaims"] = [
+        str(item)[:500] for item in (unsupported if isinstance(unsupported, list) else [])[:8]
+    ]
+    verification["citationIssues"] = [
+        str(item)[:500]
+        for item in (citation_issues if isinstance(citation_issues, list) else [])[:8]
+    ]
+    verification["causalityRisks"] = [
+        str(item)[:500]
+        for item in (causality_risks if isinstance(causality_risks, list) else [])[:8]
+    ]
+    verification["status"] = (
+        "verified"
+        if score >= 85
+        and not verification["unsupportedClaims"]
+        and not verification["citationIssues"]
+        else "needs_review"
+    )
+    verification["notes"] = str(verification.get("notes") or "")[:1200]
+    verification["usage"] = response_usage
+    return verification
+
+
+def revise_research_output(
+    profile: dict[str, Any],
+    output: dict[str, Any],
+    evidence: list[dict[str, Any]],
+    verification: dict[str, Any],
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    evidence_text = "\n\n".join(
+        (
+            f"[S{index}] {item['publisher']} | {item['title']} | "
+            f"{item['publishedAt']} | {item['url']}\n{item['excerpt'][:1400]}"
+        )
+        for index, item in enumerate(evidence, start=1)
+    )
+    prompt = f"""
+你是资深研究编辑。请根据独立证据审计，修订研究稿，使所有事实、数字、日期和引用
+都能被给定证据直接支持。删除无法支持的行业泛化；因果关系证据不足时改成明确的条件性
+分析判断。保留深度分析，但不得用更强措辞掩盖证据不足。
+
+硬性要求：
+1. 只能使用给定证据，所有重要事实保留正确的 [S#]。
+2. 必须逐项解决 unsupportedClaims、citationIssues 和 causalityRisks。
+3. 标题、导语和结论也必须符合证据边界。
+4. 保留 title、dek、summary、authorityScore、keywords、analysisProcess、sections 结构。
+5. 输出严格 JSON，不要 Markdown。
+
+主题：{profile['topic']}
+
+证据：
+{evidence_text}
+
+原研究稿：
+{json.dumps(output, ensure_ascii=False)[:46_000]}
+
+审计：
+{json.dumps(verification, ensure_ascii=False)[:14_000]}
+"""
+    response = bedrock.converse(
+        modelId=MODEL_ID,
+        messages=[{"role": "user", "content": [{"text": prompt}]}],
+        inferenceConfig={"maxTokens": 5600},
+    )
+    text = "".join(
+        part.get("text", "")
+        for part in response["output"]["message"]["content"]
+        if "text" in part
+    )
+    try:
+        revised = normalize_research_output(
+            parse_research_json(text), profile, evidence
+        )
+    except (ValueError, json.JSONDecodeError):
+        return output, response.get("usage", {})
+    return revised, response.get("usage", {})
+
+
+def reverify_recent_research(exclude_run_id: int) -> list[dict[str, Any]]:
+    candidates = rows(
+        execute_sql(
+            """
+            SELECT r.id, r.output_article_id, r.category_slug, r.topic,
+                   a.title, a.dek, a.summary, a.authority_score,
+                   a.keywords, a.body_json
+            FROM research_runs r
+            JOIN articles a ON a.id = r.output_article_id
+            WHERE r.status = 'completed' AND r.id != :exclude_run_id
+            ORDER BY
+                CASE r.verification_status
+                    WHEN 'pending' THEN 0
+                    WHEN 'needs_review' THEN 1
+                    ELSE 2
+                END,
+                a.updated_at ASC,
+                r.started_at DESC
+            LIMIT 2
+            """,
+            {"exclude_run_id": exclude_run_id},
+        )
+    )
+    audits: list[dict[str, Any]] = []
+    for candidate in candidates:
+        evidence_rows = rows(
+            execute_sql(
+                """
+                SELECT publisher, title, url, published_at, retrieved_at,
+                       source_type, content_excerpt, data_json
+                FROM research_evidence
+                WHERE run_id = :run_id
+                ORDER BY id
+                """,
+                {"run_id": candidate["id"]},
+            )
+        )
+        evidence = [
+            {
+                "publisher": item["publisher"],
+                "title": item["title"],
+                "url": item["url"],
+                "publishedAt": item["published_at"],
+                "retrievedAt": item["retrieved_at"],
+                "sourceType": item["source_type"],
+                "excerpt": item["content_excerpt"],
+                "data": json.loads(item["data_json"] or "{}"),
+            }
+            for item in evidence_rows
+        ]
+        if not evidence:
+            continue
+        output = {
+            "title": candidate["title"],
+            "dek": candidate["dek"],
+            "summary": candidate["summary"],
+            "authorityScore": candidate["authority_score"],
+            "keywords": json.loads(candidate["keywords"] or "[]"),
+            "analysisProcess": [],
+            "sections": json.loads(candidate["body_json"] or "[]"),
+        }
+        verification = verify_research_output(output, evidence)
+        initial_verification = verification
+        profile = {
+            "category": candidate["category_slug"],
+            "topic": candidate["topic"],
+        }
+        revision_usages: list[dict[str, Any]] = []
+        for _ in range(2):
+            if verification["status"] == "verified":
+                break
+            revised_output, revision_usage = revise_research_output(
+                profile, output, evidence, verification
+            )
+            if revised_output == output:
+                break
+            output = revised_output
+            revision_usages.append(revision_usage)
+            verification = verify_research_output(output, evidence)
+        if revision_usages:
+            verification["revisionApplied"] = True
+            verification["revisionPasses"] = len(revision_usages)
+            verification["revisionUsage"] = revision_usages
+            verification["initialAudit"] = {
+                "score": initial_verification.get("score", 0),
+                "unsupportedClaims": initial_verification.get(
+                    "unsupportedClaims", []
+                ),
+                "citationIssues": initial_verification.get(
+                    "citationIssues", []
+                ),
+                "causalityRisks": initial_verification.get(
+                    "causalityRisks", []
+                ),
+            }
+        article_status = (
+            "published"
+            if AUTO_PUBLISH_RESEARCH and verification["status"] == "verified"
+            else "review"
+        )
+        execute_sql(
+            """
+            UPDATE research_runs
+            SET verification_status = :verification_status,
+                verification_json = :verification_json,
+                summary = :summary,
+                analysis_process_json = :analysis_process
+            WHERE id = :run_id
+            """,
+            {
+                "verification_status": verification["status"],
+                "verification_json": json.dumps(verification, ensure_ascii=False),
+                "summary": str(output.get("summary") or "")[:3000],
+                "analysis_process": json.dumps(
+                    output.get("analysisProcess") or [], ensure_ascii=False
+                ),
+                "run_id": candidate["id"],
+            },
+        )
+        execute_sql(
+            """
+            UPDATE articles
+            SET title = :title, dek = :dek, summary = :summary,
+                authority_score = :authority_score, keywords = :keywords,
+                body_json = :body_json, status = :status, updated_at = :updated_at
+            WHERE id = :article_id
+            """,
+            {
+                "title": str(output.get("title") or candidate["title"])[:240],
+                "dek": str(output.get("dek") or candidate["dek"])[:500],
+                "summary": str(
+                    output.get("summary") or candidate["summary"]
+                )[:3000],
+                "authority_score": max(
+                    80,
+                    min(
+                        98,
+                        int(
+                            output.get("authorityScore")
+                            or candidate["authority_score"]
+                            or 88
+                        ),
+                    ),
+                ),
+                "keywords": json.dumps(
+                    output.get("keywords") or [], ensure_ascii=False
+                ),
+                "body_json": json.dumps(
+                    output.get("sections") or [], ensure_ascii=False
+                ),
+                "status": article_status,
+                "updated_at": now(),
+                "article_id": candidate["output_article_id"],
+            },
+        )
+        audits.append(
+            {
+                "researchRunId": candidate["id"],
+                "articleId": candidate["output_article_id"],
+                "status": verification["status"],
+                "score": verification["score"],
+            }
+        )
+    return audits
+
+
 def persist_research_output(
     *,
     crawler: dict[str, Any],
@@ -697,6 +1285,7 @@ def persist_research_output(
     evidence: list[dict[str, Any]],
     fetch_errors: list[str],
     force_analysis: bool,
+    tool_trace: dict[str, Any],
 ) -> dict[str, Any]:
     digest_input = "\n".join(
         f"{item['url']}|{item['publishedAt']}|{item['excerpt']}"
@@ -706,7 +1295,8 @@ def persist_research_output(
     previous = rows(
         execute_sql(
             """
-            SELECT output_article_id, summary
+            SELECT output_article_id, summary, verification_status,
+                   verification_json
             FROM research_runs
             WHERE agent_id = :agent_id AND evidence_hash = :evidence_hash
               AND status = 'completed'
@@ -721,10 +1311,10 @@ def persist_research_output(
             """
             INSERT INTO research_runs(
                 agent_id, job_id, status, category_slug, topic, evidence_hash,
-                started_at, model_id, summary
+                started_at, model_id, summary, tool_trace_json
             ) VALUES(
                 :agent_id, :job_id, :status, :category_slug, :topic,
-                :evidence_hash, :started_at, :model_id, :summary
+                :evidence_hash, :started_at, :model_id, :summary, :tool_trace_json
             ) RETURNING id
             """,
             {
@@ -737,6 +1327,7 @@ def persist_research_output(
                 "started_at": now(),
                 "model_id": MODEL_ID,
                 "summary": "证据与上次运行相同，未重复生成内容。" if previous else "",
+                "tool_trace_json": json.dumps(tool_trace, ensure_ascii=False),
             },
         )
     )[0]
@@ -771,12 +1362,16 @@ def persist_research_output(
         execute_sql(
             """
             UPDATE research_runs
-            SET completed_at = :completed_at, output_article_id = :article_id
+            SET completed_at = :completed_at, output_article_id = :article_id,
+                verification_status = :verification_status,
+                verification_json = :verification_json
             WHERE id = :run_id
             """,
             {
                 "completed_at": completed_at,
                 "article_id": article_id,
+                "verification_status": previous[0]["verification_status"],
+                "verification_json": previous[0]["verification_json"],
                 "run_id": run_id,
             },
         )
@@ -785,7 +1380,8 @@ def persist_research_output(
             UPDATE crawler_jobs
             SET status = 'completed', finished_at = :finished_at,
                 documents = :documents, message = :message,
-                research_run_id = :run_id, article_id = :article_id
+                research_run_id = :run_id, article_id = :article_id,
+                tool_trace_json = :tool_trace_json
             WHERE id = :job_id
             """,
             {
@@ -794,6 +1390,7 @@ def persist_research_output(
                 "message": "证据无变化，已关联上次深度研究输出",
                 "run_id": run_id,
                 "article_id": article_id,
+                "tool_trace_json": json.dumps(tool_trace, ensure_ascii=False),
                 "job_id": job_id,
             },
         )
@@ -803,10 +1400,39 @@ def persist_research_output(
             "researchRunId": run_id,
             "articleId": article_id,
             "documents": len(evidence),
+            "toolTrace": tool_trace,
             "message": "证据无变化，未重复生成文章",
         }
 
     output, usage = generate_deep_research(profile, evidence)
+    verification = verify_research_output(output, evidence)
+    initial_verification = verification
+    revision_usages: list[dict[str, Any]] = []
+    for _ in range(2):
+        if verification["status"] == "verified":
+            break
+        revised_output, revision_usage = revise_research_output(
+            profile, output, evidence, verification
+        )
+        for key, value in revision_usage.items():
+            usage[key] = usage.get(key, 0) + value
+        if revised_output == output:
+            break
+        output = revised_output
+        revision_usages.append(revision_usage)
+        verification = verify_research_output(output, evidence)
+    if revision_usages:
+        verification["revisionApplied"] = True
+        verification["revisionPasses"] = len(revision_usages)
+        verification["revisionUsage"] = revision_usages
+        verification["initialAudit"] = {
+            "score": initial_verification.get("score", 0),
+            "unsupportedClaims": initial_verification.get(
+                "unsupportedClaims", []
+            ),
+            "citationIssues": initial_verification.get("citationIssues", []),
+            "causalityRisks": initial_verification.get("causalityRisks", []),
+        }
     category = rows(
         execute_sql(
             "SELECT id FROM categories WHERE slug = :slug",
@@ -820,7 +1446,11 @@ def persist_research_output(
     )
     sections = output.get("sections") or []
     analysis_process = output.get("analysisProcess") or []
-    article_status = "published" if AUTO_PUBLISH_RESEARCH else "review"
+    article_status = (
+        "published"
+        if AUTO_PUBLISH_RESEARCH and verification["status"] == "verified"
+        else "review"
+    )
     article = rows(
         execute_sql(
             """
@@ -832,7 +1462,8 @@ def persist_research_output(
             ) VALUES(
                 :category_id, :slug, :title, :dek, :summary, :author, :author_role,
                 :read_minutes, :published_at, :updated_at, :status, FALSE,
-                :hero_style, :authority_score, 0, 'open', 0, :keywords, :body_json
+                :hero_style, :authority_score, :citation_count, 'open', 0,
+                :keywords, :body_json
             ) RETURNING id
             """,
             {
@@ -857,6 +1488,7 @@ def persist_research_output(
                 "authority_score": max(
                     80, min(98, int(output.get("authorityScore") or 88))
                 ),
+                "citation_count": len(evidence),
                 "keywords": json.dumps(output.get("keywords") or [], ensure_ascii=False),
                 "body_json": json.dumps(sections, ensure_ascii=False),
             },
@@ -888,7 +1520,9 @@ def persist_research_output(
         UPDATE research_runs
         SET status = 'completed', completed_at = :completed_at,
             analysis_process_json = :analysis_process, summary = :summary,
-            output_article_id = :article_id, error_message = :errors
+            output_article_id = :article_id, error_message = :errors,
+            verification_status = :verification_status,
+            verification_json = :verification_json
         WHERE id = :run_id
         """,
         {
@@ -897,20 +1531,24 @@ def persist_research_output(
             "summary": summary,
             "article_id": article_id,
             "errors": "; ".join(fetch_errors)[:2000],
+            "verification_status": verification["status"],
+            "verification_json": json.dumps(verification, ensure_ascii=False),
             "run_id": run_id,
         },
     )
     message = (
         f"已生成并{'自动发布' if article_status == 'published' else '提交审核'}"
         f"深度研究《{output.get('title', profile['topic'])}》；"
-        f"{len(evidence)} 条证据，{usage.get('totalTokens', 0)} tokens"
+        f"{len(evidence)} 条证据，审计 {verification['status']} "
+        f"({verification['score']})，{usage.get('totalTokens', 0)} tokens"
     )
     execute_sql(
         """
         UPDATE crawler_jobs
         SET status = 'completed', finished_at = :finished_at,
             documents = :documents, message = :message,
-            research_run_id = :run_id, article_id = :article_id
+            research_run_id = :run_id, article_id = :article_id,
+            tool_trace_json = :tool_trace_json
         WHERE id = :job_id
         """,
         {
@@ -919,6 +1557,7 @@ def persist_research_output(
             "message": message,
             "run_id": run_id,
             "article_id": article_id,
+            "tool_trace_json": json.dumps(tool_trace, ensure_ascii=False),
             "job_id": job_id,
         },
     )
@@ -938,48 +1577,11 @@ def persist_research_output(
         "articleSlug": article_slug,
         "articleStatus": article_status,
         "documents": len(evidence),
+        "verification": verification,
+        "toolTrace": tool_trace,
         "message": message,
         "finishedAt": completed_at,
     }
-
-
-def run_tool_session(kind: str, slug: str) -> tuple[str, int]:
-    session_name = f"{slug}-{datetime.now(timezone.utc).strftime('%Y%m%d-%H%M%S')}"
-    if kind == "Browser Tool":
-        response = agentcore.start_browser_session(
-            browserIdentifier=BROWSER_ID,
-            name=session_name,
-            sessionTimeoutSeconds=60,
-            viewPort={"width": 1280, "height": 720},
-        )
-        session_id = response["sessionId"]
-        agentcore.stop_browser_session(
-            browserIdentifier=BROWSER_ID,
-            sessionId=session_id,
-        )
-        return f"AgentCore Browser 会话 {session_id} 已完成", 1
-    if kind == "Code Interpreter":
-        response = agentcore.start_code_interpreter_session(
-            codeInterpreterIdentifier=CODE_INTERPRETER_ID,
-            name=session_name,
-            sessionTimeoutSeconds=60,
-        )
-        session_id = response["sessionId"]
-        agentcore.stop_code_interpreter_session(
-            codeInterpreterIdentifier=CODE_INTERPRETER_ID,
-            sessionId=session_id,
-        )
-        return f"AgentCore Code Interpreter 会话 {session_id} 已完成", 1
-    if kind == "Codex SDK":
-        result = analyze(
-            {
-                "topic": "验证 GEO 爬虫生成与证据校验运行链路",
-                "evidence": ["该任务由 EventBridge Scheduler 自动触发"],
-                "maxTokens": 180,
-            }
-        )
-        return f"Bedrock 校验线程已完成，使用 {result['usage'].get('totalTokens', 0)} tokens", 1
-    return f"未识别工具类型：{kind}", 0
 
 
 def run_scheduled_crawler(payload: dict[str, Any]) -> dict[str, Any]:
@@ -999,7 +1601,7 @@ def run_scheduled_crawler(payload: dict[str, Any]) -> dict[str, Any]:
     if not crawler_rows:
         raise ValueError(f"Crawler not found: {slug}")
     crawler = crawler_rows[0]
-    if crawler["status"] == "paused":
+    if crawler["status"] == "paused" and not payload.get("overridePaused"):
         return {
             "status": "skipped",
             "crawler": slug,
@@ -1029,8 +1631,10 @@ def run_scheduled_crawler(payload: dict[str, Any]) -> dict[str, Any]:
     )
 
     try:
-        tool_message, _ = run_tool_session(str(crawler["kind"]), slug)
-        profile, evidence, fetch_errors = collect_evidence(slug)
+        profile, evidence, fetch_errors, tool_trace = collect_evidence(
+            crawler,
+            payload,
+        )
         if not evidence:
             raise RuntimeError(
                 "No evidence collected. " + "; ".join(fetch_errors)
@@ -1042,11 +1646,23 @@ def run_scheduled_crawler(payload: dict[str, Any]) -> dict[str, Any]:
             evidence=evidence,
             fetch_errors=fetch_errors,
             force_analysis=bool(payload.get("forceAnalysis")),
+            tool_trace=tool_trace,
+        )
+        execute_sql(
+            "UPDATE crawler_agents SET status = 'idle' WHERE id = :agent_id",
+            {"agent_id": crawler["id"]},
         )
         result["crawler"] = slug
         result["kind"] = crawler["kind"]
-        result["toolMessage"] = tool_message
+        result["toolMessage"] = (
+            f"{tool_trace.get('provider')} 真实执行完成；"
+            f"session {tool_trace.get('sessionId', 'n/a')}"
+        )
         result["scheduledTime"] = payload.get("scheduledTime")
+        if slug == "evidence-verifier" and result.get("researchRunId"):
+            result["crossVerification"] = reverify_recent_research(
+                int(result["researchRunId"])
+            )
         return result
     except Exception as error:
         execute_sql(
@@ -1132,6 +1748,24 @@ def invoke(payload: dict[str, Any]) -> dict[str, Any]:
             "codeInterpreterId": CODE_INTERPRETER_ID,
             "browserSigning": True,
             "crawlerIndustries": ["AI", "云计算", "电商", "媒体", "金融"],
+        }
+    if action == "x402_fetch":
+        crawler_slug = str(payload.get("crawlerSlug") or "commerce-feed-miner")
+        profile = SOURCE_PROFILES.get(crawler_slug) or {}
+        paid_sources = profile.get("paidSources") or []
+        if not paid_sources:
+            raise ValueError(f"No paid source configured for {crawler_slug}")
+        source = paid_sources[0]
+        evidence, trace = run_x402_crawler(
+            source,
+            session_name=f"{crawler_slug}-manual-x402-{int(time.time())}",
+        )
+        return {
+            "status": "completed",
+            "crawler": crawler_slug,
+            "evidence": evidence,
+            "payment": trace,
+            "timestamp": now(),
         }
     if action == "scheduled_crawl":
         return run_scheduled_crawler(payload)

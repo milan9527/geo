@@ -1,2 +1,3 @@
 psycopg[binary]>=3.2,<4
 boto3>=1.40,<2
+x402[evm,httpx]==2.21.0

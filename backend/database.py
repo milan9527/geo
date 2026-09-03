@@ -1,11 +1,9 @@
 from __future__ import annotations
 
 import json
-import math
 import os
-import random
 from contextlib import contextmanager
-from datetime import date, datetime, timedelta, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any, Iterator
 
 import psycopg
@@ -110,7 +108,8 @@ CREATE TABLE IF NOT EXISTS crawler_jobs (
     documents INTEGER NOT NULL DEFAULT 0,
     message TEXT NOT NULL DEFAULT '',
     research_run_id BIGINT,
-    article_id BIGINT REFERENCES articles(id)
+    article_id BIGINT REFERENCES articles(id),
+    tool_trace_json TEXT NOT NULL DEFAULT '{}'
 );
 
 CREATE TABLE IF NOT EXISTS research_runs (
@@ -127,7 +126,10 @@ CREATE TABLE IF NOT EXISTS research_runs (
     analysis_process_json TEXT NOT NULL DEFAULT '[]',
     summary TEXT NOT NULL DEFAULT '',
     output_article_id BIGINT REFERENCES articles(id),
-    error_message TEXT NOT NULL DEFAULT ''
+    error_message TEXT NOT NULL DEFAULT '',
+    tool_trace_json TEXT NOT NULL DEFAULT '{}',
+    verification_status TEXT NOT NULL DEFAULT 'pending',
+    verification_json TEXT NOT NULL DEFAULT '{}'
 );
 
 CREATE TABLE IF NOT EXISTS research_evidence (
@@ -143,8 +145,29 @@ CREATE TABLE IF NOT EXISTS research_evidence (
     data_json TEXT NOT NULL DEFAULT '{}'
 );
 
+CREATE TABLE IF NOT EXISTS crawler_artifacts (
+    id BIGSERIAL PRIMARY KEY,
+    agent_id BIGINT NOT NULL REFERENCES crawler_agents(id),
+    source_hash TEXT NOT NULL,
+    crawl_style TEXT NOT NULL,
+    thread_id TEXT NOT NULL,
+    source_code TEXT NOT NULL,
+    test_plan TEXT NOT NULL DEFAULT '',
+    safety_notes_json TEXT NOT NULL DEFAULT '[]',
+    usage_json TEXT NOT NULL DEFAULT '{}',
+    status TEXT NOT NULL DEFAULT 'active',
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    last_used_at TEXT,
+    UNIQUE(agent_id, source_hash)
+);
+
 ALTER TABLE crawler_jobs ADD COLUMN IF NOT EXISTS research_run_id BIGINT;
 ALTER TABLE crawler_jobs ADD COLUMN IF NOT EXISTS article_id BIGINT REFERENCES articles(id);
+ALTER TABLE crawler_jobs ADD COLUMN IF NOT EXISTS tool_trace_json TEXT NOT NULL DEFAULT '{}';
+ALTER TABLE research_runs ADD COLUMN IF NOT EXISTS tool_trace_json TEXT NOT NULL DEFAULT '{}';
+ALTER TABLE research_runs ADD COLUMN IF NOT EXISTS verification_status TEXT NOT NULL DEFAULT 'pending';
+ALTER TABLE research_runs ADD COLUMN IF NOT EXISTS verification_json TEXT NOT NULL DEFAULT '{}';
 
 CREATE TABLE IF NOT EXISTS analytics_daily (
     day TEXT PRIMARY KEY,
@@ -371,7 +394,7 @@ ARTICLES = [
         [
             ("AWS", "Amazon Bedrock AgentCore product documentation", "https://aws.amazon.com/bedrock/agentcore/", "2026-08-18", "官方文档"),
             ("OpenAI", "Codex SDK documentation", "https://developers.openai.com/codex/sdk", "2026-08-25", "官方文档"),
-            ("Aperture Research", "Enterprise Agent Runtime Benchmark", "https://example.com/runtime-benchmark", "2026-09-01", "研究数据"),
+            ("NIST", "AI Risk Management Framework", "https://www.nist.gov/itl/ai-risk-management-framework", "2026-08-20", "治理框架"),
         ],
         featured=True,
         access_model="hybrid",
@@ -432,7 +455,7 @@ ARTICLES = [
             },
         ],
         [
-            ("Aperture Research", "Model System Efficiency Index", "https://example.com/model-efficiency", "2026-09-02", "研究数据"),
+            ("MLCommons", "Inference benchmarks", "https://mlcommons.org/benchmarks/inference-datacenter/", "2026-08-20", "行业基准"),
             ("OpenAI", "Model and API documentation", "https://developers.openai.com/", "2026-08-28", "官方文档"),
             ("Stanford HAI", "AI Index resources", "https://hai.stanford.edu/ai-index", "2026-04-15", "行业报告"),
         ],
@@ -553,7 +576,7 @@ ARTICLES = [
         ],
         [
             ("Stripe", "Agentic commerce resources", "https://stripe.com/use-cases/agentic-commerce", "2026-08-19", "行业资料"),
-            ("Aperture Research", "Machine Buyer Journey Study", "https://example.com/machine-buyer", "2026-08-30", "研究数据"),
+            ("W3C", "Payment Request API", "https://www.w3.org/TR/payment-request/", "2026-08-20", "技术标准"),
             ("Schema.org", "Product structured data vocabulary", "https://schema.org/Product", "2026-07-10", "标准"),
         ],
         access_model="hybrid",
@@ -614,7 +637,7 @@ ARTICLES = [
             },
         ],
         [
-            ("Aperture Research", "AI Infrastructure Capital Cycle", "https://example.com/ai-capex", "2026-08-30", "研究数据"),
+            ("U.S. BEA", "Investment in Fixed Assets", "https://www.bea.gov/data/investment-fixed-assets", "2026-08-20", "官方经济数据"),
             ("U.S. SEC", "Company filings database", "https://www.sec.gov/edgar", "2026-08-29", "监管数据"),
             ("Federal Reserve", "Economic data", "https://fred.stlouisfed.org/", "2026-08-28", "宏观数据"),
         ],
@@ -675,7 +698,7 @@ ARTICLES = [
             },
         ],
         [
-            ("Aperture Research", "Generative Citation Study", "https://example.com/geo-citations", "2026-08-29", "研究数据"),
+            ("Google Search Central", "Article structured data", "https://developers.google.com/search/docs/appearance/structured-data/article", "2026-08-20", "官方文档"),
             ("Schema.org", "Article vocabulary", "https://schema.org/Article", "2026-07-10", "标准"),
             ("W3C", "Web provenance resources", "https://www.w3.org/TR/prov-overview/", "2026-06-01", "标准"),
         ],
@@ -738,7 +761,7 @@ ARTICLES = [
         ],
         [
             ("OWASP", "LLM application security resources", "https://owasp.org/www-project-top-10-for-large-language-model-applications/", "2026-08-12", "安全标准"),
-            ("Aperture Research", "Browser Agent Safety Tests", "https://example.com/browser-safety", "2026-08-28", "研究数据"),
+            ("W3C", "WebDriver specification", "https://www.w3.org/TR/webdriver2/", "2026-08-20", "技术标准"),
             ("AWS", "AgentCore Browser documentation", "https://docs.aws.amazon.com/bedrock-agentcore/", "2026-08-18", "官方文档"),
         ],
     ),
@@ -795,7 +818,7 @@ ARTICLES = [
             },
         ],
         [
-            ("Aperture Research", "Agent Content Economy Survey", "https://example.com/agent-media", "2026-08-27", "研究数据"),
+            ("W3C", "ODRL Information Model", "https://www.w3.org/TR/odrl-model/", "2026-08-20", "许可标准"),
             ("Stripe", "Machine payments resources", "https://stripe.com/", "2026-08-19", "行业资料"),
             ("W3C", "HTTP status code specifications", "https://www.rfc-editor.org/rfc/rfc9110", "2026-05-01", "标准"),
         ],
@@ -807,12 +830,12 @@ ARTICLES = [
 
 
 AGENTS = [
-    ("Research Coder", "research-coder", "Code Interpreter", ["AI", "云计算"], "running", "*/20 * * * *", 8420, 98.9, 0.018),
-    ("Render Scout", "render-scout", "Browser Tool", ["电商", "媒体"], "running", "*/15 * * * *", 5186, 97.8, 0.032),
-    ("Market Signal", "market-signal", "Code Interpreter", ["金融", "证券"], "running", "0 */1 * * *", 2904, 99.2, 0.024),
-    ("Evidence Verifier", "evidence-verifier", "Codex SDK", ["全部行业"], "running", "*/10 * * * *", 1832, 99.6, 0.011),
-    ("Cloud Release Watch", "cloud-release-watch", "Browser Tool", ["云计算"], "idle", "0 */2 * * *", 1240, 98.1, 0.029),
-    ("Commerce Feed Miner", "commerce-feed-miner", "Code Interpreter", ["电商"], "paused", "0 */3 * * *", 684, 96.4, 0.016),
+    ("Research Coder", "research-coder", "Code Interpreter", ["AI", "云计算"], "running", "*/20 * * * *"),
+    ("Render Scout", "render-scout", "Browser Tool", ["电商", "媒体"], "running", "*/15 * * * *"),
+    ("Market Signal", "market-signal", "Code Interpreter", ["金融", "证券"], "running", "0 */1 * * *"),
+    ("Evidence Verifier", "evidence-verifier", "Codex SDK", ["全部行业"], "running", "*/10 * * * *"),
+    ("Cloud Release Watch", "cloud-release-watch", "Browser Tool", ["云计算"], "idle", "0 */2 * * *"),
+    ("Commerce Feed Miner", "commerce-feed-miner", "Code Interpreter", ["电商"], "paused", "0 */3 * * *"),
 ]
 
 
@@ -828,8 +851,6 @@ def init_db() -> None:
             _seed_categories(conn)
             _seed_articles(conn)
             _seed_agents(conn)
-            _seed_analytics(conn)
-            _seed_events(conn)
         settings_count = conn.execute(
             "SELECT COUNT(*) AS count FROM app_settings"
         ).fetchone()["count"]
@@ -875,7 +896,7 @@ def _seed_articles(conn: Any) -> None:
                 item["featured"],
                 item["hero_style"],
                 item["authority_score"],
-                item["citation_count"],
+                len(item["sources"]),
                 item["access_model"],
                 item["agent_price"],
                 item["keywords"],
@@ -893,16 +914,13 @@ def _seed_articles(conn: Any) -> None:
 
 
 def _seed_agents(conn: Any) -> None:
-    now = datetime.now(timezone.utc)
-    for index, item in enumerate(AGENTS):
-        last_run = (now - timedelta(minutes=(index + 1) * 7)).replace(microsecond=0).isoformat()
-        cursor = conn.execute(
+    for item in AGENTS:
+        conn.execute(
             """
             INSERT INTO crawler_agents(
                 name, slug, kind, industries, status, schedule, last_run,
                 pages_today, success_rate, cost_per_doc, config_json
             ) VALUES(%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-            RETURNING id
             """,
             (
                 item[0],
@@ -911,80 +929,13 @@ def _seed_agents(conn: Any) -> None:
                 json.dumps(item[3], ensure_ascii=False),
                 item[4],
                 item[5],
-                last_run,
-                item[6],
-                item[7],
-                item[8],
+                None,
+                0,
+                0,
+                0,
                 json.dumps({"maxPages": 12000, "respectRobots": True}),
             ),
         )
-        conn.execute(
-            """
-            INSERT INTO crawler_jobs(agent_id, status, started_at, finished_at, documents, message)
-            VALUES(%s, 'completed', %s, %s, %s, '增量抓取完成')
-            """,
-            (
-                cursor.fetchone()["id"],
-                (now - timedelta(hours=index + 2)).replace(microsecond=0).isoformat(),
-                (now - timedelta(hours=index + 2, minutes=-12)).replace(microsecond=0).isoformat(),
-                max(210, item[6] // 5),
-            ),
-        )
-
-
-def _seed_analytics(conn: Any) -> None:
-    rng = random.Random(9527)
-    today = date.today()
-    rows = []
-    for offset in range(119, -1, -1):
-        day = today - timedelta(days=offset)
-        progress = 1 - offset / 140
-        weekday = 0.84 if day.weekday() >= 5 else 1.0
-        wave = 1 + math.sin(offset / 5) * 0.07
-        human = int((5400 + 4300 * progress) * weekday * wave + rng.randint(-320, 420))
-        agent_views = int((1400 + 6100 * progress) * wave + rng.randint(-220, 290))
-        citations = int(agent_views * (0.13 + progress * 0.08))
-        clicks = int(citations * (0.22 + rng.random() * 0.05))
-        payments = max(0, int(agent_views * (0.004 + progress * 0.002) + rng.randint(-3, 4)))
-        revenue = round(payments * (0.08 + rng.random() * 0.08), 2)
-        rows.append((day.isoformat(), human, agent_views, citations, clicks, payments, revenue))
-    conn.cursor().executemany(
-        """
-        INSERT INTO analytics_daily(day, human_views, agent_views, citations, clicks, payments, revenue)
-        VALUES(%s, %s, %s, %s, %s, %s, %s)
-        """,
-        rows,
-    )
-
-
-def _seed_events(conn: Any) -> None:
-    now = datetime.now(timezone.utc)
-    article_ids = [row["id"] for row in conn.execute("SELECT id FROM articles")]
-    events = [
-        ("agent_view", "agent", "OpenAI Crawler", article_ids[0], 2, {"source": "article"}),
-        ("citation", "agent", "PerplexityBot", article_ids[4], 6, {"engine": "answer"}),
-        ("human_view", "human", None, article_ids[1], 11, {"source": "direct"}),
-        ("x402_payment", "agent", "Claude Research", article_ids[3], 14, {"amount": 0.03}),
-        ("citation", "agent", "Gemini Deep Research", article_ids[2], 21, {"engine": "answer"}),
-        ("human_click", "human", None, article_ids[5], 27, {"source": "ai_referral"}),
-    ]
-    conn.cursor().executemany(
-        """
-        INSERT INTO traffic_events(event_type, visitor_type, agent_name, article_id, occurred_at, metadata)
-        VALUES(%s, %s, %s, %s, %s, %s)
-        """,
-        [
-            (
-                kind,
-                visitor,
-                agent_name,
-                article_id,
-                (now - timedelta(minutes=minutes)).replace(microsecond=0).isoformat(),
-                json.dumps(metadata, ensure_ascii=False),
-            )
-            for kind, visitor, agent_name, article_id, minutes, metadata in events
-        ],
-    )
 
 
 def _seed_settings(conn: Any) -> None:

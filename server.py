@@ -85,6 +85,9 @@ def create_spa_handler(directory: Path, label: str):
                     "cookie",
                     "content-type",
                     "x-admin-key",
+                    "x-agent-name",
+                    "payment-signature",
+                    "x-payment",
                     "user-agent",
                     "accept",
                     "accept-language",
@@ -106,8 +109,12 @@ def create_spa_handler(directory: Path, label: str):
                 if content_type:
                     self.send_header("Content-Type", content_type)
                 for header, value in response.getheaders():
-                    if header.lower() == "set-cookie":
-                        self.send_header("Set-Cookie", value)
+                    if header.lower() in {
+                        "set-cookie",
+                        "payment-required",
+                        "payment-response",
+                    }:
+                        self.send_header(header, value)
                 self.send_header("Content-Length", str(len(response_body)))
                 self.send_header("Cache-Control", "no-store")
                 self.end_headers()

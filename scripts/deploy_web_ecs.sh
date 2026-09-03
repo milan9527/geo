@@ -25,6 +25,20 @@ PUBLIC_BUCKET="${GEO_PUBLIC_BUCKET:-}"
 ADMIN_BUCKET="${GEO_ADMIN_BUCKET:-}"
 PUBLIC_DISTRIBUTION="${GEO_PUBLIC_DISTRIBUTION_ID:-}"
 ADMIN_DISTRIBUTION="${GEO_ADMIN_DISTRIBUTION_ID:-}"
+X402_PAY_TO_ADDRESS="${X402_PAY_TO_ADDRESS:-}"
+X402_FACILITATOR_URL="${X402_FACILITATOR_URL:-https://x402.org/facilitator}"
+X402_NETWORK="${X402_NETWORK:-eip155:84532}"
+X402_DEFAULT_PRICE_USD="${X402_DEFAULT_PRICE_USD:-0.002}"
+X402_PUBLIC_BASE_URL="${X402_PUBLIC_BASE_URL:-}"
+
+if [ -z "$X402_PAY_TO_ADDRESS" ]; then
+  echo "X402_PAY_TO_ADDRESS is required for the paid Agent content routes." >&2
+  exit 1
+fi
+if [ -z "$X402_PUBLIC_BASE_URL" ]; then
+  echo "X402_PUBLIC_BASE_URL is required for public HTTPS payment challenges." >&2
+  exit 1
+fi
 
 DEPLOY_TEMP_DIR="$(mktemp -d)"
 DEPLOY_DOCKER_CONFIG="${DEPLOY_TEMP_DIR}/docker"
@@ -152,6 +166,11 @@ aws ecs describe-task-definition \
 jq \
   --arg image "$IMAGE_URI" \
   --arg container "$ECS_CONTAINER" \
+  --arg x402PayTo "$X402_PAY_TO_ADDRESS" \
+  --arg x402Facilitator "$X402_FACILITATOR_URL" \
+  --arg x402Network "$X402_NETWORK" \
+  --arg x402Price "$X402_DEFAULT_PRICE_USD" \
+  --arg x402PublicBaseUrl "$X402_PUBLIC_BASE_URL" \
   '
     del(
       .taskDefinitionArn,
@@ -165,7 +184,33 @@ jq \
     )
     | .containerDefinitions = (
         .containerDefinitions
-        | map(if .name == $container then .image = $image else . end)
+        | map(
+            if .name == $container then
+              .image = $image
+              | .environment = (
+                  [
+                    (.environment // [])[]
+                    | select(
+                        .name != "X402_ENABLED"
+                        and .name != "X402_PAY_TO_ADDRESS"
+                        and .name != "X402_FACILITATOR_URL"
+                        and .name != "X402_NETWORK"
+                        and .name != "X402_DEFAULT_PRICE_USD"
+                        and .name != "X402_PUBLIC_BASE_URL"
+                      )
+                  ]
+                  + [
+                      {"name": "X402_ENABLED", "value": "true"},
+                      {"name": "X402_PAY_TO_ADDRESS", "value": $x402PayTo},
+                      {"name": "X402_FACILITATOR_URL", "value": $x402Facilitator},
+                      {"name": "X402_NETWORK", "value": $x402Network},
+                      {"name": "X402_DEFAULT_PRICE_USD", "value": $x402Price},
+                      {"name": "X402_PUBLIC_BASE_URL", "value": $x402PublicBaseUrl}
+                    ]
+                )
+            else .
+            end
+          )
       )
   ' \
   "$CURRENT_TASK_FILE" >"$NEXT_TASK_FILE"

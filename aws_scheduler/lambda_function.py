@@ -5,11 +5,20 @@ import os
 from typing import Any
 
 import boto3
+from botocore.config import Config
 
 
 REGION = os.environ.get("AWS_REGION", "us-east-1")
 RUNTIME_ARN = os.environ["AGENTCORE_RUNTIME_ARN"]
-agentcore = boto3.client("bedrock-agentcore", region_name=REGION)
+agentcore = boto3.client(
+    "bedrock-agentcore",
+    region_name=REGION,
+    config=Config(
+        connect_timeout=10,
+        read_timeout=840,
+        retries={"total_max_attempts": 1, "mode": "standard"},
+    ),
+)
 
 
 def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
@@ -22,6 +31,9 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         "scheduledTime": event.get("scheduledTime", "eventbridge"),
         "scheduleName": event.get("scheduleName"),
         "requestId": getattr(context, "aws_request_id", None),
+        "allowPayment": bool(event.get("allowPayment")),
+        "forceAnalysis": bool(event.get("forceAnalysis")),
+        "overridePaused": bool(event.get("overridePaused")),
     }
     response = agentcore.invoke_agent_runtime(
         agentRuntimeArn=RUNTIME_ARN,

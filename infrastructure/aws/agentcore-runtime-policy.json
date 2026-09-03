@@ -16,6 +16,17 @@
       ]
     },
     {
+      "Sid": "BedrockMantleCodexInference",
+      "Effect": "Allow",
+      "Action": "bedrock-mantle:CreateInference",
+      "Resource": "arn:aws:bedrock-mantle:us-east-1:632930644527:project/*",
+      "Condition": {
+        "StringEquals": {
+          "bedrock-mantle:Model": "openai.gpt-5.6-sol"
+        }
+      }
+    },
+    {
       "Sid": "AuroraDataApi",
       "Effect": "Allow",
       "Action": [
@@ -65,6 +76,22 @@
       "Resource": [
         "arn:aws:bedrock-agentcore:us-east-1:632930644527:code-interpreter/*",
         "arn:aws:bedrock-agentcore:us-east-1:632930644527:code-interpreter-custom/*"
+      ]
+    },
+    {
+      "Sid": "AgentCorePaymentsBuyer",
+      "Effect": "Allow",
+      "Action": [
+        "bedrock-agentcore:ListPaymentInstruments",
+        "bedrock-agentcore:GetPaymentInstrument",
+        "bedrock-agentcore:GetPaymentInstrumentBalance",
+        "bedrock-agentcore:CreatePaymentSession",
+        "bedrock-agentcore:GetPaymentSession",
+        "bedrock-agentcore:ProcessPayment"
+      ],
+      "Resource": [
+        "arn:aws:bedrock-agentcore:us-east-1:632930644527:payment-manager/demopaymentmanager-zy4lsroxj3",
+        "arn:aws:bedrock-agentcore:us-east-1:632930644527:payment-manager/demopaymentmanager-zy4lsroxj3/*"
       ]
     },
     {

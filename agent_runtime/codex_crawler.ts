@@ -1,8 +1,9 @@
 /**
- * Production integration skeleton.
+ * Codex SDK worker used by the AgentCore Runtime.
  *
- * This worker is intentionally separate from the zero-dependency dashboard.
- * Install `@openai/codex-sdk` in the AgentCore Runtime image before use.
+ * Codex uses the Runtime task role through its Amazon Bedrock provider. It
+ * generates crawler source in an isolated workspace; execution happens later
+ * inside AgentCore Code Interpreter.
  */
 import { Codex } from "@openai/codex-sdk";
 
@@ -26,22 +27,33 @@ export interface CrawlArtifact {
   sourceCode: string;
   testPlan: string;
   safetyNotes: string[];
+  usage: {
+    inputTokens: number;
+    outputTokens: number;
+  };
 }
 
-const BEDROCK_BASE_URL =
-  process.env.BEDROCK_OPENAI_BASE_URL ??
-  "https://bedrock-runtime.us-east-1.amazonaws.com/openai/v1";
 const BEDROCK_MODEL =
-  process.env.BEDROCK_CODEX_MODEL ?? "us.openai.gpt-5.6-sol";
+  process.env.BEDROCK_CODEX_MODEL ?? "openai.gpt-5.6-sol";
+const AWS_REGION = process.env.AWS_REGION ?? "us-east-1";
 
 const codex = new Codex({
-  apiKey: process.env.BEDROCK_API_KEY,
-  baseUrl: BEDROCK_BASE_URL,
+  config: {
+    model_provider: "amazon-bedrock",
+    model_providers: {
+      "amazon-bedrock": {
+        aws: { region: AWS_REGION },
+      },
+    },
+    approval_policy: "never",
+    sandbox_mode: "workspace-write",
+    sandbox_workspace_write: { network_access: false },
+  },
 });
 
 function buildPrompt(request: CrawlRequest): string {
   return `
-Create a site-specific crawler for an isolated AgentCore Code Interpreter.
+Create a self-contained Python crawler for an isolated AgentCore Code Interpreter.
 
 Target domain: ${request.domain}
 Crawler style: ${request.style}
@@ -53,25 +65,42 @@ Robots policy: ${request.robotsPolicy}
 Requirements:
 - Respect robots policy, rate limits, authentication boundaries, and terms.
 - Do not attempt CAPTCHA bypass, credential discovery, or access-control bypass.
-- Emit newline-delimited JSON and preserve source URL, title, published_at,
-  fetched_at, author, body, structured_data, and evidence offsets.
+- Use only Python standard-library modules available in the sandbox.
+- Fetch only the exact HTTPS sample URLs and allowed domains listed above.
+- Do not use subprocess, shell commands, sockets, eval, exec, local credentials,
+  cloud metadata endpoints, or filesystem paths outside /tmp.
+- Emit exactly one JSON object on stdout with an "evidence" array.
+- Every evidence item must preserve publisher, title, url, publishedAt,
+  retrievedAt, sourceType, excerpt, and data.
 - Cap response size, retries, redirects, and total downloaded bytes.
+- For financial-timeseries, calculate changes from fetched observations.
 - Include deterministic tests using saved fixtures.
 
 Return exactly these sections:
-1. SOURCE_CODE
-2. TEST_PLAN
-3. SAFETY_NOTES
+SOURCE_CODE
+<plain Python source without Markdown fences>
+TEST_PLAN
+<plain text>
+SAFETY_NOTES
+<one item per line>
 `;
 }
 
-function parseArtifact(threadId: string, text: string): CrawlArtifact {
+function parseArtifact(
+  threadId: string,
+  text: string,
+  usage?: { input_tokens: number; output_tokens: number } | null,
+): CrawlArtifact {
   const section = (name: string, next?: string): string => {
-    const start = text.indexOf(`${name}\n`);
-    if (start < 0) return "";
-    const bodyStart = start + name.length + 1;
-    const end = next ? text.indexOf(`\n${next}\n`, bodyStart) : text.length;
-    return text.slice(bodyStart, end < 0 ? text.length : end).trim();
+    const heading = String.raw`(?:^|\n)(?:\d+\.\s*)?${name}\s*\n`;
+    const ending = next
+      ? String.raw`(?=\n(?:\d+\.\s*)?${next}\s*\n)`
+      : String.raw`$`;
+    const match = text.match(new RegExp(`${heading}([\\s\\S]*?)${ending}`, "m"));
+    return (match?.[1] ?? "")
+      .replace(/^```(?:python|text)?\s*/i, "")
+      .replace(/\s*```$/, "")
+      .trim();
   };
 
   return {
@@ -82,6 +111,10 @@ function parseArtifact(threadId: string, text: string): CrawlArtifact {
       .split("\n")
       .map((line) => line.replace(/^[-*]\s*/, "").trim())
       .filter(Boolean),
+    usage: {
+      inputTokens: usage?.input_tokens ?? 0,
+      outputTokens: usage?.output_tokens ?? 0,
+    },
   };
 }
 
@@ -90,6 +123,10 @@ export async function generateCrawler(request: CrawlRequest): Promise<CrawlArtif
     workingDirectory: "/tmp/geo-crawler-workspace",
     skipGitRepoCheck: true,
     model: BEDROCK_MODEL,
+    sandboxMode: "workspace-write",
+    networkAccessEnabled: false,
+    approvalPolicy: "never",
+    modelReasoningEffort: "high",
   });
   const result = await thread.run(buildPrompt(request));
   const finalResponse = result.finalResponse;
@@ -102,14 +139,22 @@ export async function generateCrawler(request: CrawlRequest): Promise<CrawlArtif
     throw new Error("Codex did not persist a resumable thread id");
   }
 
-  return parseArtifact(threadId, finalResponse);
+  return parseArtifact(threadId, finalResponse, result.usage);
 }
 
 export async function repairCrawler(
   threadId: string,
   failureLog: string,
 ): Promise<CrawlArtifact> {
-  const thread = codex.resumeThread(threadId);
+  const thread = codex.resumeThread(threadId, {
+    workingDirectory: "/tmp/geo-crawler-workspace",
+    skipGitRepoCheck: true,
+    model: BEDROCK_MODEL,
+    sandboxMode: "workspace-write",
+    networkAccessEnabled: false,
+    approvalPolicy: "never",
+    modelReasoningEffort: "high",
+  });
   const result = await thread.run(`
 The crawler failed in AgentCore Code Interpreter.
 Repair only the necessary code and preserve all safety constraints.
@@ -118,9 +163,12 @@ Repair only the necessary code and preserve all safety constraints.
 ${failureLog.slice(0, 12_000)}
 
 Return exactly:
-1. SOURCE_CODE
-2. TEST_PLAN
-3. SAFETY_NOTES
+SOURCE_CODE
+<plain Python source without Markdown fences>
+TEST_PLAN
+<plain text>
+SAFETY_NOTES
+<one item per line>
 `);
   const finalResponse = result.finalResponse;
 
@@ -128,5 +176,5 @@ Return exactly:
     throw new Error("Codex did not return a repaired artifact");
   }
 
-  return parseArtifact(threadId, finalResponse);
+  return parseArtifact(threadId, finalResponse, result.usage);
 }

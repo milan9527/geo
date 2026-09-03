@@ -1,7 +1,9 @@
 __pycache__/
 *.py[cod]
 node_modules/
+agent_runtime/dist/
 .venv/
+.venv-python-backup-*/
 .DS_Store
 .env
 .env.aws

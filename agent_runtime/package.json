@@ -3,7 +3,9 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "build": "tsc",
     "typecheck": "tsc --noEmit",
+    "crawler:generate": "node dist/codex_cli.js",
     "x402:wallet": "node x402_test.mjs --wallet-only",
     "x402:probe": "node x402_test.mjs",
     "x402:test": "node x402_test.mjs --pay"
@@ -11,7 +13,8 @@
   "dependencies": {
     "@aws-sdk/client-bedrock-agentcore": "^3.1125.0",
     "@aws-sdk/client-bedrock-agentcore-control": "^3.1125.0",
-    "@openai/codex-sdk": "^0.152.1"
+    "@openai/codex-sdk": "^0.152.1",
+    "playwright-core": "^1.62.0"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
