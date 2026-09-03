@@ -1,0 +1,15 @@
+.git
+.agents
+.codex
+.env
+.env.*
+.venv
+__pycache__
+*.py[cod]
+agent_runtime
+aws_runtime
+aws_scheduler
+frontend
+infrastructure
+scripts
+node_modules

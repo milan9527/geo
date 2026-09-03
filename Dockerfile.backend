@@ -1,0 +1,22 @@
+FROM python:3.13-alpine@sha256:7415fbc3c9e4979cc717d92377ab2bc7b2b4a2af1ac03cc52b5f3f88efedaf3a
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    GEO_API_HOST=0.0.0.0 \
+    GEO_API_PORT=8000
+
+WORKDIR /app
+
+RUN addgroup -S -g 10001 geo \
+    && adduser -S -D -H -u 10001 -G geo geo
+
+COPY requirements.txt .
+RUN pip install --no-cache-dir --upgrade pip \
+    && pip install --no-cache-dir -r requirements.txt
+
+COPY backend ./backend
+
+USER 10001:10001
+EXPOSE 8000
+
+CMD ["python", "-m", "backend.server"]

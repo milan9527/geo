@@ -84,6 +84,41 @@ export GEO_ADMIN_PASSWORD='创建管理员时生成的密码'
 PYTHONPATH=. .venv/bin/python scripts/smoke_test.py
 ```
 
+### AWS Web 部署
+
+生产 Web 入口使用两套独立的私有 S3 + CloudFront OAC 分发，分别承载公开站和管理后台。
+CloudFront 的 `/api/*` 与 `/agent/*` 行为转发到 ALB 后的 ECS Fargate API，因此浏览器
+请求、管理员 Cookie 和 Agent 机器接口保持同源。
+
+```text
+Public CloudFront ----> private public S3 (OAC)
+                   \
+                    +--> ALB --> ECS Fargate API --> Aurora Data API
+                   /
+Admin CloudFront -----> private admin S3 (OAC)
+```
+
+执行部署：
+
+```bash
+chmod +x scripts/deploy_web_ecs.sh
+./scripts/deploy_web_ecs.sh
+```
+
+脚本会构建 ARM64 后端镜像、推送到 `geo-intelligence-api` ECR、部署
+`geo-intelligence-web` CloudFormation stack、同步前端文件并创建 CloudFront
+invalidation。ALB 仅接受 AWS CloudFront origin-facing 前缀列表流量，并要求分发注入
+origin verification header；ECS 任务只接受 ALB 安全组访问。
+
+当前线上入口：
+
+- 公开站：`https://d1tsbnft7iv51.cloudfront.net`
+- 管理后台：`https://deu7vkdd3jf5.cloudfront.net`
+- API 健康检查：`https://d1tsbnft7iv51.cloudfront.net/api/health`
+
+部署资源输出保存在本机忽略提交的 `.env.deploy.aws`。后端基于固定 digest 的
+Python 3.13 Alpine ARM64 镜像，以非 root UID `10001` 运行；当前 ECR 扫描无发现。
+
 ### 已创建的 AWS 资源
 
 | 服务 | 资源 | 状态/配置 |
@@ -96,6 +131,11 @@ PYTHONPATH=. .venv/bin/python scripts/smoke_test.py
 | AgentCore Browser | `geo_intelligence_browser` | PUBLIC、Web Bot Auth 签名已开启 |
 | AgentCore Code Interpreter | `geo_intelligence_code` | PUBLIC、READY |
 | AgentCore Payments | `DemoPaymentManager` | Stripe Privy 钱包 ACTIVE、Base Sepolia x402 已验证 |
+| S3 + CloudFront | 公开站 | 私有 bucket、OAC、HTTP/2/3、Deployed |
+| S3 + CloudFront | 管理后台 | 私有 bucket、OAC、HTTP/2/3、Deployed |
+| ECS Fargate | `geo-intelligence-api` | ARM64、1/1 healthy、Container Insights |
+| ALB | `geo-intelligence-alb` | 仅允许 CloudFront origin-facing 网络 |
+| ECR | `geo-intelligence-api` | Alpine 镜像扫描 0 findings |
 | ECR | `geo-intelligence-agent` | 镜像扫描 0 Critical / 0 High / 0 Medium |
 | IAM | `geo-intelligence-agentcore-role` | 项目资源范围内的 Bedrock、Data API、工具和日志权限 |
 | EventBridge Scheduler | `geo-intelligence-crawlers` | 6 条 UTC 计划，5 条启用、1 条暂停 |

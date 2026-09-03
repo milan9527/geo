@@ -18,6 +18,29 @@ Provisioned on 2026-09-03 in `us-east-1`, account `632930644527`.
 - Scheduler role: `arn:aws:iam::632930644527:role/geo-intelligence-scheduler-role`
 - Bridge role: `arn:aws:iam::632930644527:role/geo-intelligence-scheduler-bridge-role`
 
+## Web application deployment
+
+Deployed by CloudFormation stack `geo-intelligence-web`:
+
+- Public CloudFront: `E57TFN7Z03O69` / `d1tsbnft7iv51.cloudfront.net`
+- Admin CloudFront: `E1OMOLTZCN9KUQ` / `deu7vkdd3jf5.cloudfront.net`
+- Shared S3 OAC: `E2WLLGTAL5PGBQ`
+- Public bucket: `geo-intelligence-public-632930644527-us-east-1`
+- Admin bucket: `geo-intelligence-admin-632930644527-us-east-1`
+- ECS cluster/service: `geo-intelligence` / `geo-intelligence-api`
+- ALB: `geo-intelligence-alb-136542997.us-east-1.elb.amazonaws.com`
+- ECR repository: `632930644527.dkr.ecr.us-east-1.amazonaws.com/geo-intelligence-api`
+- Active task definition: `geo-intelligence-api:2`
+
+Both buckets block every form of public access and grant object reads only to their CloudFront
+distribution through OAC. The ALB security group accepts port 80 only from the AWS-managed
+CloudFront origin-facing prefix list, and its listener forwards requests only when the private
+origin verification header matches. ECS tasks accept port 8000 only from the ALB security group.
+
+The deployed backend image uses pinned Python 3.13 Alpine on ARM64, runs as UID `10001`, and its
+ECR scan completed with zero findings. The ECS service has one desired/running task and uses
+Aurora PostgreSQL 17.7 exclusively through the Data API.
+
 The Aurora password is AWS-managed in Secrets Manager. Do not export or copy the secret value into
 project files. Runtime and local AWS mode use the AWS credential chain plus the resource and Secret
 ARNs in the ignored `.env.aws` file.

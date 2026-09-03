@@ -5,5 +5,6 @@ node_modules/
 .DS_Store
 .env
 .env.aws
+.env.deploy.aws
 .agents/
 .codex/

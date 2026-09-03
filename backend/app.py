@@ -167,6 +167,15 @@ class ApiHandler(BaseHTTPRequestHandler):
         path = parsed.path.rstrip("/") or "/"
         query = parse_qs(parsed.query)
 
+        if path == "/api/ping":
+            self._json(
+                {
+                    "status": "ok",
+                    "service": "aperture-geo-api",
+                    "timestamp": utc_now(),
+                }
+            )
+            return
         if path == "/api/health":
             self._health()
             return
