@@ -20,7 +20,8 @@ Provisioned on 2026-09-03 in `us-east-1`, account `632930644527`.
 
 ## Web application deployment
 
-Deployed by CloudFormation stack `geo-intelligence-web`:
+Application releases are deployed directly with AWS CLI service APIs. The deployment script does
+not call CloudFormation, CDK, or SAM:
 
 - Public CloudFront: `E57TFN7Z03O69` / `d1tsbnft7iv51.cloudfront.net`
 - Admin CloudFront: `E1OMOLTZCN9KUQ` / `deu7vkdd3jf5.cloudfront.net`
@@ -30,7 +31,7 @@ Deployed by CloudFormation stack `geo-intelligence-web`:
 - ECS cluster/service: `geo-intelligence` / `geo-intelligence-api`
 - ALB: `geo-intelligence-alb-136542997.us-east-1.elb.amazonaws.com`
 - ECR repository: `632930644527.dkr.ecr.us-east-1.amazonaws.com/geo-intelligence-api`
-- Active task definition: `geo-intelligence-api:2`
+- Active task definition: `geo-intelligence-api:3`
 
 Both buckets block every form of public access and grant object reads only to their CloudFront
 distribution through OAC. The ALB security group accepts port 80 only from the AWS-managed
@@ -40,6 +41,11 @@ origin verification header matches. ECS tasks accept port 8000 only from the ALB
 The deployed backend image uses pinned Python 3.13 Alpine on ARM64, runs as UID `10001`, and its
 ECR scan completed with zero findings. The ECS service has one desired/running task and uses
 Aurora PostgreSQL 17.7 exclusively through the Data API.
+
+The resources were initially created before the direct-API deployment workflow was adopted. The
+legacy `geo-intelligence-web` stack is not used for releases or updates and remains only because
+deleting an active stack would also delete its live resources. Do not update or delete that stack.
+All application releases must use `scripts/deploy_web_ecs.sh`.
 
 The Aurora password is AWS-managed in Secrets Manager. Do not export or copy the secret value into
 project files. Runtime and local AWS mode use the AWS credential chain plus the resource and Secret

@@ -105,10 +105,14 @@ chmod +x scripts/deploy_web_ecs.sh
 ./scripts/deploy_web_ecs.sh
 ```
 
-脚本会构建 ARM64 后端镜像、推送到 `geo-intelligence-api` ECR、部署
-`geo-intelligence-web` CloudFormation stack、同步前端文件并创建 CloudFront
-invalidation。ALB 仅接受 AWS CloudFront origin-facing 前缀列表流量，并要求分发注入
-origin verification header；ECS 任务只接受 ALB 安全组访问。
+脚本只使用 AWS CLI 和各服务 API，不调用 CloudFormation、CDK 或 SAM。它会构建 ARM64
+后端镜像，等待 ECR 扫描确认无 Critical/High 漏洞后注册新的 ECS task definition，
+滚动更新 Fargate 服务、同步两个 S3 前端并创建 CloudFront invalidation。
+
+现有 S3、OAC、CloudFront、ALB、IAM 与 ECS 基础资源按稳定名称和 ID 发现；部署脚本不会
+重建或替换分发，因此线上 URL 保持不变。ALB 仅接受 AWS CloudFront origin-facing
+前缀列表流量，并要求分发注入 origin verification header；ECS 任务只接受 ALB
+安全组访问。
 
 当前线上入口：
 
