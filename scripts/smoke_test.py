@@ -5,8 +5,13 @@ from __future__ import annotations
 
 import json
 import os
+import sys
 import time
+from html import escape
 from http.client import HTTPConnection
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from backend.database import connection
 
@@ -23,6 +28,9 @@ SESSION_COOKIE = ""
 TEST_SLUG = f"postgres-smoke-{int(time.time())}"
 TEST_SOURCE_NAME = f"Registry smoke source {int(time.time())}"
 TEST_SOURCE_URL = f"https://www.iana.org/domains/reserved?geo-smoke={int(time.time())}"
+PUBLIC_BASE_URL = os.environ.get(
+    "GEO_PUBLIC_BASE_URL", "https://aperture.zhangwangshu.com"
+).rstrip("/")
 
 
 def request(
@@ -54,6 +62,27 @@ def request(
     connection.close()
     data = json.loads(raw.decode("utf-8")) if raw else None
     return response.status, data
+
+
+def request_raw(
+    port: int,
+    method: str,
+    path: str,
+    *,
+    user_agent: str = "ApertureSmokeTest/1.0",
+) -> tuple[int, dict[str, str], bytes]:
+    client = HTTPConnection("127.0.0.1", port, timeout=10)
+    client.request(
+        method,
+        path,
+        headers={"Accept": "*/*", "User-Agent": user_agent},
+    )
+    response = client.getresponse()
+    status = response.status
+    headers = {key.lower(): value for key, value in response.getheaders()}
+    body = response.read()
+    client.close()
+    return status, headers, body
 
 
 def check(condition: bool, message: str) -> None:
@@ -127,6 +156,66 @@ def main() -> None:
 
         status, detail = request(PUBLIC_PORT, "GET", f"/api/v1/articles/{primary_slug}")
         check(status == 200 and detail["sections"] and detail["sources"], "Complete article detail")
+
+        status, headers, body = request_raw(
+            PUBLIC_PORT, "GET", f"/article/{primary_slug}"
+        )
+        document = body.decode("utf-8")
+        check(
+            status == 200
+            and headers["content-type"].startswith("text/html")
+            and escape(detail["title"]) in document
+            and escape(detail["summary"]) in document,
+            "Server-rendered article contains complete research content",
+        )
+        check(
+            f'<link rel="canonical" href="{PUBLIC_BASE_URL}/article/{primary_slug}"'
+            in document
+            and '"@type":"AnalysisNewsArticle"' in document
+            and 'rel="alternate" type="application/ld+json"' in document,
+            "Article canonical, JSON-LD, and machine alternate metadata",
+        )
+        status, headers, body = request_raw(
+            PUBLIC_PORT, "HEAD", f"/article/{primary_slug}"
+        )
+        check(
+            status == 200
+            and not body
+            and int(headers["content-length"]) > 0,
+            "Server-rendered article HEAD response",
+        )
+        status, _, _ = request_raw(
+            PUBLIC_PORT, "GET", "/article/not-a-published-article"
+        )
+        check(status == 404, "Unknown article returns a real HTTP 404")
+
+        for discovery_path, expected_type in (
+            ("/robots.txt", "text/plain"),
+            ("/sitemap.xml", "application/xml"),
+            ("/sitemap-articles.xml", "application/xml"),
+            ("/feed.xml", "application/rss+xml"),
+            ("/llms.txt", "text/plain"),
+            ("/indexnow-key.txt", "text/plain"),
+        ):
+            status, headers, body = request_raw(
+                PUBLIC_PORT, "GET", discovery_path
+            )
+            check(
+                status == 200
+                and headers["content-type"].startswith(expected_type)
+                and body,
+                f"Discovery endpoint {discovery_path}",
+            )
+        _, _, sitemap_body = request_raw(
+            PUBLIC_PORT, "GET", "/sitemap.xml"
+        )
+        sitemap = sitemap_body.decode("utf-8")
+        check(
+            f"{PUBLIC_BASE_URL}/article/{primary_slug}" in sitemap
+            and "/api/admin/" not in sitemap
+            and "/paid" not in sitemap,
+            "Sitemap includes only public canonical content",
+        )
 
         status, results = request(PUBLIC_PORT, "GET", "/api/v1/search?q=Agent")
         check(status == 200 and results, "Full-text content search")

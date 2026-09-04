@@ -53,6 +53,10 @@ CRAWLER_CONTACT_URL = os.environ.get(
     "CRAWLER_CONTACT_URL",
     "https://d1tsbnft7iv51.cloudfront.net/",
 )
+INDEXING_NOTIFIER_FUNCTION = os.environ.get(
+    "GEO_INDEXING_NOTIFIER_FUNCTION",
+    "geo-intelligence-indexing-notifier",
+)
 
 bedrock = boto3.client(
     "bedrock-runtime",
@@ -64,6 +68,7 @@ bedrock = boto3.client(
     ),
 )
 rds_data = boto3.client("rds-data", region_name=REGION)
+lambda_client = boto3.client("lambda", region_name=REGION)
 runtime_app = BedrockAgentCoreApp()
 background_tasks: set[asyncio.Task[Any]] = set()
 EVIDENCE_DATA_MAX_BYTES = 40_000
@@ -93,6 +98,30 @@ CASE
     )::text
 END
 """
+
+
+def submit_indexing(
+    article_slug: str,
+    category_slug: str,
+    *,
+    reason: str,
+) -> bool:
+    try:
+        response = lambda_client.invoke(
+            FunctionName=INDEXING_NOTIFIER_FUNCTION,
+            InvocationType="Event",
+            Payload=json.dumps(
+                {
+                    "slugs": [article_slug],
+                    "categories": [category_slug],
+                    "reason": reason,
+                }
+            ).encode("utf-8"),
+        )
+        return response.get("StatusCode") == 202
+    except Exception as error:
+        print(f"[indexing] asynchronous submission failed: {error}")
+        return False
 
 WRITING_STYLES = {
     "mechanism": {
@@ -2227,6 +2256,15 @@ def persist_research_output(
         """,
         {"documents": len(evidence), "agent_id": crawler["id"]},
     )
+    indexing_submitted = (
+        submit_indexing(
+            article_slug,
+            profile["category"],
+            reason=f"agent_{article_action}",
+        )
+        if article_status == "published"
+        else False
+    )
     return {
         "status": "completed",
         "jobId": job_id,
@@ -2234,6 +2272,7 @@ def persist_research_output(
         "articleId": article_id,
         "articleSlug": article_slug,
         "articleStatus": article_status,
+        "indexingSubmitted": indexing_submitted,
         "documents": len(evidence),
         "verification": verification,
         "toolTrace": tool_trace,

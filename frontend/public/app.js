@@ -75,6 +75,8 @@ function compactStory(article) {
 function setMeta({ title, description, article }) {
   document.title = title;
   $('meta[name="description"]').setAttribute("content", description);
+  $('link[rel="canonical"]')?.setAttribute("href", `${location.origin}${location.pathname}`);
+  $$("script[data-page-schema]").forEach((schema) => schema.remove());
   $("#pageSchema")?.remove();
   if (article) {
     const schema = document.createElement("script");
@@ -345,10 +347,6 @@ async function renderArticle(slug) {
         </section>
       </article>
     `;
-    api("/api/v1/track", {
-      method: "POST",
-      body: JSON.stringify({ eventType: "article_render", articleSlug: article.slug, metadata: { path: location.pathname } }),
-    }).catch(() => {});
   } catch {
     renderNotFound();
   }
@@ -409,12 +407,34 @@ function initEvents() {
     const link = event.target.closest("[data-link]");
     if (link && link.origin === location.origin) {
       event.preventDefault();
+      const destinationSlug = link.pathname.match(/^\/article\/([^/]+)/)?.[1];
+      api("/api/v1/track", {
+        method: "POST",
+        keepalive: true,
+        body: JSON.stringify({
+          eventType: "human_click",
+          articleSlug: destinationSlug,
+          metadata: {
+            sourcePath: location.pathname,
+            destinationPath: link.pathname,
+          },
+        }),
+      }).catch(() => {});
       navigate(link.pathname);
       $("#searchOverlay").classList.remove("open");
     }
     const machine = event.target.closest("[data-machine-url]");
     if (machine) {
       navigator.clipboard.writeText(machine.dataset.machineUrl).then(() => showToast("Agent API 地址已复制"));
+      api("/api/v1/track", {
+        method: "POST",
+        keepalive: true,
+        body: JSON.stringify({
+          eventType: "machine_link_copy",
+          articleSlug: location.pathname.match(/^\/article\/([^/]+)/)?.[1],
+          metadata: { target: machine.dataset.machineUrl },
+        }),
+      }).catch(() => {});
     }
   });
   window.addEventListener("popstate", renderRoute);
@@ -454,6 +474,7 @@ function closeSearch() {
 }
 
 async function init() {
+  const serverRendered = document.body.dataset.ssr === "true";
   initEvents();
   try {
     [state.site, state.categories, state.articles] = await Promise.all([
@@ -462,8 +483,16 @@ async function init() {
       api("/api/v1/articles"),
     ]);
     renderNav();
+    if (serverRendered) {
+      updateNavActive();
+      return;
+    }
     await renderRoute();
   } catch (error) {
+    if (serverRendered) {
+      $$("[data-link]").forEach((link) => link.removeAttribute("data-link"));
+      return;
+    }
     $("#app").innerHTML = `
       <div class="not-found"><span>!</span><h1>研究服务暂时不可用</h1>
       <p>请确认 API 服务已运行在 ${API}。</p></div>

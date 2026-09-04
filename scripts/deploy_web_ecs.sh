@@ -25,11 +25,14 @@ PUBLIC_BUCKET="${GEO_PUBLIC_BUCKET:-}"
 ADMIN_BUCKET="${GEO_ADMIN_BUCKET:-}"
 PUBLIC_DISTRIBUTION="${GEO_PUBLIC_DISTRIBUTION_ID:-}"
 ADMIN_DISTRIBUTION="${GEO_ADMIN_DISTRIBUTION_ID:-}"
+SSR_CACHE_POLICY_NAME="${GEO_SSR_CACHE_POLICY_NAME:-geo-intelligence-ssr-cache}"
 X402_PAY_TO_ADDRESS="${X402_PAY_TO_ADDRESS:-}"
 X402_FACILITATOR_URL="${X402_FACILITATOR_URL:-https://x402.org/facilitator}"
 X402_NETWORK="${X402_NETWORK:-eip155:84532}"
 X402_DEFAULT_PRICE_USD="${X402_DEFAULT_PRICE_USD:-0.002}"
 X402_PUBLIC_BASE_URL="${X402_PUBLIC_BASE_URL:-}"
+PUBLIC_BASE_URL="${GEO_PUBLIC_BASE_URL:-}"
+INDEXING_NOTIFIER_FUNCTION="${GEO_INDEXING_NOTIFIER_FUNCTION:-geo-intelligence-indexing-notifier}"
 
 if [ -z "$X402_PAY_TO_ADDRESS" ]; then
   echo "X402_PAY_TO_ADDRESS is required for the paid Agent content routes." >&2
@@ -87,6 +90,31 @@ for required_value in \
   fi
 done
 
+if [ -z "$PUBLIC_BASE_URL" ]; then
+  PUBLIC_ALIAS="$(
+    aws cloudfront get-distribution \
+      --id "$PUBLIC_DISTRIBUTION" \
+      --query 'Distribution.DistributionConfig.Aliases.Items[0]' \
+      --output text
+  )"
+  if [ -n "$PUBLIC_ALIAS" ] && [ "$PUBLIC_ALIAS" != "None" ]; then
+    PUBLIC_BASE_URL="https://${PUBLIC_ALIAS}"
+  else
+    PUBLIC_CLOUDFRONT_DOMAIN="$(
+      aws cloudfront get-distribution \
+        --id "$PUBLIC_DISTRIBUTION" \
+        --query 'Distribution.DomainName' \
+        --output text
+    )"
+    PUBLIC_BASE_URL="https://${PUBLIC_CLOUDFRONT_DOMAIN}"
+  fi
+fi
+if [[ ! "$PUBLIC_BASE_URL" =~ ^https://[^/]+$ ]]; then
+  echo "GEO_PUBLIC_BASE_URL must be an HTTPS origin without a path or trailing slash." >&2
+  exit 1
+fi
+INDEXNOW_KEY="${INDEXNOW_KEY:-$(printf '%s' "$PUBLIC_BASE_URL" | sha256sum | cut -c1-32)}"
+
 aws s3api head-bucket --bucket "$PUBLIC_BUCKET"
 aws s3api head-bucket --bucket "$ADMIN_BUCKET"
 aws cloudfront get-distribution --id "$PUBLIC_DISTRIBUTION" >/dev/null
@@ -98,6 +126,38 @@ aws ecs describe-services \
   --query 'services[0].serviceName' \
   --output text |
   grep -qx "$ECS_SERVICE"
+
+SSR_CACHE_POLICY_ID="$(
+  aws cloudfront list-cache-policies \
+    --type custom \
+    --query "CachePolicyList.Items[?CachePolicy.CachePolicyConfig.Name=='${SSR_CACHE_POLICY_NAME}'].CachePolicy.Id | [0]" \
+    --output text
+)"
+if [ -z "$SSR_CACHE_POLICY_ID" ] || [ "$SSR_CACHE_POLICY_ID" = "None" ]; then
+  SSR_CACHE_CONFIG="${DEPLOY_TEMP_DIR}/ssr-cache-policy.json"
+  jq -n \
+    --arg name "$SSR_CACHE_POLICY_NAME" \
+    '{
+      Name: $name,
+      Comment: "Aperture GEO server-rendered public content cache",
+      DefaultTTL: 300,
+      MaxTTL: 900,
+      MinTTL: 0,
+      ParametersInCacheKeyAndForwardedToOrigin: {
+        EnableAcceptEncodingGzip: true,
+        EnableAcceptEncodingBrotli: true,
+        HeadersConfig: {HeaderBehavior: "none"},
+        CookiesConfig: {CookieBehavior: "none"},
+        QueryStringsConfig: {QueryStringBehavior: "none"}
+      }
+    }' >"$SSR_CACHE_CONFIG"
+  SSR_CACHE_POLICY_ID="$(
+    aws cloudfront create-cache-policy \
+      --cache-policy-config "file://${SSR_CACHE_CONFIG}" \
+      --query 'CachePolicy.Id' \
+      --output text
+  )"
+fi
 
 if ! aws ecr describe-repositories \
   --region "$DEPLOY_REGION" \
@@ -171,6 +231,9 @@ jq \
   --arg x402Network "$X402_NETWORK" \
   --arg x402Price "$X402_DEFAULT_PRICE_USD" \
   --arg x402PublicBaseUrl "$X402_PUBLIC_BASE_URL" \
+  --arg publicBaseUrl "$PUBLIC_BASE_URL" \
+  --arg indexingFunction "$INDEXING_NOTIFIER_FUNCTION" \
+  --arg indexnowKey "$INDEXNOW_KEY" \
   '
     del(
       .taskDefinitionArn,
@@ -197,6 +260,9 @@ jq \
                         and .name != "X402_NETWORK"
                         and .name != "X402_DEFAULT_PRICE_USD"
                         and .name != "X402_PUBLIC_BASE_URL"
+                        and .name != "GEO_PUBLIC_BASE_URL"
+                        and .name != "GEO_INDEXING_NOTIFIER_FUNCTION"
+                        and .name != "INDEXNOW_KEY"
                       )
                   ]
                   + [
@@ -205,7 +271,10 @@ jq \
                       {"name": "X402_FACILITATOR_URL", "value": $x402Facilitator},
                       {"name": "X402_NETWORK", "value": $x402Network},
                       {"name": "X402_DEFAULT_PRICE_USD", "value": $x402Price},
-                      {"name": "X402_PUBLIC_BASE_URL", "value": $x402PublicBaseUrl}
+                      {"name": "X402_PUBLIC_BASE_URL", "value": $x402PublicBaseUrl},
+                      {"name": "GEO_PUBLIC_BASE_URL", "value": $publicBaseUrl},
+                      {"name": "GEO_INDEXING_NOTIFIER_FUNCTION", "value": $indexingFunction},
+                      {"name": "INDEXNOW_KEY", "value": $indexnowKey}
                     ]
                 )
             else .
@@ -254,6 +323,68 @@ aws s3 cp frontend/admin/index.html "s3://${ADMIN_BUCKET}/index.html" \
   --content-type text/html \
   --cache-control 'no-cache'
 
+PUBLIC_DISTRIBUTION_WRAPPER="${DEPLOY_TEMP_DIR}/public-distribution-wrapper.json"
+PUBLIC_DISTRIBUTION_CONFIG="${DEPLOY_TEMP_DIR}/public-distribution-config.json"
+aws cloudfront get-distribution-config \
+  --id "$PUBLIC_DISTRIBUTION" \
+  --output json >"$PUBLIC_DISTRIBUTION_WRAPPER"
+PUBLIC_DISTRIBUTION_ETAG="$(
+  jq -r '.ETag' "$PUBLIC_DISTRIBUTION_WRAPPER"
+)"
+SSR_PATHS='[
+  "article/*",
+  "category/*",
+  "methodology",
+  "robots.txt",
+  "sitemap.xml",
+  "sitemap-articles.xml",
+  "feed.xml",
+  "llms.txt",
+  "indexnow-key.txt"
+]'
+jq \
+  --argjson paths "$SSR_PATHS" \
+  --arg ssrCachePolicy "$SSR_CACHE_POLICY_ID" \
+  '
+    .DistributionConfig
+    | (.CacheBehaviors.Items[] | select(.PathPattern == "api/*")) as $api
+    | .CacheBehaviors.Items = (
+        (
+          (.CacheBehaviors.Items // [])
+          | map(
+              select(
+                .PathPattern as $existing
+                | ($paths | index($existing) | not)
+              )
+            )
+        )
+        + [
+            $paths[] as $path
+            | $api
+              + {
+                  "PathPattern": $path,
+                  "CachePolicyId": $ssrCachePolicy,
+                  "AllowedMethods": {
+                    "Quantity": 3,
+                    "Items": ["HEAD", "GET", "OPTIONS"],
+                    "CachedMethods": {
+                      "Quantity": 3,
+                      "Items": ["HEAD", "GET", "OPTIONS"]
+                    }
+                  }
+                }
+          ]
+      )
+    | .CacheBehaviors.Quantity = (.CacheBehaviors.Items | length)
+  ' \
+  "$PUBLIC_DISTRIBUTION_WRAPPER" >"$PUBLIC_DISTRIBUTION_CONFIG"
+aws cloudfront update-distribution \
+  --id "$PUBLIC_DISTRIBUTION" \
+  --if-match "$PUBLIC_DISTRIBUTION_ETAG" \
+  --distribution-config "file://${PUBLIC_DISTRIBUTION_CONFIG}" >/dev/null
+aws cloudfront wait distribution-deployed \
+  --id "$PUBLIC_DISTRIBUTION"
+
 aws cloudfront create-invalidation \
   --distribution-id "$PUBLIC_DISTRIBUTION" \
   --paths '/*' >/dev/null
@@ -277,8 +408,13 @@ ADMIN_DOMAIN="$(
 curl --fail --silent --show-error "https://${PUBLIC_DOMAIN}/api/health" >/dev/null
 curl --fail --silent --show-error "https://${PUBLIC_DOMAIN}/" >/dev/null
 curl --fail --silent --show-error "https://${ADMIN_DOMAIN}/" >/dev/null
+curl --fail --silent --show-error "${PUBLIC_BASE_URL}/robots.txt" >/dev/null
+curl --fail --silent --show-error "${PUBLIC_BASE_URL}/sitemap.xml" >/dev/null
+curl --fail --silent --show-error "${PUBLIC_BASE_URL}/feed.xml" >/dev/null
+curl --fail --silent --show-error "${PUBLIC_BASE_URL}/llms.txt" >/dev/null
+curl --fail --silent --show-error "${PUBLIC_BASE_URL}/indexnow-key.txt" >/dev/null
 
 printf 'Backend image: %s\n' "$IMAGE_URI"
 printf 'Task definition: %s\n' "$NEXT_TASK_ARN"
-printf 'Public site: https://%s\n' "$PUBLIC_DOMAIN"
+printf 'Public site: %s\n' "$PUBLIC_BASE_URL"
 printf 'Admin site: https://%s\n' "$ADMIN_DOMAIN"

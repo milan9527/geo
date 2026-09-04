@@ -224,7 +224,7 @@ function renderDashboard() {
     <section class="metric-grid">
       ${metricCard("i-users", "teal", "Agent 独立访问", fmt(summary.agentViews), data.growth.agent, `占总流量 ${summary.agentShare}%`)}
       ${metricCard("i-citation", "purple", "AI 内容引用", fmt(summary.citations), data.growth.citations, `引用率 ${summary.citationRate}%`)}
-      ${metricCard("i-trend", "blue", "人类访问", fmt(summary.humanViews), data.growth.human, "含 AI 引荐访问")}
+      ${metricCard("i-trend", "blue", "人类独立访问", fmt(summary.humanViews), data.growth.human, `${fmt(summary.humanRequests || 0)} 次页面请求`)}
       ${metricCard("i-wallet", "amber", "x402 收入", money(summary.revenue), data.growth.revenue, `${fmt(summary.payments)} 笔支付`)}
     </section>
     <section class="panel ab-panel">
@@ -238,11 +238,11 @@ function renderDashboard() {
     </section>
     <section class="dashboard-grid">
       <article class="panel">
-        <div class="panel-header"><div><p>TRAFFIC INTELLIGENCE</p><h2>人类与 Agent 流量趋势</h2></div><span>总访问 ${fmt(total)}</span></div>
+        <div class="panel-header"><div><p>TRAFFIC INTELLIGENCE</p><h2>人类与 Agent 独立访问趋势</h2></div><span>HLL 估算 · 日志延迟数分钟</span></div>
         <div class="chart-summary">
           <div><span>所选周期</span><strong>${fmt(total)}</strong></div>
-          <div class="chart-legend"><i></i>Agent 流量 <b>${fmt(summary.agentViews)}</b></div>
-          <div class="chart-legend human"><i></i>人类访问 <b>${fmt(summary.humanViews)}</b></div>
+          <div class="chart-legend"><i></i>Agent 独立访问 <b>${fmt(summary.agentViews)}</b></div>
+          <div class="chart-legend human"><i></i>人类独立访问 <b>${fmt(summary.humanViews)}</b></div>
         </div>
         ${renderChart(data.daily)}
       </article>
@@ -267,7 +267,7 @@ function renderDashboard() {
         </div>
       </article>
       <article class="panel">
-        <div class="panel-header"><div><p>LIVE ACTIVITY</p><h2>最新访问事件</h2></div><span>实时</span></div>
+        <div class="panel-header"><div><p>BUSINESS ACTIVITY</p><h2>最新业务事件</h2></div><span>实时</span></div>
         <div class="event-list">${state.events.slice(0,5).map((event) => `
           <div class="event-row"><span class="event-icon"><svg><use href="#${event.visitor_type === "agent" ? "i-agent" : "i-users"}"></use></svg></span><div><strong>${event.agent_name || (event.visitor_type === "agent" ? "未知 Agent" : "人类访客")} · ${event.event_type}</strong><span>${event.article_title || "站点页面"}</span></div><small>${relativeTime(event.occurred_at)}</small></div>
         `).join("")}</div>

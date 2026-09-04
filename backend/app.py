@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import html
+import hashlib
 import json
 import ipaddress
 import os
@@ -12,7 +14,7 @@ from datetime import date, datetime, timedelta, timezone
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler
 from urllib.error import HTTPError, URLError
-from urllib.parse import parse_qs, urljoin, urlparse
+from urllib.parse import parse_qs, quote, unquote, urljoin, urlparse
 from urllib.request import HTTPRedirectHandler, Request, build_opener
 
 import boto3
@@ -22,6 +24,13 @@ from .auth import (
     hash_password,
     session_token_hash,
     verify_password,
+)
+from .analytics import (
+    decode_hll,
+    empty_hll,
+    hll_count,
+    hll_merge,
+    identify_visitor,
 )
 from .database import USE_AURORA_DATA_API, connection, init_db, utc_now
 from .x402_payment import (
@@ -47,6 +56,16 @@ ADMIN_SESSION_HOURS = int(os.environ.get("GEO_ADMIN_SESSION_HOURS", "12"))
 ADMIN_MAX_FAILED_ATTEMPTS = 5
 ADMIN_LOCK_MINUTES = 15
 AWS_REGION = os.environ.get("AWS_REGION", "us-east-1")
+PUBLIC_BASE_URL = os.environ.get(
+    "GEO_PUBLIC_BASE_URL", "https://aperture.zhangwangshu.com"
+).rstrip("/")
+INDEXING_NOTIFIER_FUNCTION = os.environ.get(
+    "GEO_INDEXING_NOTIFIER_FUNCTION",
+    "geo-intelligence-indexing-notifier",
+)
+INDEXNOW_KEY = os.environ.get("INDEXNOW_KEY") or hashlib.sha256(
+    PUBLIC_BASE_URL.encode("utf-8")
+).hexdigest()[:32]
 SCHEDULER_GROUP = "geo-intelligence-crawlers"
 SCHEDULER_BRIDGE_FUNCTION = "geo-intelligence-scheduler-bridge"
 CRAWLER_SCHEDULE_PRESETS = {
@@ -86,14 +105,6 @@ CASE
     )::text
 END
 """
-AGENT_PATTERNS = {
-    "OpenAI Crawler": ("gptbot", "chatgpt-user", "openai"),
-    "ClaudeBot": ("claudebot", "claude-web"),
-    "PerplexityBot": ("perplexitybot", "perplexity-user"),
-    "Google-Extended": ("google-extended", "gemini"),
-    "Amazonbot": ("amazonbot",),
-    "Common Crawl": ("ccbot",),
-}
 SOURCE_METHODS = {"feed", "web", "browser", "api", "timeseries", "x402"}
 SOURCE_STATUSES = {"active", "paused", "error"}
 SOURCE_ACCESS_MODELS = {"open", "authenticated", "x402"}
@@ -269,14 +280,6 @@ def parse_json(value: str | None, fallback):
         return fallback
 
 
-def identify_visitor(user_agent: str) -> tuple[str, str | None]:
-    normalized = user_agent.lower()
-    for name, patterns in AGENT_PATTERNS.items():
-        if any(pattern in normalized for pattern in patterns):
-            return "agent", name
-    return "human", None
-
-
 def normalize_crawler_schedule(value: object) -> dict[str, str]:
     schedule = re.sub(r"\s+", " ", str(value or "").strip())
     if schedule == "0 */1 * * *":
@@ -392,6 +395,46 @@ def invoke_crawler_bridge(
     return body
 
 
+def submit_indexing(
+    *,
+    slugs: list[str],
+    categories: list[str],
+    reason: str,
+) -> bool:
+    clean_slugs = sorted(
+        {
+            slug
+            for slug in slugs
+            if re.fullmatch(r"[a-z0-9][a-z0-9-]{0,239}", slug)
+        }
+    )
+    clean_categories = sorted(
+        {
+            category
+            for category in categories
+            if re.fullmatch(r"[a-z0-9][a-z0-9-]{0,99}", category)
+        }
+    )
+    if not clean_slugs and not clean_categories:
+        return False
+    try:
+        response = boto3.client("lambda", region_name=AWS_REGION).invoke(
+            FunctionName=INDEXING_NOTIFIER_FUNCTION,
+            InvocationType="Event",
+            Payload=json.dumps(
+                {
+                    "slugs": clean_slugs,
+                    "categories": clean_categories,
+                    "reason": reason[:80],
+                }
+            ).encode("utf-8"),
+        )
+        return response.get("StatusCode") == 202
+    except Exception as error:
+        print(f"[indexing] asynchronous submission failed: {error}")
+        return False
+
+
 def public_article(row: dict, *, detailed: bool = False) -> dict:
     result = {
         "id": row["id"],
@@ -451,11 +494,51 @@ class ApiHandler(BaseHTTPRequestHandler):
         self.send_response(HTTPStatus.NO_CONTENT)
         self.end_headers()
 
+    def do_HEAD(self) -> None:  # noqa: N802
+        self._head_only = True
+        try:
+            self.do_GET()
+        finally:
+            self._head_only = False
+
     def do_GET(self) -> None:  # noqa: N802
         parsed = urlparse(self.path)
         path = parsed.path.rstrip("/") or "/"
         query = parse_qs(parsed.query)
 
+        article_page_match = re.fullmatch(r"/article/([^/]+)", path)
+        if article_page_match:
+            self._article_page(article_page_match.group(1))
+            return
+        category_page_match = re.fullmatch(r"/category/([^/]+)", path)
+        if category_page_match:
+            self._category_page(category_page_match.group(1))
+            return
+        if path == "/methodology":
+            self._methodology_page()
+            return
+        if path == "/robots.txt":
+            self._robots()
+            return
+        if path == "/sitemap.xml":
+            self._sitemap(articles_only=False)
+            return
+        if path == "/sitemap-articles.xml":
+            self._sitemap(articles_only=True)
+            return
+        if path == "/feed.xml":
+            self._feed()
+            return
+        if path == "/llms.txt":
+            self._llms()
+            return
+        if path == "/indexnow-key.txt":
+            self._text(
+                INDEXNOW_KEY,
+                content_type="text/plain; charset=utf-8",
+                extra_headers={"Cache-Control": "public, max-age=86400"},
+            )
+            return
         if path == "/api/ping":
             self._json(
                 {
@@ -896,6 +979,605 @@ class ApiHandler(BaseHTTPRequestHandler):
             }
         )
 
+    def _load_public_article(self, slug: str) -> dict | None:
+        with connection() as conn:
+            row = conn.execute(
+                """
+                SELECT a.*, c.slug category_slug, c.name category_name,
+                       c.eyebrow category_eyebrow, c.accent category_accent
+                FROM articles a JOIN categories c ON c.id = a.category_id
+                WHERE a.slug = %s AND a.status = 'published'
+                """,
+                (unquote(slug),),
+            ).fetchone()
+            if not row:
+                return None
+            sources = [
+                dict(source)
+                for source in conn.execute(
+                    """
+                    SELECT publisher, title, url, published_at publishedAt,
+                           source_type sourceType
+                    FROM sources WHERE article_id = %s ORDER BY id
+                    """,
+                    (row["id"],),
+                ).fetchall()
+            ]
+            related = conn.execute(
+                """
+                SELECT a.*, c.slug category_slug, c.name category_name,
+                       c.eyebrow category_eyebrow, c.accent category_accent
+                FROM articles a JOIN categories c ON c.id = a.category_id
+                WHERE a.status = 'published' AND a.id != %s
+                ORDER BY CASE WHEN a.category_id = %s THEN 0 ELSE 1 END,
+                         a.published_at DESC LIMIT 3
+                """,
+                (row["id"], row["category_id"]),
+            ).fetchall()
+        article_row = dict(row)
+        article_row["sources"] = sources
+        result = public_article(article_row, detailed=True)
+        result["related"] = [public_article(dict(item)) for item in related]
+        return result
+
+    def _navigation_html(self) -> str:
+        with connection() as conn:
+            rows = conn.execute(
+                "SELECT slug, name FROM categories ORDER BY sort_order"
+            ).fetchall()
+        return "".join(
+            '<a href="/category/{slug}" data-link>{name}</a>'.format(
+                slug=quote(str(row["slug"]), safe=""),
+                name=html.escape(str(row["name"])),
+            )
+            for row in rows
+        )
+
+    def _page_shell(
+        self,
+        *,
+        title: str,
+        description: str,
+        canonical_path: str,
+        main_html: str,
+        schemas: list[dict] | None = None,
+        alternate_json_path: str | None = None,
+        robots: str = "index, follow, max-snippet:-1, max-image-preview:large",
+        open_graph_type: str = "website",
+    ) -> str:
+        escaped_title = html.escape(title)
+        escaped_description = html.escape(description, quote=True)
+        canonical = f"{PUBLIC_BASE_URL}{canonical_path}"
+        schema_tags = "".join(
+            '<script type="application/ld+json" data-page-schema>{}</script>'.format(
+                json.dumps(schema, ensure_ascii=False, separators=(",", ":"))
+                .replace("<", "\\u003c")
+                .replace(">", "\\u003e")
+            )
+            for schema in (schemas or [])
+        )
+        alternate = (
+            '<link rel="alternate" type="application/ld+json" href="{}" />'.format(
+                html.escape(
+                    f"{PUBLIC_BASE_URL}{alternate_json_path}", quote=True
+                )
+            )
+            if alternate_json_path
+            else ""
+        )
+        return f"""<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>{escaped_title}</title>
+  <meta name="description" content="{escaped_description}" />
+  <meta name="robots" content="{html.escape(robots, quote=True)}" />
+  <link rel="canonical" href="{html.escape(canonical, quote=True)}" />
+  {alternate}
+  <meta property="og:type" content="{html.escape(open_graph_type, quote=True)}" />
+  <meta property="og:site_name" content="Aperture Intelligence" />
+  <meta property="og:locale" content="zh_CN" />
+  <meta property="og:title" content="{escaped_title}" />
+  <meta property="og:description" content="{escaped_description}" />
+  <meta property="og:url" content="{html.escape(canonical, quote=True)}" />
+  <link rel="stylesheet" href="/styles.css" />
+  {schema_tags}
+</head>
+<body data-ssr="true">
+  <svg class="icon-sprite" aria-hidden="true">
+    <symbol id="icon-arrow" viewBox="0 0 24 24"><path d="M5 12h14M14 7l5 5-5 5"></path></symbol>
+    <symbol id="icon-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"></circle><path d="M16 16l5 5"></path></symbol>
+    <symbol id="icon-menu" viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"></path></symbol>
+    <symbol id="icon-close" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"></path></symbol>
+    <symbol id="icon-agent" viewBox="0 0 24 24"><rect x="4" y="7" width="16" height="12" rx="4"></rect><path d="M12 3v4M8 12h.01M16 12h.01M9 16h6"></path></symbol>
+  </svg>
+  <div class="site-shell">
+    <header class="site-header"><div class="header-inner">
+      <a class="brand" href="/" data-link aria-label="Aperture Intelligence 首页">
+        <span class="brand-mark"><i></i><i></i><i></i></span>
+        <span class="brand-type"><b>APERTURE</b><small>INTELLIGENCE</small></span>
+      </a>
+      <nav class="primary-nav" id="primaryNav" aria-label="研究分类">{self._navigation_html()}</nav>
+      <div class="header-actions">
+        <span class="freshness"><i></i> 持续更新</span>
+        <button class="search-button" id="searchButton" aria-label="搜索研究内容"><svg><use href="#icon-search"></use></svg></button>
+        <button class="menu-button" id="menuButton" aria-label="打开导航"><svg><use href="#icon-menu"></use></svg></button>
+      </div>
+    </div></header>
+    <main id="app" tabindex="-1">{main_html}</main>
+    <footer class="site-footer">
+      <div class="footer-primary">
+        <div class="footer-brand"><a class="brand light" href="/" data-link><span class="brand-type"><b>APERTURE</b><small>INTELLIGENCE</small></span></a><p>把复杂技术变化转化为可验证、可行动的专业判断。</p></div>
+        <div class="footer-links">
+          <div><strong>研究领域</strong><a href="/category/ai" data-link>AI 行业动向</a><a href="/category/agent" data-link>Agent 技术</a><a href="/category/cloud" data-link>云计算</a></div>
+          <div><strong>行业观察</strong><a href="/category/commerce" data-link>电商与媒体</a><a href="/category/finance" data-link>金融市场</a><a href="/methodology" data-link>研究方法</a></div>
+          <div><strong>机器访问</strong><a href="/llms.txt">llms.txt</a><a href="/feed.xml">RSS Feed</a><a href="/sitemap.xml">Sitemap</a></div>
+        </div>
+      </div>
+      <div class="footer-bottom"><span>© 2026 Aperture Intelligence</span><span>研究内容不构成投资建议</span></div>
+    </footer>
+  </div>
+  <div class="search-overlay" id="searchOverlay" aria-hidden="true"><div class="search-panel">
+    <div class="search-top"><div class="search-input-wrap"><svg><use href="#icon-search"></use></svg><input id="searchInput" type="search" placeholder="搜索主题、公司、技术或研究观点…" autocomplete="off" /></div><button id="closeSearch" aria-label="关闭搜索"><svg><use href="#icon-close"></use></svg></button></div>
+    <div class="search-prompt" id="searchPrompt"><span>热门主题</span><div><button data-search-term="Agent Runtime">Agent Runtime</button><button data-search-term="GEO">GEO</button><button data-search-term="云计算">云计算</button></div></div>
+    <div class="search-results" id="searchResults"></div>
+  </div></div>
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  <script src="/app.js?v=20260904-1"></script>
+</body>
+</html>"""
+
+    @staticmethod
+    def _safe_source_url(value: object) -> str:
+        parsed = urlparse(str(value or ""))
+        return str(value) if parsed.scheme in {"http", "https"} else "#"
+
+    def _article_page(self, slug: str) -> None:
+        article = self._load_public_article(slug)
+        if not article:
+            self._not_found_page()
+            return
+        escaped_slug = quote(str(article["slug"]), safe="")
+        canonical_path = f"/article/{escaped_slug}"
+        section_parts: list[str] = []
+        for section in article["sections"]:
+            heading = html.escape(str(section.get("heading") or "分析"))
+            number = (
+                f'<span class="section-number">{html.escape(str(section["number"]))}</span>'
+                if section.get("number")
+                else ""
+            )
+            paragraphs = "".join(
+                f"<p>{html.escape(str(paragraph))}</p>"
+                for paragraph in section.get("paragraphs", [])
+            )
+            stat = ""
+            if isinstance(section.get("stat"), dict):
+                stat = (
+                    '<div class="article-stat"><strong>{}</strong><span>{}</span></div>'.format(
+                        html.escape(str(section["stat"].get("value", ""))),
+                        html.escape(str(section["stat"].get("label", ""))),
+                    )
+                )
+            quote_html = (
+                f'<blockquote class="article-quote">{html.escape(str(section["quote"]))}</blockquote>'
+                if section.get("quote")
+                else ""
+            )
+            table = ""
+            if section.get("rows"):
+                headers = "".join(
+                    f"<th>{html.escape(str(cell))}</th>"
+                    for cell in section.get("headers", [])
+                )
+                rows = "".join(
+                    "<tr>"
+                    + "".join(
+                        f"<td>{html.escape(str(cell))}</td>" for cell in row
+                    )
+                    + "</tr>"
+                    for row in section["rows"]
+                )
+                table = f'<div class="article-table-wrap"><table class="article-table"><thead><tr>{headers}</tr></thead><tbody>{rows}</tbody></table></div>'
+            bullets = ""
+            if section.get("bullets"):
+                bullets = '<ul class="article-bullets">{}</ul>'.format(
+                    "".join(
+                        f"<li>{html.escape(str(item))}</li>"
+                        for item in section["bullets"]
+                    )
+                )
+            section_parts.append(
+                f'<section class="article-section">{number}<h2>{heading}</h2>{paragraphs}{stat}{quote_html}{table}{bullets}</section>'
+            )
+        source_items = "".join(
+            '<li><a href="{url}" rel="noreferrer" target="_blank"><span>{publisher} · {kind}</span><strong>{title}</strong><small>{date}</small></a></li>'.format(
+                url=html.escape(
+                    self._safe_source_url(source.get("url")), quote=True
+                ),
+                publisher=html.escape(str(source.get("publisher") or "")),
+                kind=html.escape(str(source.get("sourceType") or "")),
+                title=html.escape(str(source.get("title") or "")),
+                date=html.escape(str(source.get("publishedAt") or "")),
+            )
+            for source in article["sources"]
+        )
+        related = "".join(
+            '<a class="story-card" href="/article/{slug}" data-link><div class="story-body"><span class="story-category">{category}</span><h3>{title}</h3><p>{dek}</p></div></a>'.format(
+                slug=quote(str(item["slug"]), safe=""),
+                category=html.escape(str(item["category"]["name"])),
+                title=html.escape(str(item["title"])),
+                dek=html.escape(str(item["dek"])),
+            )
+            for item in article["related"]
+        )
+        main_html = f"""
+<article class="article-page">
+  <header class="article-header"><div class="article-header-inner">
+    <p class="article-eyebrow">{html.escape(str(article["category"]["eyebrow"]))}</p>
+    <h1>{html.escape(str(article["title"]))}</h1>
+    <p class="article-dek">{html.escape(str(article["dek"]))}</p>
+    <div class="article-byline"><span><b>{html.escape(str(article["author"]))}</b> · {html.escape(str(article["authorRole"]))}</span><i></i><time datetime="{html.escape(str(article["publishedAt"]), quote=True)}">{html.escape(str(article["publishedAt"]))}</time><i></i><span>{int(article["readMinutes"])} 分钟阅读</span></div>
+  </div></header>
+  <div class="article-layout">
+    <div class="article-content"><p class="article-summary">{html.escape(str(article["summary"]))}</p>{''.join(section_parts)}</div>
+    <aside class="article-sidebar"><div class="sticky-sidebar">
+      <div class="article-facts"><strong>RESEARCH PROFILE</strong><div class="fact-row"><span>内容权威度</span><b>{int(article["authorityScore"])} / 100</b></div><div class="fact-row"><span>证据来源</span><b>{len(article["sources"])} 个</b></div><div class="fact-row"><span>最后更新</span><b>{html.escape(str(article["updatedAt"]))}</b></div></div>
+      <div class="machine-card"><div class="machine-card-header">AGENT-READY CONTENT</div><p>开放的结构化版本包含声明、证据来源和内容许可信息。</p><a href="/agent/v1/articles/{escaped_slug}">读取 Agent JSON</a></div>
+      <div class="source-list"><h2>主要来源</h2><ol>{source_items}</ol></div>
+    </div></aside>
+  </div>
+  <section class="related-band"><div class="related-inner"><div class="section-heading"><div><p class="section-eyebrow">CONTINUE READING</p><h2>相关研究</h2></div></div><div class="related-grid">{related}</div></div></section>
+</article>"""
+        organization_id = f"{PUBLIC_BASE_URL}/#organization"
+        schemas = [
+            {
+                "@context": "https://schema.org",
+                "@type": "Organization",
+                "@id": organization_id,
+                "name": "Aperture Intelligence",
+                "url": f"{PUBLIC_BASE_URL}/",
+            },
+            {
+                "@context": "https://schema.org",
+                "@type": "AnalysisNewsArticle",
+                "@id": f"{PUBLIC_BASE_URL}{canonical_path}#article",
+                "mainEntityOfPage": f"{PUBLIC_BASE_URL}{canonical_path}",
+                "headline": article["title"],
+                "description": article["dek"],
+                "abstract": article["summary"],
+                "datePublished": article["publishedAt"],
+                "dateModified": article["updatedAt"],
+                "author": {
+                    "@type": "Person",
+                    "name": article["author"],
+                    "jobTitle": article["authorRole"],
+                },
+                "publisher": {"@id": organization_id},
+                "articleSection": article["category"]["name"],
+                "keywords": article["keywords"],
+                "isAccessibleForFree": True,
+                "citation": [
+                    {
+                        "@type": "CreativeWork",
+                        "name": source.get("title"),
+                        "publisher": source.get("publisher"),
+                        "url": source.get("url"),
+                        "datePublished": source.get("publishedAt"),
+                    }
+                    for source in article["sources"]
+                ],
+            },
+            {
+                "@context": "https://schema.org",
+                "@type": "BreadcrumbList",
+                "itemListElement": [
+                    {
+                        "@type": "ListItem",
+                        "position": 1,
+                        "name": "首页",
+                        "item": f"{PUBLIC_BASE_URL}/",
+                    },
+                    {
+                        "@type": "ListItem",
+                        "position": 2,
+                        "name": article["category"]["name"],
+                        "item": f"{PUBLIC_BASE_URL}/category/{quote(str(article['category']['slug']), safe='')}",
+                    },
+                    {
+                        "@type": "ListItem",
+                        "position": 3,
+                        "name": article["title"],
+                        "item": f"{PUBLIC_BASE_URL}{canonical_path}",
+                    },
+                ],
+            },
+        ]
+        document = self._page_shell(
+            title=f"{article['title']} · Aperture Intelligence",
+            description=str(article["dek"]),
+            canonical_path=canonical_path,
+            main_html=main_html,
+            schemas=schemas,
+            alternate_json_path=f"/agent/v1/articles/{escaped_slug}",
+            open_graph_type="article",
+        )
+        self._html(
+            document,
+            extra_headers={
+                "Cache-Control": "public, max-age=60, s-maxage=300",
+                "X-Robots-Tag": "index, follow",
+            },
+        )
+
+    def _category_page(self, slug: str) -> None:
+        with connection() as conn:
+            category = conn.execute(
+                "SELECT * FROM categories WHERE slug = %s", (unquote(slug),)
+            ).fetchone()
+            if not category:
+                self._not_found_page()
+                return
+            rows = conn.execute(
+                """
+                SELECT a.*, c.slug category_slug, c.name category_name,
+                       c.eyebrow category_eyebrow, c.accent category_accent
+                FROM articles a JOIN categories c ON c.id = a.category_id
+                WHERE a.status = 'published' AND c.id = %s
+                ORDER BY a.published_at DESC
+                """,
+                (category["id"],),
+            ).fetchall()
+        articles = [public_article(dict(row)) for row in rows]
+        cards = "".join(
+            '<article class="story-card"><div class="story-body"><span class="story-category">{category}</span><h2><a href="/article/{slug}" data-link>{title}</a></h2><p>{dek}</p><div class="story-footer"><span>{minutes} 分钟阅读</span><time datetime="{published}">{published}</time></div></div></article>'.format(
+                category=html.escape(str(item["category"]["name"])),
+                slug=quote(str(item["slug"]), safe=""),
+                title=html.escape(str(item["title"])),
+                dek=html.escape(str(item["dek"])),
+                minutes=int(item["readMinutes"]),
+                published=html.escape(str(item["publishedAt"]), quote=True),
+            )
+            for item in articles
+        )
+        category_slug = quote(str(category["slug"]), safe="")
+        main_html = f"""
+<section class="category-hero"><div class="category-hero-inner">
+  <p class="article-eyebrow">{html.escape(str(category["eyebrow"]))}</p>
+  <h1>{html.escape(str(category["name"]))}</h1>
+  <p>{html.escape(str(category["description"]))} 我们关注变化背后的系统影响，而不仅是事件本身。</p>
+  <span class="category-count">{len(articles)} 篇已发布研究</span>
+</div></section>
+<section class="section"><div class="section-heading"><div><p class="section-eyebrow">ALL RESEARCH</p><h2>全部分析</h2></div></div><div class="category-articles">{cards or '<div class="empty-state">该分类暂无已发布内容。</div>'}</div></section>"""
+        schema = {
+            "@context": "https://schema.org",
+            "@type": "CollectionPage",
+            "name": category["name"],
+            "description": category["description"],
+            "url": f"{PUBLIC_BASE_URL}/category/{category_slug}",
+            "mainEntity": {
+                "@type": "ItemList",
+                "itemListElement": [
+                    {
+                        "@type": "ListItem",
+                        "position": index,
+                        "url": f"{PUBLIC_BASE_URL}/article/{quote(str(item['slug']), safe='')}",
+                        "name": item["title"],
+                    }
+                    for index, item in enumerate(articles, 1)
+                ],
+            },
+        }
+        self._html(
+            self._page_shell(
+                title=f"{category['name']} · Aperture Intelligence",
+                description=str(category["description"]),
+                canonical_path=f"/category/{category_slug}",
+                main_html=main_html,
+                schemas=[schema],
+            ),
+            extra_headers={"Cache-Control": "public, max-age=60, s-maxage=300"},
+        )
+
+    def _methodology_page(self) -> None:
+        steps = [
+            ("定义问题", "把趋势拆解为可验证的问题、实体和时间范围，预先说明什么证据能够改变判断。"),
+            ("采集与分级", "以官方文档、监管数据和一手资料为核心来源，记录发布者、时间、类型和访问地址。"),
+            ("交叉验证", "关键事实使用独立证据复核；来源冲突时保留口径差异和不确定性。"),
+            ("专业分析", "用行业框架解释事实间的因果关系、约束和二阶影响，并区分事实、推断与观点。"),
+            ("GEO 结构化", "输出实体、声明、证据、日期与许可元数据，使生成式引擎能够准确抽取和引用。"),
+            ("持续更新", "由爬虫 Agent 监控变化，重要事实更新后触发复核并保留修订时间。"),
+        ]
+        body = "".join(
+            f'<div class="methodology-step"><span>{index:02d}</span><div><h2>{html.escape(title)}</h2><p>{html.escape(text)}</p></div></div>'
+            for index, (title, text) in enumerate(steps, 1)
+        )
+        main_html = f'<div class="methodology-page"><section class="methodology-hero"><div><p class="article-eyebrow">RESEARCH METHODOLOGY</p><h1>研究方法</h1><p>专业内容是问题、证据与判断之间可复核的关系。</p></div></section><section class="methodology-body">{body}</section></div>'
+        self._html(
+            self._page_shell(
+                title="研究方法 · Aperture Intelligence",
+                description="Aperture Intelligence 的来源分级、证据验证、行业分析与机器可读内容方法。",
+                canonical_path="/methodology",
+                main_html=main_html,
+                schemas=[
+                    {
+                        "@context": "https://schema.org",
+                        "@type": "WebPage",
+                        "name": "Aperture Intelligence 研究方法",
+                        "url": f"{PUBLIC_BASE_URL}/methodology",
+                    }
+                ],
+            ),
+            extra_headers={"Cache-Control": "public, max-age=300"},
+        )
+
+    def _not_found_page(self) -> None:
+        self._html(
+            self._page_shell(
+                title="页面未找到 · Aperture Intelligence",
+                description="请求的研究内容不存在或尚未发布。",
+                canonical_path=urlparse(self.path).path,
+                main_html='<div class="not-found"><span>404</span><h1>没有找到这项研究</h1><p>内容可能尚未发布、已经更新或移动。</p><a href="/">返回首页</a></div>',
+                robots="noindex, nofollow",
+            ),
+            HTTPStatus.NOT_FOUND,
+            extra_headers={"X-Robots-Tag": "noindex, nofollow"},
+        )
+
+    def _robots(self) -> None:
+        self._text(
+            "\n".join(
+                [
+                    "User-agent: *",
+                    "Allow: /",
+                    "Disallow: /api/admin/",
+                    "Disallow: /agent/v1/articles/*/paid",
+                    "",
+                    f"Sitemap: {PUBLIC_BASE_URL}/sitemap.xml",
+                    f"Sitemap: {PUBLIC_BASE_URL}/sitemap-articles.xml",
+                    "",
+                ]
+            ),
+            content_type="text/plain; charset=utf-8",
+            extra_headers={"Cache-Control": "public, max-age=3600"},
+        )
+
+    def _sitemap(self, *, articles_only: bool) -> None:
+        with connection() as conn:
+            articles = conn.execute(
+                """
+                SELECT slug, updated_at
+                FROM articles
+                WHERE status = 'published'
+                ORDER BY updated_at DESC
+                """
+            ).fetchall()
+            categories = (
+                []
+                if articles_only
+                else conn.execute(
+                    """
+                    SELECT c.slug, MAX(a.updated_at) lastmod
+                    FROM categories c
+                    LEFT JOIN articles a
+                      ON a.category_id = c.id AND a.status = 'published'
+                    GROUP BY c.id ORDER BY c.sort_order
+                    """
+                ).fetchall()
+            )
+        urls: list[tuple[str, str | None]] = []
+        if not articles_only:
+            latest = str(articles[0]["updated_at"]) if articles else None
+            urls.extend(
+                [
+                    (f"{PUBLIC_BASE_URL}/", latest),
+                    (f"{PUBLIC_BASE_URL}/methodology", None),
+                ]
+            )
+            urls.extend(
+                (
+                    f"{PUBLIC_BASE_URL}/category/{quote(str(row['slug']), safe='')}",
+                    str(row["lastmod"]) if row["lastmod"] else None,
+                )
+                for row in categories
+            )
+        urls.extend(
+            (
+                f"{PUBLIC_BASE_URL}/article/{quote(str(row['slug']), safe='')}",
+                str(row["updated_at"]),
+            )
+            for row in articles
+        )
+        entries = "".join(
+            "<url><loc>{}</loc>{}</url>".format(
+                html.escape(location),
+                (
+                    f"<lastmod>{html.escape(lastmod)}</lastmod>"
+                    if lastmod
+                    else ""
+                ),
+            )
+            for location, lastmod in urls
+        )
+        self._xml(
+            '<?xml version="1.0" encoding="UTF-8"?>'
+            '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'
+            f"{entries}</urlset>",
+            extra_headers={"Cache-Control": "public, max-age=900"},
+        )
+
+    def _feed(self) -> None:
+        with connection() as conn:
+            rows = conn.execute(
+                """
+                SELECT a.slug, a.title, a.dek, a.published_at, a.updated_at,
+                       c.name category_name
+                FROM articles a JOIN categories c ON c.id = a.category_id
+                WHERE a.status = 'published'
+                ORDER BY a.published_at DESC LIMIT 30
+                """
+            ).fetchall()
+        items = "".join(
+            "<item><title>{title}</title><link>{url}</link><guid isPermaLink=\"true\">{url}</guid>"
+            "<description>{description}</description><category>{category}</category>"
+            "<pubDate>{published}</pubDate></item>".format(
+                title=html.escape(str(row["title"])),
+                url=html.escape(
+                    f"{PUBLIC_BASE_URL}/article/{quote(str(row['slug']), safe='')}"
+                ),
+                description=html.escape(str(row["dek"])),
+                category=html.escape(str(row["category_name"])),
+                published=html.escape(str(row["published_at"])),
+            )
+            for row in rows
+        )
+        self._xml(
+            '<?xml version="1.0" encoding="UTF-8"?>'
+            '<rss version="2.0"><channel>'
+            "<title>Aperture Intelligence</title>"
+            f"<link>{html.escape(PUBLIC_BASE_URL)}/</link>"
+            "<description>AI、Agent、云计算、电商媒体与金融市场的深度研究</description>"
+            "<language>zh-CN</language>"
+            f"{items}</channel></rss>",
+            content_type="application/rss+xml; charset=utf-8",
+            extra_headers={"Cache-Control": "public, max-age=900"},
+        )
+
+    def _llms(self) -> None:
+        self._text(
+            f"""# Aperture Intelligence
+
+> 面向 AI 时代的技术与商业研究，覆盖 AI 行业、Agent 技术、云计算、电商与媒体、金融市场。
+
+## Canonical site
+- {PUBLIC_BASE_URL}/
+
+## Research methodology
+- {PUBLIC_BASE_URL}/methodology
+
+## Research collections
+- {PUBLIC_BASE_URL}/category/ai
+- {PUBLIC_BASE_URL}/category/agent
+- {PUBLIC_BASE_URL}/category/cloud
+- {PUBLIC_BASE_URL}/category/commerce
+- {PUBLIC_BASE_URL}/category/finance
+
+## Discovery
+- Sitemap: {PUBLIC_BASE_URL}/sitemap.xml
+- Article sitemap: {PUBLIC_BASE_URL}/sitemap-articles.xml
+- RSS: {PUBLIC_BASE_URL}/feed.xml
+
+## Machine-readable content
+Each published article has a JSON-LD representation at:
+{PUBLIC_BASE_URL}/agent/v1/articles/{{slug}}
+
+The open article and JSON-LD representation may be quoted with a link and clear attribution to Aperture Intelligence. Paid x402 variants are excluded from indexing. Training and bulk-reuse rights require publisher authorization.
+""",
+            content_type="text/plain; charset=utf-8",
+            extra_headers={"Cache-Control": "public, max-age=900"},
+        )
+
     def _categories(self) -> None:
         with connection() as conn:
             rows = conn.execute(
@@ -949,59 +1631,10 @@ class ApiHandler(BaseHTTPRequestHandler):
         self._json([public_article(dict(row)) for row in rows])
 
     def _article(self, slug: str) -> None:
-        with connection() as conn:
-            row = conn.execute(
-                """
-                SELECT a.*, c.slug category_slug, c.name category_name,
-                       c.eyebrow category_eyebrow, c.accent category_accent
-                FROM articles a JOIN categories c ON c.id = a.category_id
-                WHERE a.slug = %s AND a.status = 'published'
-                """,
-                (slug,),
-            ).fetchone()
-            if not row:
-                self._json({"error": "Article not found"}, HTTPStatus.NOT_FOUND)
-                return
-            sources = [
-                dict(source)
-                for source in conn.execute(
-                    """
-                    SELECT publisher, title, url, published_at publishedAt,
-                           source_type sourceType
-                    FROM sources WHERE article_id = %s ORDER BY id
-                    """,
-                    (row["id"],),
-                ).fetchall()
-            ]
-            article_row = dict(row)
-            article_row["sources"] = sources
-            related = conn.execute(
-                """
-                SELECT a.*, c.slug category_slug, c.name category_name,
-                       c.eyebrow category_eyebrow, c.accent category_accent
-                FROM articles a JOIN categories c ON c.id = a.category_id
-                WHERE a.status = 'published' AND a.id != %s
-                ORDER BY CASE WHEN a.category_id = %s THEN 0 ELSE 1 END,
-                         a.published_at DESC LIMIT 3
-                """,
-                (row["id"], row["category_id"]),
-            ).fetchall()
-            visitor_type, agent_name = identify_visitor(self.headers.get("User-Agent", ""))
-            conn.execute(
-                """
-                INSERT INTO traffic_events(event_type, visitor_type, agent_name, article_id, occurred_at, metadata)
-                VALUES(%s, %s, %s, %s, %s, '{}')
-                """,
-                (
-                    "agent_view" if visitor_type == "agent" else "human_view",
-                    visitor_type,
-                    agent_name,
-                    row["id"],
-                    utc_now(),
-                ),
-            )
-        response = public_article(article_row, detailed=True)
-        response["related"] = [public_article(dict(item)) for item in related]
+        response = self._load_public_article(slug)
+        if not response:
+            self._json({"error": "Article not found"}, HTTPStatus.NOT_FOUND)
+            return
         self._json(response)
 
     def _record_event(
@@ -1098,18 +1731,6 @@ class ApiHandler(BaseHTTPRequestHandler):
             },
         }
         if not paid:
-            with connection() as conn:
-                self._record_event(
-                    conn,
-                    event_type="agent_view",
-                    article_id=row["id"],
-                    agent_name=agent_name,
-                    metadata={
-                        "endpoint": "agent",
-                        "variant": "A",
-                        "access": "free",
-                    },
-                )
             self._json(payload, extra_headers={"X-Robots-Tag": "index, follow"})
             return
 
@@ -1130,7 +1751,10 @@ class ApiHandler(BaseHTTPRequestHandler):
                     agent_name=agent_name,
                     metadata={"variant": "B", "error": str(error)[:500]},
                 )
-            self._send_instructions(error_instructions(error))
+            self._send_instructions(
+                error_instructions(error),
+                extra_headers={"X-Robots-Tag": "noindex, noarchive"},
+            )
             return
 
         result = payment_request.process_result
@@ -1156,7 +1780,8 @@ class ApiHandler(BaseHTTPRequestHandler):
                 )
             self._send_instructions(
                 result.response
-                or error_instructions(X402ConfigurationError("Payment required"))
+                or error_instructions(X402ConfigurationError("Payment required")),
+                extra_headers={"X-Robots-Tag": "noindex, noarchive"},
             )
             return
 
@@ -1179,7 +1804,8 @@ class ApiHandler(BaseHTTPRequestHandler):
                 settlement.response
                 or error_instructions(
                     RuntimeError(settlement.error_reason or "Settlement failed")
-                )
+                ),
+                extra_headers={"X-Robots-Tag": "noindex, noarchive"},
             )
             return
 
@@ -1240,7 +1866,18 @@ class ApiHandler(BaseHTTPRequestHandler):
         self._json([public_article(dict(row)) for row in rows])
 
     def _track(self, payload: dict) -> None:
-        event_type = str(payload.get("eventType", "human_view"))[:40]
+        event_type = str(payload.get("eventType", ""))[:40]
+        if event_type not in {
+            "human_click",
+            "citation",
+            "machine_link_copy",
+            "smoke_test",
+        }:
+            self._json(
+                {"error": "Unsupported public event type"},
+                HTTPStatus.BAD_REQUEST,
+            )
+            return
         slug = payload.get("articleSlug")
         visitor_type, agent_name = identify_visitor(self.headers.get("User-Agent", ""))
         with connection() as conn:
@@ -1296,7 +1933,21 @@ class ApiHandler(BaseHTTPRequestHandler):
         end = end_date.isoformat()
         previous_start = previous_start_date.isoformat()
         with connection() as conn:
-            events = [
+            traffic_rows = [
+                dict(row)
+                for row in conn.execute(
+                    """
+                    SELECT bucket_hour, visitor_type, agent_name, path_group,
+                           article_slug, access_variant, requests,
+                           successful_requests, bytes_sent, visitor_hll
+                    FROM traffic_hourly
+                    WHERE bucket_hour >= %s AND bucket_hour < %s
+                    ORDER BY bucket_hour
+                    """,
+                    (previous_start, next_date.isoformat()),
+                ).fetchall()
+            ]
+            business_events = [
                 dict(row)
                 for row in conn.execute(
                     """
@@ -1322,34 +1973,39 @@ class ApiHandler(BaseHTTPRequestHandler):
                 FROM crawler_agents
                 """
             ).fetchone()
-        agent_event_types = {
-            "agent_view",
-            "x402_challenge",
-            "x402_payment",
-            "x402_verification_failed",
-            "x402_settlement_failed",
-        }
 
-        def empty_totals() -> dict[str, float]:
+        def empty_access() -> dict:
             return {
-                "human": 0,
-                "agent": 0,
+                "humanHll": empty_hll(),
+                "agentHll": empty_hll(),
+                "humanRequests": 0,
+                "agentRequests": 0,
+                "variantA": 0,
+                "variantB": 0,
+            }
+
+        def add_access(target: dict, row: dict) -> None:
+            visitor_type = row["visitor_type"]
+            registers = decode_hll(row["visitor_hll"])
+            hll_merge(target[f"{visitor_type}Hll"], [registers])
+            target[f"{visitor_type}Requests"] += int(row["requests"] or 0)
+            if row["access_variant"] == "A":
+                target["variantA"] += int(row["requests"] or 0)
+            elif row["access_variant"] == "B":
+                target["variantB"] += int(row["requests"] or 0)
+
+        def empty_business() -> dict[str, float]:
+            return {
                 "citations": 0,
                 "clicks": 0,
                 "payments": 0,
                 "revenue": 0.0,
-                "variantA": 0,
-                "variantB": 0,
                 "challenges": 0,
             }
 
-        def add_event(totals: dict[str, float], event: dict) -> None:
+        def add_business(totals: dict[str, float], event: dict) -> None:
             event_type = event["event_type"]
             metadata = parse_json(event["metadata"], {})
-            if event_type == "human_view":
-                totals["human"] += 1
-            if event_type in agent_event_types:
-                totals["agent"] += 1
             if event_type == "citation":
                 totals["citations"] += 1
             if event_type == "human_click":
@@ -1359,49 +2015,87 @@ class ApiHandler(BaseHTTPRequestHandler):
                 totals["revenue"] += float(
                     metadata.get("amountUsd", metadata.get("amount", 0)) or 0
                 )
-            if metadata.get("variant") == "A" or (
-                event_type == "agent_view" and not metadata.get("variant")
-            ):
-                totals["variantA"] += 1
-            if metadata.get("variant") == "B":
-                totals["variantB"] += 1
             if event_type == "x402_challenge":
                 totals["challenges"] += 1
 
-        current = empty_totals()
-        previous = empty_totals()
-        daily_map = {
-            (start_date + timedelta(days=offset)).isoformat(): empty_totals()
+        current_access = empty_access()
+        previous_access = empty_access()
+        current_business = empty_business()
+        previous_business = empty_business()
+        daily_access = {
+            (start_date + timedelta(days=offset)).isoformat(): empty_access()
             for offset in range(days)
         }
-        source_counts: dict[str, int] = {}
-        for event in events:
+        daily_business = {
+            (start_date + timedelta(days=offset)).isoformat(): empty_business()
+            for offset in range(days)
+        }
+        source_hll: dict[str, bytearray] = {}
+        source_requests: dict[str, int] = {}
+        for row in traffic_rows:
+            traffic_day = str(row["bucket_hour"])[:10]
+            target = (
+                current_access
+                if start <= traffic_day <= end
+                else previous_access
+            )
+            add_access(target, row)
+            if traffic_day in daily_access:
+                add_access(daily_access[traffic_day], row)
+            if (
+                start <= traffic_day <= end
+                and row["visitor_type"] == "agent"
+            ):
+                name = row["agent_name"] or "Machine client"
+                registers = source_hll.setdefault(name, empty_hll())
+                hll_merge(registers, [decode_hll(row["visitor_hll"])])
+                source_requests[name] = source_requests.get(name, 0) + int(
+                    row["requests"] or 0
+                )
+
+        for event in business_events:
             event_day = str(event["occurred_at"])[:10]
-            target = current if start <= event_day <= end else previous
-            add_event(target, event)
-            if event_day in daily_map:
-                add_event(daily_map[event_day], event)
-            if start <= event_day <= end and event["event_type"] in agent_event_types:
-                name = event["agent_name"] or "Machine client"
-                source_counts[name] = source_counts.get(name, 0) + 1
+            target = (
+                current_business
+                if start <= event_day <= end
+                else previous_business
+            )
+            add_business(target, event)
+            if event_day in daily_business:
+                add_business(daily_business[event_day], event)
 
         daily = [
             {
                 "day": day,
-                "human_views": int(values["human"]),
-                "agent_views": int(values["agent"]),
-                "citations": int(values["citations"]),
-                "clicks": int(values["clicks"]),
-                "payments": int(values["payments"]),
-                "revenue": round(values["revenue"], 6),
+                "human_views": hll_count(
+                    daily_access[day]["humanHll"]
+                ),
+                "agent_views": hll_count(
+                    daily_access[day]["agentHll"]
+                ),
+                "human_requests": int(
+                    daily_access[day]["humanRequests"]
+                ),
+                "agent_requests": int(
+                    daily_access[day]["agentRequests"]
+                ),
+                "citations": int(daily_business[day]["citations"]),
+                "clicks": int(daily_business[day]["clicks"]),
+                "payments": int(daily_business[day]["payments"]),
+                "revenue": round(daily_business[day]["revenue"], 6),
             }
-            for day, values in daily_map.items()
+            for day in daily_access
         ]
+        source_counts = {
+            name: hll_count(registers)
+            for name, registers in source_hll.items()
+        }
         source_total = sum(source_counts.values())
         sources = [
             {
                 "name": name,
                 "count": count,
+                "requests": source_requests.get(name, 0),
                 "value": round(count / max(1, source_total) * 100, 1),
             }
             for name, count in sorted(
@@ -1409,10 +2103,32 @@ class ApiHandler(BaseHTTPRequestHandler):
             )[:5]
         ]
 
+        current_values = {
+            "human": hll_count(current_access["humanHll"]),
+            "agent": hll_count(current_access["agentHll"]),
+            "citations": current_business["citations"],
+            "revenue": current_business["revenue"],
+        }
+        previous_values = {
+            "human": hll_count(previous_access["humanHll"]),
+            "agent": hll_count(previous_access["agentHll"]),
+            "citations": previous_business["citations"],
+            "revenue": previous_business["revenue"],
+        }
+
         def growth(key: str) -> float:
-            current_value = current[key]
-            previous_value = previous[key]
-            return round((current_value - previous_value) / previous_value * 100, 1) if previous_value else 0
+            current_value = current_values[key]
+            previous_value = previous_values[key]
+            return (
+                round(
+                    (current_value - previous_value)
+                    / previous_value
+                    * 100,
+                    1,
+                )
+                if previous_value
+                else 0
+            )
 
         self._json(
             {
@@ -1421,35 +2137,56 @@ class ApiHandler(BaseHTTPRequestHandler):
                 "startDate": start,
                 "endDate": end,
                 "summary": {
-                    "humanViews": int(current["human"]),
-                    "agentViews": int(current["agent"]),
-                    "citations": int(current["citations"]),
-                    "clicks": int(current["clicks"]),
-                    "payments": int(current["payments"]),
-                    "revenue": round(current["revenue"], 6),
+                    "humanViews": int(current_values["human"]),
+                    "agentViews": int(current_values["agent"]),
+                    "humanRequests": int(
+                        current_access["humanRequests"]
+                    ),
+                    "agentRequests": int(
+                        current_access["agentRequests"]
+                    ),
+                    "citations": int(current_business["citations"]),
+                    "clicks": int(current_business["clicks"]),
+                    "payments": int(current_business["payments"]),
+                    "revenue": round(current_business["revenue"], 6),
                     "agentShare": round(
-                        (current["agent"] or 0)
-                        / max(1, (current["human"] or 0) + (current["agent"] or 0))
+                        (current_values["agent"] or 0)
+                        / max(
+                            1,
+                            current_values["human"]
+                            + current_values["agent"],
+                        )
                         * 100,
                         1,
                     ),
-                    "citationRate": round((current["citations"] or 0) / max(1, current["agent"] or 0) * 100, 1),
+                    "citationRate": round(
+                        (current_business["citations"] or 0)
+                        / max(1, current_values["agent"])
+                        * 100,
+                        1,
+                    ),
                 },
                 "growth": {key: growth(key) for key in ("human", "agent", "citations", "revenue")},
                 "daily": daily,
                 "agentSources": sources,
                 "abTest": {
-                    "variantAViews": int(current["variantA"]),
-                    "variantBViews": int(current["variantB"]),
-                    "challenges": int(current["challenges"]),
-                    "payments": int(current["payments"]),
+                    "variantAViews": int(current_access["variantA"]),
+                    "variantBViews": int(current_access["variantB"]),
+                    "challenges": int(current_business["challenges"]),
+                    "payments": int(current_business["payments"]),
                     "conversionRate": round(
-                        current["payments"]
-                        / max(1, current["challenges"])
+                        current_business["payments"]
+                        / max(1, current_business["challenges"])
                         * 100,
                         1,
                     ),
-                    "revenue": round(current["revenue"], 6),
+                    "revenue": round(current_business["revenue"], 6),
+                },
+                "dataSource": {
+                    "traffic": "cloudfront-standard-logs-v2",
+                    "businessEvents": "aurora",
+                    "uniqueVisitors": "hll-estimate",
+                    "freshness": "CloudFront 日志通常延迟数分钟",
                 },
                 "content": status_counts,
                 "crawlers": {
@@ -1544,9 +2281,15 @@ class ApiHandler(BaseHTTPRequestHandler):
 
         placeholders = ", ".join(["%s"] * len(article_ids))
         timestamp = utc_now()
+        indexing_slugs: list[str] = []
+        indexing_categories: list[str] = []
         with connection() as conn:
             existing = conn.execute(
-                f"SELECT id FROM articles WHERE id IN ({placeholders})",
+                f"""
+                SELECT a.id, a.slug, a.status, c.slug category_slug
+                FROM articles a JOIN categories c ON c.id = a.category_id
+                WHERE a.id IN ({placeholders})
+                """,
                 article_ids,
             ).fetchall()
             existing_ids = [int(row["id"]) for row in existing]
@@ -1606,12 +2349,23 @@ class ApiHandler(BaseHTTPRequestHandler):
                     ),
                 ),
             )
+            if action in {"publish", "delete"}:
+                indexing_slugs = [str(row["slug"]) for row in existing]
+                indexing_categories = [
+                    str(row["category_slug"]) for row in existing
+                ]
+        indexing_submitted = submit_indexing(
+            slugs=indexing_slugs,
+            categories=indexing_categories,
+            reason=f"admin_batch_{action}",
+        )
         self._json(
             {
                 "ok": True,
                 "action": action,
                 "count": len(existing_ids),
                 "articleIds": existing_ids,
+                "indexingSubmitted": indexing_submitted,
             }
         )
 
@@ -2227,8 +2981,23 @@ class ApiHandler(BaseHTTPRequestHandler):
                     json.dumps(sections, ensure_ascii=False),
                 ),
             ).fetchone()["id"]
+        indexing_submitted = (
+            submit_indexing(
+                slugs=[slug],
+                categories=[category_slug],
+                reason="admin_create_published",
+            )
+            if status == "published"
+            else False
+        )
         self._json(
-            {"ok": True, "articleId": article_id, "slug": slug, "status": status},
+            {
+                "ok": True,
+                "articleId": article_id,
+                "slug": slug,
+                "status": status,
+                "indexingSubmitted": indexing_submitted,
+            },
             HTTPStatus.CREATED,
         )
 
@@ -2240,15 +3009,40 @@ class ApiHandler(BaseHTTPRequestHandler):
             return
         updates["updated_at"] = utc_now()
         columns = ", ".join(f"{key} = %s" for key in updates)
+        article = None
         with connection() as conn:
             cursor = conn.execute(
-                f"UPDATE articles SET {columns} WHERE id = %s",
+                f"""
+                UPDATE articles SET {columns} WHERE id = %s
+                RETURNING slug, status, category_id
+                """,
                 [*updates.values(), article_id],
             )
-            if cursor.rowcount == 0:
+            article = cursor.fetchone()
+            if not article:
                 self._json({"error": "Article not found"}, HTTPStatus.NOT_FOUND)
                 return
-        self._json({"ok": True, "articleId": article_id, "updated": updates})
+            category = conn.execute(
+                "SELECT slug FROM categories WHERE id = %s",
+                (article["category_id"],),
+            ).fetchone()
+        indexing_submitted = (
+            submit_indexing(
+                slugs=[str(article["slug"])],
+                categories=[str(category["slug"])],
+                reason="admin_update_published",
+            )
+            if article["status"] == "published"
+            else False
+        )
+        self._json(
+            {
+                "ok": True,
+                "articleId": article_id,
+                "updated": updates,
+                "indexingSubmitted": indexing_submitted,
+            }
+        )
 
     def _update_crawler(self, crawler_id: int, payload: dict) -> None:
         has_status = "status" in payload
@@ -2513,9 +3307,67 @@ class ApiHandler(BaseHTTPRequestHandler):
             for key, value in extra_headers.items():
                 self.send_header(key, value)
         self.end_headers()
-        self.wfile.write(body)
+        if not getattr(self, "_head_only", False):
+            self.wfile.write(body)
 
-    def _send_instructions(self, instructions) -> None:
+    def _html(
+        self,
+        payload: str,
+        status: HTTPStatus = HTTPStatus.OK,
+        *,
+        extra_headers: dict[str, str] | None = None,
+    ) -> None:
+        self._text(
+            payload,
+            status,
+            content_type="text/html; charset=utf-8",
+            extra_headers=extra_headers,
+        )
+
+    def _xml(
+        self,
+        payload: str,
+        status: HTTPStatus = HTTPStatus.OK,
+        *,
+        content_type: str = "application/xml; charset=utf-8",
+        extra_headers: dict[str, str] | None = None,
+    ) -> None:
+        self._text(
+            payload,
+            status,
+            content_type=content_type,
+            extra_headers=extra_headers,
+        )
+
+    def _text(
+        self,
+        payload: str,
+        status: HTTPStatus = HTTPStatus.OK,
+        *,
+        content_type: str,
+        extra_headers: dict[str, str] | None = None,
+    ) -> None:
+        body = payload.encode("utf-8")
+        self.send_response(status)
+        self.send_header("Content-Type", content_type)
+        self.send_header("Content-Length", str(len(body)))
+        if not extra_headers or not any(
+            key.lower() == "cache-control" for key in extra_headers
+        ):
+            self.send_header("Cache-Control", "no-store")
+        if extra_headers:
+            for key, value in extra_headers.items():
+                self.send_header(key, value)
+        self.end_headers()
+        if not getattr(self, "_head_only", False):
+            self.wfile.write(body)
+
+    def _send_instructions(
+        self,
+        instructions,
+        *,
+        extra_headers: dict[str, str] | None = None,
+    ) -> None:
         payload = instructions.body
         if instructions.is_html:
             body = (
@@ -2533,8 +3385,12 @@ class ApiHandler(BaseHTTPRequestHandler):
         for key, value in instructions.headers.items():
             if key.lower() not in {"content-type", "content-length"}:
                 self.send_header(key, value)
+        if extra_headers:
+            for key, value in extra_headers.items():
+                self.send_header(key, value)
         self.end_headers()
-        self.wfile.write(body)
+        if not getattr(self, "_head_only", False):
+            self.wfile.write(body)
 
     def log_message(self, fmt: str, *args: object) -> None:
         print(f"[geo-api] {self.address_string()} - {fmt % args}")

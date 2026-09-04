@@ -36,7 +36,9 @@ Python 3.13；若检测到旧版 `.venv`，会先归档旧环境再重建。
 - API 健康检查：`http://127.0.0.1:8000/api/health`
 
 首次启动会创建 PostgreSQL Docker 持久化卷、自动建表，并写入带官方来源的起始内容。
-流量、点击、Agent 访问、引用和支付统计只从真实 `traffic_events` 聚合，不生成模拟统计。
+访问事实来自 CloudFront Standard Logging v2；Lambda 将日志转换为不可逆 HLL
+独立访客估算和小时聚合。点击、引用、管理操作与 x402 支付作为业务事件保存在
+`traffic_events`，不生成模拟统计。
 数据库连接可通过 `DATABASE_URL` 覆盖，默认值为：
 
 ```text
@@ -91,8 +93,8 @@ PYTHONPATH=. .venv/bin/python scripts/smoke_test.py
 ### AWS Web 部署
 
 生产 Web 入口使用两套独立的私有 S3 + CloudFront OAC 分发，分别承载公开站和管理后台。
-CloudFront 的 `/api/*` 与 `/agent/*` 行为转发到 ALB 后的 ECS Fargate API，因此浏览器
-请求、管理员 Cookie 和 Agent 机器接口保持同源。
+CloudFront 的 `/api/*`、`/agent/*` 以及公开内容 SSR 行为转发到 ALB 后的 ECS
+Fargate API，因此浏览器请求、管理员 Cookie、搜索引擎页面和 Agent 机器接口保持同源。
 
 ```text
 Public CloudFront ----> private public S3 (OAC)
@@ -111,7 +113,8 @@ chmod +x scripts/deploy_web_ecs.sh
 
 脚本只使用 AWS CLI 和各服务 API，不调用 CloudFormation、CDK 或 SAM。它会构建 ARM64
 后端镜像，等待 ECR 扫描确认无 Critical/High 漏洞后注册新的 ECS task definition，
-滚动更新 Fargate 服务、同步两个 S3 前端并创建 CloudFront invalidation。
+滚动更新 Fargate 服务、同步两个 S3 前端、增量维护 SSR cache behaviors，等待
+CloudFront 部署完成后创建 invalidation。
 
 现有 S3、OAC、CloudFront、ALB、IAM 与 ECS 基础资源按稳定名称和 ID 发现；部署脚本不会
 重建或替换分发，因此线上 URL 保持不变。ALB 仅接受 AWS CloudFront origin-facing
@@ -120,9 +123,61 @@ chmod +x scripts/deploy_web_ecs.sh
 
 当前线上入口：
 
-- 公开站：`https://d1tsbnft7iv51.cloudfront.net`
+- 公开站：`https://aperture.zhangwangshu.com`
 - 管理后台：`https://deu7vkdd3jf5.cloudfront.net`
-- API 健康检查：`https://d1tsbnft7iv51.cloudfront.net/api/health`
+- API 健康检查：`https://aperture.zhangwangshu.com/api/health`
+
+文章、分类和研究方法页面由 ECS 返回包含完整正文与 JSON-LD 的首屏 HTML，不依赖
+JavaScript 才能被读取。搜索引擎和 Agent 可通过以下入口发现内容：
+
+- `https://aperture.zhangwangshu.com/robots.txt`
+- `https://aperture.zhangwangshu.com/sitemap.xml`
+- `https://aperture.zhangwangshu.com/sitemap-articles.xml`
+- `https://aperture.zhangwangshu.com/feed.xml`
+- `https://aperture.zhangwangshu.com/llms.txt`
+
+### 主动索引提交
+
+已部署 `geo-intelligence-indexing-notifier` Lambda。管理员创建或批量发布文章、修改已发布
+文章，以及 AgentCore Runtime 自动发布或更新研究稿时，应用会用 `InvocationType=Event`
+异步调用该函数，不阻塞发布请求。函数会：
+
+1. 精确失效文章、分类、sitemap 和 feed 的 CloudFront 缓存；
+2. 向 IndexNow 提交文章与分类 URL；
+3. 使用公开验证文件
+   `https://aperture.zhangwangshu.com/indexnow-key.txt` 证明站点控制权。
+
+删除文章也会通知 IndexNow，使搜索引擎尽快重新抓取并识别 404。IndexNow 的成功响应表示
+搜索引擎已接收通知，不代表保证收录或排名。创建或更新通知资源：
+
+```bash
+bash scripts/provision_search_indexing.sh
+```
+
+Google、Bing 和百度的站长平台仍需要站点所有者完成验证，不能仅凭公开 sitemap 代替：
+
+- Google Search Console：验证 `aperture.zhangwangshu.com` 后，一次性提交
+  `https://aperture.zhangwangshu.com/sitemap.xml`。Google 会持续读取 sitemap；Google
+  Indexing API 仅适用于 JobPosting 和 BroadcastEvent 等受支持页面，不用于普通研究文章。
+- Bing Webmaster Tools：验证或从 Search Console 导入站点后提交同一 sitemap。文章级
+  更新已经通过 IndexNow 自动通知 Bing 等参与搜索引擎。
+- 百度搜索资源平台：验证 HTTPS 站点后提交 sitemap；如需 API 主动推送，还必须提供该
+  站点专属推送 token 和每日配额。
+
+仓库和已部署环境没有 Search Console OAuth、Bing Webmaster API key 或百度推送 token，
+因此当前不能声称这三个平台已经由 API 提交。取得站点所有权凭证后，应放入 Secrets
+Manager，不写入仓库或 ECS 明文环境变量。
+
+部署或更新访问统计基础设施：
+
+```bash
+bash scripts/provision_traffic_analytics.sh
+```
+
+该脚本使用 AWS CLI 创建 CloudFront Standard Logging v2 → 私有 S3 → SQS →
+Lambda 管道。原始日志保留 90 天；Lambda 使用 Secrets Manager 中的 HMAC salt
+处理 IP 与 User-Agent，并只向 Aurora 写入小时聚合、HLL 草图和对象幂等标记。
+SSR 使用 5 分钟 CloudFront 缓存，命中缓存的请求仍会由 CloudFront 日志统计。
 
 部署资源输出保存在本机忽略提交的 `.env.deploy.aws`。后端基于固定 digest 的
 Python 3.13 Alpine ARM64 镜像，以非 root UID `10001` 运行；当前 ECR 扫描无发现。
@@ -139,8 +194,10 @@ Python 3.13 Alpine ARM64 镜像，以非 root UID `10001` 运行；当前 ECR �
 | AgentCore Browser | `geo_intelligence_browser` | PUBLIC、Web Bot Auth 签名已开启 |
 | AgentCore Code Interpreter | `geo_intelligence_code` | PUBLIC、READY |
 | AgentCore Payments | `DemoPaymentManager` | Stripe Privy 钱包 ACTIVE、Base Sepolia x402 已验证 |
+| Lambda | `geo-intelligence-indexing-notifier` | 异步 CloudFront invalidation + IndexNow |
 | S3 + CloudFront | 公开站 | 私有 bucket、OAC、HTTP/2/3、Deployed |
 | S3 + CloudFront | 管理后台 | 私有 bucket、OAC、HTTP/2/3、Deployed |
+| S3 | `geo-intelligence-traffic-logs-*` | CloudFront JSON 原始日志、AES256、90 天生命周期 |
 | ECS Fargate | `geo-intelligence-api` | ARM64、1/1 healthy、Container Insights |
 | ALB | `geo-intelligence-alb` | 仅允许 CloudFront origin-facing 网络 |
 | ECR | `geo-intelligence-api` | Alpine 镜像扫描 0 findings |
@@ -148,6 +205,8 @@ Python 3.13 Alpine ARM64 镜像，以非 root UID `10001` 运行；当前 ECR �
 | IAM | `geo-intelligence-agentcore-role` | 项目资源范围内的 Bedrock、Data API、工具和日志权限 |
 | EventBridge Scheduler | `geo-intelligence-crawlers` | 6 条 UTC 计划，5 条启用、1 条暂停 |
 | Lambda | `geo-intelligence-scheduler-bridge` | ARM64 Python 3.13，Scheduler 到 AgentCore 桥接 |
+| Lambda | `geo-intelligence-traffic-aggregator` | ARM64 Python 3.13，CloudFront 日志 HLL 聚合 |
+| SQS | `geo-intelligence-traffic-log-events` | 日志聚合缓冲队列，失败转入专用 DLQ |
 | SQS | `geo-intelligence-scheduler-dlq` | 调度失败死信队列，保留 14 天 |
 | IAM | `geo-intelligence-scheduler-role` | Scheduler 调用 Lambda 与写入 DLQ |
 | IAM | `geo-intelligence-scheduler-bridge-role` | Lambda 调用 AgentCore 与写日志 |

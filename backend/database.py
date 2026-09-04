@@ -230,6 +230,32 @@ CREATE TABLE IF NOT EXISTS traffic_events (
     metadata TEXT NOT NULL DEFAULT '{}'
 );
 
+CREATE TABLE IF NOT EXISTS traffic_hourly (
+    bucket_hour TEXT NOT NULL,
+    visitor_type TEXT NOT NULL CHECK(visitor_type IN ('human', 'agent')),
+    agent_name TEXT NOT NULL DEFAULT '',
+    path_group TEXT NOT NULL,
+    article_slug TEXT NOT NULL DEFAULT '',
+    access_variant TEXT NOT NULL DEFAULT '',
+    requests BIGINT NOT NULL DEFAULT 0,
+    successful_requests BIGINT NOT NULL DEFAULT 0,
+    bytes_sent BIGINT NOT NULL DEFAULT 0,
+    visitor_hll TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    PRIMARY KEY(
+        bucket_hour, visitor_type, agent_name, path_group,
+        article_slug, access_variant
+    )
+);
+
+CREATE TABLE IF NOT EXISTS traffic_log_objects (
+    object_key TEXT PRIMARY KEY,
+    bucket_name TEXT NOT NULL,
+    etag TEXT NOT NULL DEFAULT '',
+    record_count INTEGER NOT NULL DEFAULT 0,
+    processed_at TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS app_settings (
     key TEXT PRIMARY KEY,
     value TEXT NOT NULL,
@@ -273,6 +299,8 @@ CREATE INDEX IF NOT EXISTS idx_data_sources_category ON data_sources(category_sl
 CREATE INDEX IF NOT EXISTS idx_agent_source_agent ON agent_source_assignments(agent_id);
 CREATE INDEX IF NOT EXISTS idx_agent_source_source ON agent_source_assignments(source_id);
 CREATE INDEX IF NOT EXISTS idx_events_occurred ON traffic_events(occurred_at);
+CREATE INDEX IF NOT EXISTS idx_traffic_hourly_bucket
+    ON traffic_hourly(bucket_hour);
 CREATE INDEX IF NOT EXISTS idx_research_runs_started ON research_runs(started_at);
 CREATE INDEX IF NOT EXISTS idx_research_evidence_run ON research_evidence(run_id);
 CREATE INDEX IF NOT EXISTS idx_admin_sessions_user ON admin_sessions(user_id);

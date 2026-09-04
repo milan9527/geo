@@ -69,7 +69,22 @@ def create_spa_handler(directory: Path, label: str):
 
         def _is_api_request(self) -> bool:
             path = urlparse(self.path).path
-            return path.startswith("/api/") or path.startswith("/agent/")
+            return (
+                path.startswith("/api/")
+                or path.startswith("/agent/")
+                or path.startswith("/article/")
+                or path.startswith("/category/")
+                or path
+                in {
+                    "/methodology",
+                    "/robots.txt",
+                    "/sitemap.xml",
+                    "/sitemap-articles.xml",
+                    "/feed.xml",
+                    "/llms.txt",
+                    "/indexnow-key.txt",
+                }
+            )
 
         def _proxy_api(self) -> None:
             if not self._is_api_request():
@@ -108,15 +123,28 @@ def create_spa_handler(directory: Path, label: str):
                 content_type = response.getheader("Content-Type")
                 if content_type:
                     self.send_header("Content-Type", content_type)
+                has_cache_control = False
                 for header, value in response.getheaders():
                     if header.lower() in {
                         "set-cookie",
                         "payment-required",
                         "payment-response",
+                        "cache-control",
+                        "x-robots-tag",
                     }:
                         self.send_header(header, value)
-                self.send_header("Content-Length", str(len(response_body)))
-                self.send_header("Cache-Control", "no-store")
+                        has_cache_control = (
+                            has_cache_control or header.lower() == "cache-control"
+                        )
+                upstream_length = response.getheader("Content-Length")
+                response_length = (
+                    upstream_length
+                    if self.command == "HEAD" and upstream_length is not None
+                    else str(len(response_body))
+                )
+                self.send_header("Content-Length", response_length)
+                if not has_cache_control:
+                    self.send_header("Cache-Control", "no-store")
                 self.end_headers()
                 if self.command != "HEAD":
                     self.wfile.write(response_body)
