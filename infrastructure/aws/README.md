@@ -31,7 +31,7 @@ not call CloudFormation, CDK, or SAM:
 - ECS cluster/service: `geo-intelligence` / `geo-intelligence-api`
 - ALB: `geo-intelligence-alb-136542997.us-east-1.elb.amazonaws.com`
 - ECR repository: `632930644527.dkr.ecr.us-east-1.amazonaws.com/geo-intelligence-api`
-- Active task definition: `geo-intelligence-api:8`
+- Active task definition: `geo-intelligence-api:16`
 
 Both buckets block every form of public access and grant object reads only to their CloudFront
 distribution through OAC. The ALB security group accepts port 80 only from the AWS-managed
@@ -64,10 +64,14 @@ The container is Linux ARM64, runs as UID `10001`, listens on port `8080`, and i
 The ECR image is deployed by immutable digest. The deployed image scan completed with no Critical,
 High, or Medium findings.
 
-The active Runtime is version 18 and uses image digest
-`sha256:cceba82eea931c4857cb553dba3fa3a35e13ba0209287311f64e54b2361dfa19`.
+The active Runtime is version 36 and uses image digest
+`sha256:2e0e2caaf47c8331e36666c6e53958bc380c52563ff33949cdf77a6a6b6e34a6`.
 It runs Codex SDK through the Amazon Bedrock provider, AgentCore Code Interpreter, AgentCore
-Browser with Web Bot Auth, evidence remediation, and budgeted AgentCore Payments.
+Browser with Web Bot Auth, evidence remediation, and budgeted AgentCore Payments. Crawl source
+profiles are loaded from Aurora `data_sources` and `agent_source_assignments` on every invocation;
+the IAM-only `source_registry` action provides a read-only production verification path. The
+registry currently contains 86 sources, and each crawler rotates through at most eight open
+sources per invocation using assignment selection timestamps.
 
 CloudFront forwards the standard `PAYMENT-SIGNATURE`, legacy `X-PAYMENT`, and `X-Agent-Name`
 headers to ECS for x402 settlement and Agent traffic attribution. API cache TTL is zero.
@@ -81,6 +85,7 @@ headers to ECS for x402 settlement and Agent traffic attribution. API cache TTL 
 - `scheduler-runtime-policy.json`: invoke the Lambda bridge and publish failed events to SQS
 - `lambda-trust-policy.json`: Lambda service trust
 - `scheduler-bridge-policy.json`: invoke the AgentCore DEFAULT endpoint and write Lambda logs
+- `ecs-api-runtime-policy.json`: API access plus schedule updates and Scheduler-only PassRole
 
 ## Scheduler
 

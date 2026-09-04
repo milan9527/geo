@@ -1,14 +1,19 @@
 from __future__ import annotations
 
 import json
+import ipaddress
 import os
 import re
 import secrets
+import socket
+import time
 from http.cookies import SimpleCookie
 from datetime import date, datetime, timedelta, timezone
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler
-from urllib.parse import parse_qs, urlparse
+from urllib.error import HTTPError, URLError
+from urllib.parse import parse_qs, urljoin, urlparse
+from urllib.request import HTTPRedirectHandler, Request, build_opener
 
 import boto3
 
@@ -44,6 +49,43 @@ ADMIN_LOCK_MINUTES = 15
 AWS_REGION = os.environ.get("AWS_REGION", "us-east-1")
 SCHEDULER_GROUP = "geo-intelligence-crawlers"
 SCHEDULER_BRIDGE_FUNCTION = "geo-intelligence-scheduler-bridge"
+CRAWLER_SCHEDULE_PRESETS = {
+    "*/10 * * * *": ("cron(0/10 * * * ? *)", "每 10 分钟"),
+    "*/15 * * * *": ("cron(0/15 * * * ? *)", "每 15 分钟"),
+    "*/20 * * * *": ("cron(0/20 * * * ? *)", "每 20 分钟"),
+    "*/30 * * * *": ("cron(0/30 * * * ? *)", "每 30 分钟"),
+    "0 * * * *": ("cron(0 * * * ? *)", "每小时"),
+    "0 */2 * * *": ("cron(0 0/2 * * ? *)", "每 2 小时"),
+    "0 */3 * * *": ("cron(0 0/3 * * ? *)", "每 3 小时"),
+    "0 */6 * * *": ("cron(0 0/6 * * ? *)", "每 6 小时"),
+    "0 */12 * * *": ("cron(0 0/12 * * ? *)", "每 12 小时"),
+}
+EVIDENCE_DATA_SQL = """
+CASE
+    WHEN octet_length(data_json) <= 40000 THEN data_json
+    ELSE jsonb_strip_nulls(
+        jsonb_build_object(
+            '_compacted', TRUE,
+            '_originalBytes', octet_length(data_json),
+            'seriesId', data_json::jsonb -> 'seriesId',
+            'observationCount', data_json::jsonb -> 'observationCount',
+            'missingObservationCount',
+                data_json::jsonb -> 'missingObservationCount',
+            'startDate', data_json::jsonb -> 'startDate',
+            'endDate', data_json::jsonb -> 'endDate',
+            'latest', data_json::jsonb -> 'latest',
+            'latestDate', data_json::jsonb -> 'latestDate',
+            'latestValue', data_json::jsonb -> 'latestValue',
+            'startValue', data_json::jsonb -> 'startValue',
+            'changePercent', data_json::jsonb -> 'changePercent',
+            'changeFromPrevious',
+                data_json::jsonb -> 'changeFromPrevious',
+            'changeFromFirst', data_json::jsonb -> 'changeFromFirst',
+            '_preview', left(data_json, 2000)
+        )
+    )::text
+END
+"""
 AGENT_PATTERNS = {
     "OpenAI Crawler": ("gptbot", "chatgpt-user", "openai"),
     "ClaudeBot": ("claudebot", "claude-web"),
@@ -52,6 +94,170 @@ AGENT_PATTERNS = {
     "Amazonbot": ("amazonbot",),
     "Common Crawl": ("ccbot",),
 }
+SOURCE_METHODS = {"feed", "web", "browser", "api", "timeseries", "x402"}
+SOURCE_STATUSES = {"active", "paused", "error"}
+SOURCE_ACCESS_MODELS = {"open", "authenticated", "x402"}
+CRAWLER_CONTACT_URL = os.environ.get(
+    "CRAWLER_CONTACT_URL",
+    os.environ.get(
+        "X402_PUBLIC_BASE_URL",
+        "https://d1tsbnft7iv51.cloudfront.net/",
+    ),
+)
+
+
+class _NoRedirect(HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None
+
+
+def validated_public_https_url(value: object) -> str:
+    raw = str(value or "").strip()
+    parsed = urlparse(raw)
+    if parsed.scheme != "https" or not parsed.hostname or parsed.username:
+        raise ValueError("数据源 URL 必须是公开的 HTTPS 地址")
+    if parsed.port not in {None, 443}:
+        raise ValueError("数据源 URL 仅允许使用 HTTPS 443 端口")
+    return raw
+
+
+def assert_public_hostname(url: str) -> None:
+    hostname = urlparse(url).hostname or ""
+    try:
+        addresses = {
+            item[4][0]
+            for item in socket.getaddrinfo(hostname, 443, type=socket.SOCK_STREAM)
+        }
+    except socket.gaierror as error:
+        raise ValueError(f"域名解析失败：{error}") from error
+    if not addresses:
+        raise ValueError("域名没有可用 IP 地址")
+    for address in addresses:
+        ip = ipaddress.ip_address(address)
+        if not ip.is_global:
+            raise ValueError("数据源不能解析到内网、环回或保留地址")
+
+
+def normalized_source_config(value: object) -> dict:
+    if not isinstance(value, dict):
+        raise ValueError("config 必须是 JSON 对象")
+    config = dict(value)
+    raw_policy = config.get("requestPolicy")
+    if raw_policy is None:
+        return config
+    if not isinstance(raw_policy, dict):
+        raise ValueError("requestPolicy 必须是 JSON 对象")
+    policy = dict(raw_policy)
+    if "userAgent" in policy:
+        user_agent = str(policy["userAgent"] or "").strip()
+        if not user_agent or len(user_agent) > 500 or "\r" in user_agent or "\n" in user_agent:
+            raise ValueError("requestPolicy.userAgent 无效")
+        policy["userAgent"] = user_agent
+    if "requestsPerSecond" in policy:
+        requests_per_second = float(policy["requestsPerSecond"])
+        if not 0.1 <= requests_per_second <= 10:
+            raise ValueError("requestsPerSecond 必须在 0.1 到 10 之间")
+        policy["requestsPerSecond"] = requests_per_second
+    if "cacheTtlSeconds" in policy:
+        cache_ttl = int(policy["cacheTtlSeconds"])
+        if not 0 <= cache_ttl <= 604800:
+            raise ValueError("cacheTtlSeconds 必须在 0 到 604800 之间")
+        policy["cacheTtlSeconds"] = cache_ttl
+    if "maxRetries" in policy:
+        max_retries = int(policy["maxRetries"])
+        if not 0 <= max_retries <= 5:
+            raise ValueError("maxRetries 必须在 0 到 5 之间")
+        policy["maxRetries"] = max_retries
+    if "retryStatusCodes" in policy:
+        statuses = policy["retryStatusCodes"]
+        if not isinstance(statuses, list) or any(
+            int(status) not in {408, 425, 429, 500, 502, 503, 504}
+            for status in statuses
+        ):
+            raise ValueError("retryStatusCodes 包含不安全的状态码")
+        policy["retryStatusCodes"] = list(dict.fromkeys(int(status) for status in statuses))
+    if "maxRetryAfterSeconds" in policy:
+        max_retry_after = int(policy["maxRetryAfterSeconds"])
+        if not 1 <= max_retry_after <= 900:
+            raise ValueError("maxRetryAfterSeconds 必须在 1 到 900 之间")
+        policy["maxRetryAfterSeconds"] = max_retry_after
+    config["requestPolicy"] = policy
+    return config
+
+
+def source_request_policy(config: dict) -> dict:
+    policy = dict(config.get("requestPolicy") or {})
+    user_agent = str(
+        policy.get("userAgent")
+        or "ApertureGEORegistryTest/2.0 (Aperture GEO; +{contactUrl})"
+    )
+    policy["userAgent"] = user_agent.replace("{contactUrl}", CRAWLER_CONTACT_URL)
+    policy.setdefault("maxRetries", 1)
+    policy.setdefault("retryStatusCodes", [429, 503])
+    policy.setdefault("maxRetryAfterSeconds", 60)
+    return policy
+
+
+def test_data_source_url(
+    url: str,
+    *,
+    config: dict | None = None,
+    access_model: str = "open",
+) -> dict[str, object]:
+    current_url = validated_public_https_url(url)
+    opener = build_opener(_NoRedirect())
+    policy = source_request_policy(config or {})
+    retries_remaining = int(policy["maxRetries"])
+    redirects_remaining = 5
+    while True:
+        assert_public_hostname(current_url)
+        request = Request(
+            current_url,
+            headers={
+                "User-Agent": str(policy["userAgent"]),
+                "Accept": "application/rss+xml, application/xml, text/csv, text/html, application/json",
+                "Range": "bytes=0-4095",
+            },
+        )
+        try:
+            with opener.open(request, timeout=15) as response:
+                response.read(4096)
+                final_url = validated_public_https_url(response.geturl())
+                assert_public_hostname(final_url)
+                return {
+                    "ok": True,
+                    "statusCode": int(response.status),
+                    "contentType": response.headers.get("Content-Type", ""),
+                    "finalUrl": final_url,
+                    "message": f"HTTP {response.status} · 来源可访问",
+                }
+        except HTTPError as error:
+            if error.code in {301, 302, 303, 307, 308}:
+                if redirects_remaining <= 0:
+                    raise ValueError("重定向次数超过限制") from error
+                location = error.headers.get("Location", "")
+                if not location:
+                    raise ValueError(f"HTTP {error.code} 缺少重定向地址") from error
+                current_url = validated_public_https_url(urljoin(current_url, location))
+                redirects_remaining -= 1
+                continue
+            if error.code == 402 and access_model == "x402":
+                return {
+                    "ok": True,
+                    "statusCode": error.code,
+                    "contentType": error.headers.get("Content-Type", ""),
+                    "finalUrl": current_url,
+                    "message": "HTTP 402 · x402 付费挑战正常",
+                }
+            if error.code in set(policy["retryStatusCodes"]) and retries_remaining > 0:
+                raw_retry_after = str(error.headers.get("Retry-After", "")).strip()
+                retry_after = int(raw_retry_after) if raw_retry_after.isdigit() else 1
+                time.sleep(min(retry_after, int(policy["maxRetryAfterSeconds"])))
+                retries_remaining -= 1
+                continue
+            raise ValueError(f"来源返回 HTTP {error.code}") from error
+        except URLError as error:
+            raise ValueError(f"连接失败：{error.reason}") from error
 
 
 def parse_json(value: str | None, fallback):
@@ -71,7 +277,55 @@ def identify_visitor(user_agent: str) -> tuple[str, str | None]:
     return "human", None
 
 
-def sync_eventbridge_schedule(slug: str, status: str) -> str | None:
+def normalize_crawler_schedule(value: object) -> dict[str, str]:
+    schedule = re.sub(r"\s+", " ", str(value or "").strip())
+    if schedule == "0 */1 * * *":
+        schedule = "0 * * * *"
+    preset = CRAWLER_SCHEDULE_PRESETS.get(schedule)
+    if preset:
+        return {
+            "schedule": schedule,
+            "eventbridgeExpression": preset[0],
+            "label": preset[1],
+        }
+    daily = re.fullmatch(r"([0-5]?\d) ([01]?\d|2[0-3]) \* \* \*", schedule)
+    if daily:
+        minute = int(daily.group(1))
+        hour = int(daily.group(2))
+        return {
+            "schedule": f"{minute} {hour} * * *",
+            "eventbridgeExpression": f"cron({minute} {hour} * * ? *)",
+            "label": f"每天 {hour:02d}:{minute:02d}",
+        }
+    raise ValueError(
+        "仅支持每 10/15/20/30 分钟、每 1/2/3/6/12 小时或每天固定时间"
+    )
+
+
+def eventbridge_schedule_states(slugs: list[str]) -> dict[str, str]:
+    if not USE_AURORA_DATA_API:
+        return {}
+    scheduler = boto3.client("scheduler", region_name=AWS_REGION)
+    states: dict[str, str] = {}
+    for slug in slugs:
+        name = f"geo-{slug}"
+        try:
+            response = scheduler.get_schedule(
+                Name=name,
+                GroupName=SCHEDULER_GROUP,
+            )
+            states[name] = str(response["State"])
+        except scheduler.exceptions.ResourceNotFoundException:
+            states[name] = "MISSING"
+    return states
+
+
+def sync_eventbridge_schedule(
+    slug: str,
+    *,
+    status: str | None = None,
+    schedule_expression: str | None = None,
+) -> dict[str, str] | None:
     if not USE_AURORA_DATA_API:
         return None
     scheduler = boto3.client("scheduler", region_name=AWS_REGION)
@@ -80,10 +334,16 @@ def sync_eventbridge_schedule(slug: str, status: str) -> str | None:
     request = {
         "Name": name,
         "GroupName": SCHEDULER_GROUP,
-        "ScheduleExpression": current["ScheduleExpression"],
+        "ScheduleExpression": schedule_expression or current["ScheduleExpression"],
         "FlexibleTimeWindow": current["FlexibleTimeWindow"],
         "Target": current["Target"],
-        "State": "DISABLED" if status == "paused" else "ENABLED",
+        "State": (
+            "DISABLED"
+            if status == "paused"
+            else "ENABLED"
+            if status is not None
+            else current["State"]
+        ),
     }
     for key in (
         "Description",
@@ -96,7 +356,11 @@ def sync_eventbridge_schedule(slug: str, status: str) -> str | None:
         if key in current:
             request[key] = current[key]
     scheduler.update_schedule(**request)
-    return request["State"]
+    return {
+        "state": request["State"],
+        "scheduleExpression": request["ScheduleExpression"],
+        "timezone": str(request.get("ScheduleExpressionTimezone") or "UTC"),
+    }
 
 
 def invoke_crawler_bridge(
@@ -167,7 +431,7 @@ class ApiHandler(BaseHTTPRequestHandler):
         origin = self.headers.get("Origin", "*")
         allowed = origin if origin.startswith(("http://127.0.0.1:", "http://localhost:")) else "*"
         self.send_header("Access-Control-Allow-Origin", allowed)
-        self.send_header("Access-Control-Allow-Methods", "GET, POST, PATCH, OPTIONS")
+        self.send_header("Access-Control-Allow-Methods", "GET, POST, PATCH, DELETE, OPTIONS")
         self.send_header(
             "Access-Control-Allow-Headers",
             "Content-Type, X-Admin-Key, X-Agent-Name, PAYMENT-SIGNATURE, X-PAYMENT",
@@ -250,6 +514,11 @@ class ApiHandler(BaseHTTPRequestHandler):
                 return
             self._admin_crawlers()
             return
+        if path == "/api/admin/data-sources":
+            if not self._require_admin():
+                return
+            self._admin_data_sources()
+            return
         if path == "/api/admin/jobs":
             if not self._require_admin():
                 return
@@ -331,6 +600,19 @@ class ApiHandler(BaseHTTPRequestHandler):
             if not self._require_admin():
                 return
             self._create_article(payload)
+            return
+        if path == "/api/admin/data-sources":
+            if not self._require_admin():
+                return
+            self._create_data_source(payload)
+            return
+        source_test_match = re.fullmatch(
+            r"/api/admin/data-sources/(\d+)/test", path
+        )
+        if source_test_match:
+            if not self._require_admin():
+                return
+            self._test_data_source(int(source_test_match.group(1)))
             return
         crawler_match = re.fullmatch(r"/api/admin/crawlers/(\d+)/run", path)
         if crawler_match:
@@ -569,9 +851,23 @@ class ApiHandler(BaseHTTPRequestHandler):
         if crawler_match:
             self._update_crawler(int(crawler_match.group(1)), payload)
             return
+        source_match = re.fullmatch(r"/api/admin/data-sources/(\d+)", path)
+        if source_match:
+            self._update_data_source(int(source_match.group(1)), payload)
+            return
         setting_match = re.fullmatch(r"/api/admin/settings/([a-z0-9_]+)", path)
         if setting_match:
             self._update_setting(setting_match.group(1), payload)
+            return
+        self._json({"error": "Not found"}, HTTPStatus.NOT_FOUND)
+
+    def do_DELETE(self) -> None:  # noqa: N802
+        path = urlparse(self.path).path.rstrip("/")
+        if not self._require_admin():
+            return
+        source_match = re.fullmatch(r"/api/admin/data-sources/(\d+)", path)
+        if source_match:
+            self._delete_data_source(int(source_match.group(1)))
             return
         self._json({"error": "Not found"}, HTTPStatus.NOT_FOUND)
 
@@ -1319,25 +1615,387 @@ class ApiHandler(BaseHTTPRequestHandler):
             }
         )
 
+    def _admin_data_sources(self) -> None:
+        with connection() as conn:
+            sources = conn.execute(
+                """
+                SELECT ds.*, c.name category_name
+                FROM data_sources ds
+                JOIN categories c ON c.slug = ds.category_slug
+                ORDER BY ds.status, ds.trust_tier, ds.publisher, ds.name
+                """
+            ).fetchall()
+            assignments = conn.execute(
+                """
+                SELECT asa.source_id, asa.agent_id, asa.enabled, asa.priority,
+                       asa.last_selected_at, asa.selection_count,
+                       ca.name agent_name, ca.slug agent_slug, ca.kind agent_kind
+                FROM agent_source_assignments asa
+                JOIN crawler_agents ca ON ca.id = asa.agent_id
+                ORDER BY asa.source_id, asa.priority, ca.id
+                """
+            ).fetchall()
+        by_source: dict[int, list[dict]] = {}
+        for row in assignments:
+            assignment = dict(row)
+            by_source.setdefault(int(assignment["source_id"]), []).append(
+                assignment
+            )
+        result = []
+        for row in sources:
+            item = dict(row)
+            item["respect_robots"] = bool(item["respect_robots"])
+            item["config"] = parse_json(item.pop("config_json", "{}"), {})
+            item["assignments"] = by_source.get(int(item["id"]), [])
+            item["agentIds"] = [
+                assignment["agent_id"]
+                for assignment in item["assignments"]
+                if assignment["enabled"]
+            ]
+            result.append(item)
+        self._json(result)
+
+    def _source_values(
+        self,
+        payload: dict,
+        *,
+        partial: bool,
+    ) -> tuple[dict[str, object], list[int] | None]:
+        field_map = {
+            "publisher": "publisher",
+            "name": "name",
+            "url": "url",
+            "categorySlug": "category_slug",
+            "sourceType": "source_type",
+            "ingestionMethod": "ingestion_method",
+            "status": "status",
+            "trustTier": "trust_tier",
+            "maxItems": "max_items",
+            "respectRobots": "respect_robots",
+            "accessModel": "access_model",
+            "secretArn": "secret_arn",
+            "notes": "notes",
+            "config": "config_json",
+        }
+        required = {
+            "publisher",
+            "name",
+            "url",
+            "categorySlug",
+            "sourceType",
+            "ingestionMethod",
+        }
+        if not partial:
+            missing = [field for field in required if not str(payload.get(field, "")).strip()]
+            if missing:
+                raise ValueError(f"缺少必填字段：{', '.join(sorted(missing))}")
+        values: dict[str, object] = {}
+        for input_name, column in field_map.items():
+            if input_name not in payload:
+                continue
+            value: object = payload[input_name]
+            if input_name == "url":
+                value = validated_public_https_url(value)
+            elif input_name in {
+                "publisher",
+                "name",
+                "categorySlug",
+                "sourceType",
+                "secretArn",
+                "notes",
+            }:
+                value = str(value or "").strip()
+            elif input_name == "ingestionMethod":
+                value = str(value or "").strip()
+                if value not in SOURCE_METHODS:
+                    raise ValueError("不支持的采集方式")
+            elif input_name == "status":
+                value = str(value or "").strip()
+                if value not in SOURCE_STATUSES:
+                    raise ValueError("不支持的数据源状态")
+            elif input_name == "accessModel":
+                value = str(value or "").strip()
+                if value not in SOURCE_ACCESS_MODELS:
+                    raise ValueError("不支持的访问模式")
+            elif input_name == "trustTier":
+                value = int(value)
+                if not 1 <= value <= 4:
+                    raise ValueError("可信等级必须在 1 到 4 之间")
+            elif input_name == "maxItems":
+                value = int(value)
+                if not 1 <= value <= 50:
+                    raise ValueError("单次条数必须在 1 到 50 之间")
+            elif input_name == "respectRobots":
+                if not isinstance(value, bool):
+                    raise ValueError("respectRobots 必须是布尔值")
+            elif input_name == "config":
+                value = json.dumps(
+                    normalized_source_config(value),
+                    ensure_ascii=False,
+                )
+            values[column] = value
+        secret_arn = str(values.get("secret_arn", ""))
+        if secret_arn and not secret_arn.startswith("arn:aws:secretsmanager:"):
+            raise ValueError("凭据必须引用 AWS Secrets Manager ARN")
+        agent_ids = None
+        if "agentIds" in payload:
+            if not isinstance(payload["agentIds"], list):
+                raise ValueError("agentIds 必须是数组")
+            try:
+                agent_ids = list(dict.fromkeys(int(item) for item in payload["agentIds"]))
+            except (TypeError, ValueError) as error:
+                raise ValueError("agentIds 包含无效 Agent ID") from error
+            if len(agent_ids) > 50:
+                raise ValueError("单个来源最多分配给 50 个 Agent")
+        return values, agent_ids
+
+    def _replace_source_assignments(
+        self,
+        conn,
+        source_id: int,
+        agent_ids: list[int],
+        timestamp: str,
+    ) -> None:
+        if agent_ids:
+            placeholders = ", ".join("%s" for _ in agent_ids)
+            existing = conn.execute(
+                f"SELECT id FROM crawler_agents WHERE id IN ({placeholders})",
+                agent_ids,
+            ).fetchall()
+            if len(existing) != len(agent_ids):
+                raise ValueError("分配列表包含不存在的 Agent")
+        conn.execute(
+            "DELETE FROM agent_source_assignments WHERE source_id = %s",
+            (source_id,),
+        )
+        for priority, agent_id in enumerate(agent_ids, start=1):
+            conn.execute(
+                """
+                INSERT INTO agent_source_assignments(
+                    agent_id, source_id, enabled, priority, created_at, updated_at
+                ) VALUES(%s, %s, TRUE, %s, %s, %s)
+                """,
+                (agent_id, source_id, priority * 10, timestamp, timestamp),
+            )
+
+    def _create_data_source(self, payload: dict) -> None:
+        try:
+            values, agent_ids = self._source_values(payload, partial=False)
+        except (TypeError, ValueError) as error:
+            self._json({"error": str(error)}, HTTPStatus.BAD_REQUEST)
+            return
+        timestamp = utc_now()
+        values.setdefault("status", "active")
+        values.setdefault("trust_tier", 1)
+        values.setdefault("max_items", 4)
+        values.setdefault("respect_robots", True)
+        values.setdefault("access_model", "open")
+        values.setdefault("secret_arn", "")
+        values.setdefault("notes", "")
+        values.setdefault("config_json", "{}")
+        values["created_at"] = timestamp
+        values["updated_at"] = timestamp
+        columns = list(values)
+        placeholders = ", ".join("%s" for _ in columns)
+        try:
+            with connection() as conn:
+                source_id = conn.execute(
+                    f"""
+                    INSERT INTO data_sources({", ".join(columns)})
+                    VALUES({placeholders})
+                    RETURNING id
+                    """,
+                    [values[column] for column in columns],
+                ).fetchone()["id"]
+                self._replace_source_assignments(
+                    conn,
+                    int(source_id),
+                    agent_ids or [],
+                    timestamp,
+                )
+        except ValueError as error:
+            self._json({"error": str(error)}, HTTPStatus.BAD_REQUEST)
+            return
+        except Exception as error:
+            if "unique" in str(error).lower() or "duplicate" in str(error).lower():
+                self._json({"error": "该 URL 已存在于数据源注册中心"}, HTTPStatus.CONFLICT)
+                return
+            raise
+        self._json(
+            {"ok": True, "sourceId": source_id},
+            HTTPStatus.CREATED,
+        )
+
+    def _update_data_source(self, source_id: int, payload: dict) -> None:
+        try:
+            values, agent_ids = self._source_values(payload, partial=True)
+        except (TypeError, ValueError) as error:
+            self._json({"error": str(error)}, HTTPStatus.BAD_REQUEST)
+            return
+        if not values and agent_ids is None:
+            self._json({"error": "没有可更新字段"}, HTTPStatus.BAD_REQUEST)
+            return
+        timestamp = utc_now()
+        try:
+            with connection() as conn:
+                source = conn.execute(
+                    "SELECT id FROM data_sources WHERE id = %s",
+                    (source_id,),
+                ).fetchone()
+                if not source:
+                    self._json({"error": "数据源不存在"}, HTTPStatus.NOT_FOUND)
+                    return
+                if values:
+                    values["updated_at"] = timestamp
+                    assignments = ", ".join(
+                        f"{column} = %s" for column in values
+                    )
+                    conn.execute(
+                        f"UPDATE data_sources SET {assignments} WHERE id = %s",
+                        [*values.values(), source_id],
+                    )
+                if agent_ids is not None:
+                    self._replace_source_assignments(
+                        conn,
+                        source_id,
+                        agent_ids,
+                        timestamp,
+                    )
+        except ValueError as error:
+            self._json({"error": str(error)}, HTTPStatus.BAD_REQUEST)
+            return
+        except Exception as error:
+            if "unique" in str(error).lower() or "duplicate" in str(error).lower():
+                self._json({"error": "该 URL 已存在于数据源注册中心"}, HTTPStatus.CONFLICT)
+                return
+            raise
+        self._json({"ok": True, "sourceId": source_id})
+
+    def _delete_data_source(self, source_id: int) -> None:
+        with connection() as conn:
+            cursor = conn.execute(
+                "DELETE FROM data_sources WHERE id = %s",
+                (source_id,),
+            )
+            if cursor.rowcount == 0:
+                self._json({"error": "数据源不存在"}, HTTPStatus.NOT_FOUND)
+                return
+        self._json({"ok": True, "sourceId": source_id})
+
+    def _test_data_source(self, source_id: int) -> None:
+        with connection() as conn:
+            source = conn.execute(
+                """
+                SELECT url, access_model, config_json
+                FROM data_sources
+                WHERE id = %s
+                """,
+                (source_id,),
+            ).fetchone()
+        if not source:
+            self._json({"error": "数据源不存在"}, HTTPStatus.NOT_FOUND)
+            return
+        timestamp = utc_now()
+        try:
+            result = test_data_source_url(
+                str(source["url"]),
+                config=normalized_source_config(
+                    parse_json(source["config_json"], {})
+                ),
+                access_model=str(source["access_model"]),
+            )
+            test_status = "success"
+            response_status = HTTPStatus.OK
+        except (TypeError, ValueError) as error:
+            result = {
+                "ok": False,
+                "statusCode": None,
+                "finalUrl": source["url"],
+                "message": str(error),
+            }
+            test_status = "failed"
+            response_status = HTTPStatus.BAD_GATEWAY
+        with connection() as conn:
+            conn.execute(
+                """
+                UPDATE data_sources
+                SET last_tested_at = %s, last_test_status = %s,
+                    last_test_message = %s, updated_at = %s
+                WHERE id = %s
+                """,
+                (
+                    timestamp,
+                    test_status,
+                    str(result["message"])[:1000],
+                    timestamp,
+                    source_id,
+                ),
+            )
+        self._json(
+            {"sourceId": source_id, "testedAt": timestamp, **result},
+            response_status,
+        )
+
     def _admin_crawlers(self) -> None:
         with connection() as conn:
             rows = conn.execute("SELECT * FROM crawler_agents ORDER BY id").fetchall()
-        self._json(
-            [
-                {
-                    **dict(row),
-                    "industries": parse_json(row["industries"], []),
-                    "config": parse_json(row["config_json"], {}),
-                    "eventbridge": {
-                        "scheduleName": f"geo-{row['slug']}",
-                        "state": "DISABLED" if row["status"] == "paused" else "ENABLED",
-                        "group": SCHEDULER_GROUP,
-                    }
-                    if USE_AURORA_DATA_API
-                    else None,
+            source_rows = conn.execute(
+                """
+                SELECT asa.agent_id, ds.id source_id, ds.name, ds.status,
+                       ds.access_model
+                FROM agent_source_assignments asa
+                JOIN data_sources ds ON ds.id = asa.source_id
+                WHERE asa.enabled = TRUE
+                ORDER BY asa.agent_id, asa.priority, ds.id
+                """
+            ).fetchall()
+        sources_by_agent: dict[int, list[dict]] = {}
+        for source in source_rows:
+            item = dict(source)
+            sources_by_agent.setdefault(int(item["agent_id"]), []).append(item)
+        schedule_states = eventbridge_schedule_states(
+            [str(row["slug"]) for row in rows]
+        )
+        result = []
+        for row in rows:
+            item = dict(row)
+            try:
+                schedule_details = normalize_crawler_schedule(item["schedule"])
+            except ValueError:
+                schedule_details = {
+                    "schedule": item["schedule"],
+                    "eventbridgeExpression": "",
+                    "label": item["schedule"],
                 }
-                for row in rows
-            ]
+            item["industries"] = parse_json(item["industries"], [])
+            item["config"] = parse_json(item["config_json"], {})
+            item["dataSources"] = sources_by_agent.get(int(item["id"]), [])
+            item["sourceCount"] = len(
+                [
+                    source
+                    for source in item["dataSources"]
+                    if source["status"] == "active"
+                ]
+            )
+            item["scheduleLabel"] = schedule_details["label"]
+            item["eventbridge"] = (
+                {
+                    "scheduleName": f"geo-{item['slug']}",
+                    "state": schedule_states.get(
+                        f"geo-{item['slug']}", "UNKNOWN"
+                    ),
+                    "group": SCHEDULER_GROUP,
+                    "scheduleExpression": schedule_details[
+                        "eventbridgeExpression"
+                    ],
+                    "timezone": "UTC",
+                }
+                if USE_AURORA_DATA_API
+                else None
+            )
+            result.append(item)
+        self._json(
+            result
         )
 
     def _admin_jobs(self) -> None:
@@ -1362,13 +2020,20 @@ class ApiHandler(BaseHTTPRequestHandler):
                 """
                 SELECT r.*, a.name agent_name, a.kind agent_kind,
                        o.title article_title, o.slug article_slug,
-                       o.status article_status, o.body_json,
-                       COUNT(e.id) evidence_count
+                       o.status article_status,
+                       CASE
+                           WHEN octet_length(o.body_json) <= 20000
+                           THEN o.body_json
+                           ELSE '[]'
+                       END body_json,
+                       (
+                           SELECT COUNT(*)
+                           FROM research_evidence e
+                           WHERE e.run_id = r.id
+                       ) evidence_count
                 FROM research_runs r
                 JOIN crawler_agents a ON a.id = r.agent_id
                 LEFT JOIN articles o ON o.id = r.output_article_id
-                LEFT JOIN research_evidence e ON e.run_id = r.id
-                GROUP BY r.id, a.name, a.kind, o.title, o.slug, o.status, o.body_json
                 ORDER BY r.started_at DESC LIMIT 20
                 """
             ).fetchall()
@@ -1404,7 +2069,12 @@ class ApiHandler(BaseHTTPRequestHandler):
                 """
                 SELECT r.*, a.name agent_name, a.kind agent_kind,
                        o.title article_title, o.slug article_slug,
-                       o.status article_status, o.body_json
+                       o.status article_status,
+                       CASE
+                           WHEN octet_length(o.body_json) <= 200000
+                           THEN o.body_json
+                           ELSE '[]'
+                       END body_json
                 FROM research_runs r
                 JOIN crawler_agents a ON a.id = r.agent_id
                 LEFT JOIN articles o ON o.id = r.output_article_id
@@ -1436,7 +2106,12 @@ class ApiHandler(BaseHTTPRequestHandler):
             item["evidence"] = []
             for evidence in evidence_rows:
                 payload = conn.execute(
-                    "SELECT data_json FROM research_evidence WHERE id = %s",
+                    (
+                        "SELECT "
+                        + EVIDENCE_DATA_SQL
+                        + " AS data_json "
+                        "FROM research_evidence WHERE id = %s"
+                    ),
                     (evidence.pop("id"),),
                 ).fetchone()
                 evidence["data"] = parse_json(
@@ -1576,19 +2251,45 @@ class ApiHandler(BaseHTTPRequestHandler):
         self._json({"ok": True, "articleId": article_id, "updated": updates})
 
     def _update_crawler(self, crawler_id: int, payload: dict) -> None:
-        status = payload.get("status")
-        if status not in {"running", "paused", "idle"}:
+        has_status = "status" in payload
+        has_schedule = "schedule" in payload
+        if not has_status and not has_schedule:
+            self._json(
+                {"error": "status or schedule is required"},
+                HTTPStatus.BAD_REQUEST,
+            )
+            return
+        status = payload.get("status") if has_status else None
+        if has_status and status not in {"running", "paused", "idle"}:
             self._json({"error": "Invalid status"}, HTTPStatus.BAD_REQUEST)
             return
+        schedule_details = None
+        if has_schedule:
+            try:
+                schedule_details = normalize_crawler_schedule(
+                    payload.get("schedule")
+                )
+            except ValueError as error:
+                self._json({"error": str(error)}, HTTPStatus.BAD_REQUEST)
+                return
         with connection() as conn:
             crawler = conn.execute(
-                "SELECT slug FROM crawler_agents WHERE id = %s", (crawler_id,)
+                "SELECT slug, status, schedule FROM crawler_agents WHERE id = %s",
+                (crawler_id,),
             ).fetchone()
             if not crawler:
                 self._json({"error": "Crawler not found"}, HTTPStatus.NOT_FOUND)
                 return
         try:
-            scheduler_state = sync_eventbridge_schedule(crawler["slug"], status)
+            scheduler_result = sync_eventbridge_schedule(
+                crawler["slug"],
+                status=status if has_status else None,
+                schedule_expression=(
+                    schedule_details["eventbridgeExpression"]
+                    if schedule_details
+                    else None
+                ),
+            )
         except Exception as error:
             self._json(
                 {
@@ -1598,9 +2299,19 @@ class ApiHandler(BaseHTTPRequestHandler):
                 HTTPStatus.BAD_GATEWAY,
             )
             return
+        next_status = status if has_status else crawler["status"]
+        next_schedule = (
+            schedule_details["schedule"]
+            if schedule_details
+            else crawler["schedule"]
+        )
         with connection() as conn:
             cursor = conn.execute(
-                "UPDATE crawler_agents SET status = %s WHERE id = %s", (status, crawler_id)
+                """
+                UPDATE crawler_agents SET status = %s, schedule = %s
+                WHERE id = %s
+                """,
+                (next_status, next_schedule, crawler_id),
             )
             if cursor.rowcount == 0:
                 self._json({"error": "Crawler not found"}, HTTPStatus.NOT_FOUND)
@@ -1609,8 +2320,17 @@ class ApiHandler(BaseHTTPRequestHandler):
             {
                 "ok": True,
                 "crawlerId": crawler_id,
-                "status": status,
-                "eventbridgeState": scheduler_state,
+                "status": next_status,
+                "schedule": next_schedule,
+                "scheduleLabel": (
+                    schedule_details["label"]
+                    if schedule_details
+                    else normalize_crawler_schedule(next_schedule)["label"]
+                ),
+                "eventbridge": scheduler_result,
+                "eventbridgeState": (
+                    scheduler_result["state"] if scheduler_result else None
+                ),
             }
         )
 

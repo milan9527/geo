@@ -12,6 +12,7 @@ import time
 import uuid
 from datetime import datetime, timezone
 from typing import Any
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 from urllib.request import Request, urlopen
 from xml.etree import ElementTree
 
@@ -38,6 +39,16 @@ CODE_INTERPRETER_ID = os.environ.get("AGENTCORE_CODE_INTERPRETER_ID", "")
 AUTO_PUBLISH_RESEARCH = os.environ.get(
     "RESEARCH_AUTO_PUBLISH", "true"
 ).lower() in {"1", "true", "yes"}
+ARTICLE_UPDATE_WINDOW_HOURS = int(
+    os.environ.get("RESEARCH_ARTICLE_UPDATE_WINDOW_HOURS", "24")
+)
+ARTICLE_SOURCE_OVERLAP_THRESHOLD = float(
+    os.environ.get("RESEARCH_ARTICLE_SOURCE_OVERLAP_THRESHOLD", "0.5")
+)
+MAX_OPEN_SOURCES_PER_RUN = max(
+    1,
+    min(20, int(os.environ.get("CRAWLER_MAX_OPEN_SOURCES_PER_RUN", "8"))),
+)
 CRAWLER_CONTACT_URL = os.environ.get(
     "CRAWLER_CONTACT_URL",
     "https://d1tsbnft7iv51.cloudfront.net/",
@@ -55,6 +66,33 @@ bedrock = boto3.client(
 rds_data = boto3.client("rds-data", region_name=REGION)
 runtime_app = BedrockAgentCoreApp()
 background_tasks: set[asyncio.Task[Any]] = set()
+EVIDENCE_DATA_MAX_BYTES = 40_000
+EVIDENCE_DATA_SQL = """
+CASE
+    WHEN octet_length(data_json) <= 40000 THEN data_json
+    ELSE jsonb_strip_nulls(
+        jsonb_build_object(
+            '_compacted', TRUE,
+            '_originalBytes', octet_length(data_json),
+            'seriesId', data_json::jsonb -> 'seriesId',
+            'observationCount', data_json::jsonb -> 'observationCount',
+            'missingObservationCount',
+                data_json::jsonb -> 'missingObservationCount',
+            'startDate', data_json::jsonb -> 'startDate',
+            'endDate', data_json::jsonb -> 'endDate',
+            'latest', data_json::jsonb -> 'latest',
+            'latestDate', data_json::jsonb -> 'latestDate',
+            'latestValue', data_json::jsonb -> 'latestValue',
+            'startValue', data_json::jsonb -> 'startValue',
+            'changePercent', data_json::jsonb -> 'changePercent',
+            'changeFromPrevious',
+                data_json::jsonb -> 'changeFromPrevious',
+            'changeFromFirst', data_json::jsonb -> 'changeFromFirst',
+            '_preview', left(data_json, 2000)
+        )
+    )::text
+END
+"""
 
 WRITING_STYLES = {
     "mechanism": {
@@ -101,134 +139,65 @@ WRITING_STYLES = {
     },
 }
 
+HUMAN_TITLE_FALLBACKS = {
+    "ai": "AI产业的新分工：模型、应用与基础设施如何重新组合",
+    "agent": "Agent进入生产环境：执行控制、数据连接与治理如何协同",
+    "cloud": "企业AI架构的关键变化：智能体、数据、运行时与计费",
+    "commerce": "AI正在改变电商入口、交易流程与平台分工",
+    "finance": "利率与科技股重新定价：AI资本开支进入回报检验期",
+}
+TITLE_AUDIT_LANGUAGE = (
+    "给定材料",
+    "给定证据",
+    "给定摘录",
+    "现有材料",
+    "现有证据",
+    "证据不足",
+    "未展示",
+    "未提供",
+    "无法确认",
+    "无法形成",
+    "仍待核验",
+    "本研究",
+    "证据链细节",
+)
+
 SOURCE_PROFILES = {
     "research-coder": {
         "category": "ai",
         "crawlStyle": "research",
         "topic": "AI 基础模型、Agent 与云端 AI 基础设施的最新产业进展",
         "writingStyles": ["mechanism", "comparative", "critical_review"],
-        "sources": [
-            {
-                "publisher": "OpenAI",
-                "url": "https://openai.com/news/rss.xml",
-                "sourceType": "官方发布",
-            },
-            {
-                "publisher": "AWS Machine Learning Blog",
-                "url": "https://aws.amazon.com/blogs/machine-learning/feed/",
-                "sourceType": "官方技术博客",
-            },
-        ],
     },
     "render-scout": {
         "category": "commerce",
         "crawlStyle": "browser-rendered",
         "topic": "电商、支付与媒体平台采用 AI 和 Agent Commerce 的最新变化",
         "writingStyles": ["field_note", "comparative", "mechanism"],
-        "sources": [
-            {
-                "publisher": "Stripe",
-                "url": "https://stripe.com/blog",
-                "sourceType": "动态官方页面",
-                "maxItems": 3,
-            },
-            {
-                "publisher": "Shopify",
-                "url": "https://www.shopify.com/news",
-                "sourceType": "动态官方新闻",
-                "maxItems": 3,
-            },
-        ],
     },
     "market-signal": {
         "category": "finance",
         "crawlStyle": "financial-timeseries",
         "topic": "科技股、利率与 AI 资本开支周期的最新市场研判",
         "writingStyles": ["data_note", "mechanism", "comparative"],
-        "sources": [
-            {
-                "publisher": "Federal Reserve Bank of St. Louis",
-                "url": "https://fred.stlouisfed.org/graph/fredgraph.csv?id=NASDAQCOM",
-                "sourceType": "官方市场数据",
-            },
-            {
-                "publisher": "Federal Reserve Bank of St. Louis",
-                "url": "https://fred.stlouisfed.org/graph/fredgraph.csv?id=DGS10",
-                "sourceType": "官方利率数据",
-            },
-            {
-                "publisher": "Federal Reserve Bank of St. Louis",
-                "url": "https://fred.stlouisfed.org/graph/fredgraph.csv?id=FEDFUNDS",
-                "sourceType": "官方宏观数据",
-            },
-        ],
     },
     "evidence-verifier": {
         "category": "agent",
         "crawlStyle": "evidence-verification",
         "topic": "Agent 运行时、工具执行、证据治理与机器身份的技术进展",
         "writingStyles": ["critical_review", "mechanism", "comparative"],
-        "sources": [
-            {
-                "publisher": "AWS",
-                "url": "https://aws.amazon.com/bedrock/agentcore/",
-                "sourceType": "官方产品资料",
-            },
-            {
-                "publisher": "OpenAI",
-                "url": "https://openai.com/news/rss.xml",
-                "sourceType": "官方发布",
-            },
-        ],
     },
     "cloud-release-watch": {
         "category": "cloud",
         "crawlStyle": "browser-rendered",
         "topic": "主要云计算厂商最新服务发布及其对企业 AI 架构的影响",
         "writingStyles": ["architecture", "comparative", "mechanism"],
-        "sources": [
-            {
-                "publisher": "AWS What's New",
-                "url": "https://aws.amazon.com/new/",
-                "sourceType": "动态官方发布页面",
-                "maxItems": 3,
-            },
-            {
-                "publisher": "Google Cloud",
-                "url": "https://cloud.google.com/release-notes",
-                "sourceType": "动态官方发布说明",
-                "maxItems": 3,
-            },
-        ],
     },
     "commerce-feed-miner": {
         "category": "commerce",
         "crawlStyle": "research",
         "topic": "电商平台、支付基础设施与 AI 购物 Agent 的商业模式变化",
         "writingStyles": ["field_note", "mechanism", "comparative"],
-        "sources": [
-            {
-                "publisher": "Stripe",
-                "url": "https://stripe.com/blog/feed.rss",
-                "sourceType": "官方发布",
-            },
-            {
-                "publisher": "Shopify",
-                "url": "https://www.shopify.com/news",
-                "sourceType": "官方新闻",
-            },
-        ],
-        "paidSources": [
-            {
-                "publisher": "Aperture GEO",
-                "title": "Agent买方进入定价议程",
-                "url": (
-                    "https://d1tsbnft7iv51.cloudfront.net/agent/v1/articles/"
-                    "commerce-research-20260903-0927-212/paid"
-                ),
-                "sourceType": "本站 x402 付费深度分析",
-            }
-        ],
     },
 }
 
@@ -306,6 +275,144 @@ def rows(response: dict[str, Any]) -> list[dict[str, Any]]:
         {name: data_api_field(field) for name, field in zip(names, record)}
         for record in response.get("records", [])
     ]
+
+
+def load_source_profile(
+    crawler: dict[str, Any],
+    *,
+    mark_selected: bool = False,
+) -> dict[str, Any]:
+    slug = str(crawler["slug"])
+    base_profile = SOURCE_PROFILES.get(slug)
+    if not base_profile:
+        raise ValueError(f"No research profile configured for {slug}")
+    registered = rows(
+        execute_sql(
+            """
+            SELECT ds.id, ds.publisher, ds.name, ds.url, ds.source_type,
+                   ds.ingestion_method, ds.max_items, ds.respect_robots,
+                   ds.access_model, ds.config_json, ds.trust_tier,
+                   asa.priority, asa.last_selected_at, asa.selection_count
+            FROM agent_source_assignments asa
+            JOIN data_sources ds ON ds.id = asa.source_id
+            WHERE asa.agent_id = :agent_id
+              AND asa.enabled = TRUE
+              AND ds.status = 'active'
+            ORDER BY asa.last_selected_at NULLS FIRST,
+                     ds.trust_tier, asa.priority, ds.id
+            """,
+            {"agent_id": crawler["id"]},
+        )
+    )
+    if not registered:
+        raise ValueError(f"No active registered sources assigned to {slug}")
+
+    open_registered = [
+        item
+        for item in registered
+        if item["access_model"] != "x402" and item["ingestion_method"] != "x402"
+    ]
+    paid_registered = [
+        item
+        for item in registered
+        if item["access_model"] == "x402" or item["ingestion_method"] == "x402"
+    ]
+    eligible_open: list[dict[str, Any]] = []
+    deferred_by_cache_ttl = 0
+    selected_at_dt = datetime.now(timezone.utc)
+    for item in open_registered:
+        try:
+            config = json.loads(str(item.get("config_json") or "{}"))
+        except json.JSONDecodeError:
+            config = {}
+        policy = config.get("requestPolicy") if isinstance(config, dict) else {}
+        cache_ttl = int(
+            policy.get("cacheTtlSeconds", 0)
+            if isinstance(policy, dict)
+            else 0
+        )
+        last_selected = item.get("last_selected_at")
+        if cache_ttl > 0 and last_selected:
+            try:
+                last_selected_dt = datetime.fromisoformat(
+                    str(last_selected).replace("Z", "+00:00")
+                )
+                if (selected_at_dt - last_selected_dt).total_seconds() < cache_ttl:
+                    deferred_by_cache_ttl += 1
+                    continue
+            except ValueError:
+                pass
+        eligible_open.append(item)
+    selected_open = eligible_open[:MAX_OPEN_SOURCES_PER_RUN]
+    selected = selected_open + paid_registered
+    if mark_selected and selected_open:
+        selected_at = now()
+        for item in selected_open:
+            execute_sql(
+                """
+                UPDATE agent_source_assignments
+                SET last_selected_at = :selected_at,
+                    selection_count = selection_count + 1,
+                    updated_at = :selected_at
+                WHERE agent_id = :agent_id AND source_id = :source_id
+                """,
+                {
+                    "selected_at": selected_at,
+                    "agent_id": crawler["id"],
+                    "source_id": item["id"],
+                },
+            )
+
+    profile = dict(base_profile)
+    profile["sources"] = []
+    profile["paidSources"] = []
+    profile["sourceRegistry"] = {
+        "mode": "aurora",
+        "sourceIds": [item["id"] for item in selected],
+        "activeAssigned": len(registered),
+        "selectedOpen": len(selected_open),
+        "paidAssigned": len(paid_registered),
+        "deferredByCacheTtl": deferred_by_cache_ttl,
+        "maxOpenPerRun": MAX_OPEN_SOURCES_PER_RUN,
+        "loadedAt": now(),
+    }
+    for item in selected:
+        try:
+            source_config = json.loads(str(item.get("config_json") or "{}"))
+        except json.JSONDecodeError:
+            source_config = {}
+        if isinstance(source_config, dict):
+            request_policy = source_config.get("requestPolicy")
+            if isinstance(request_policy, dict):
+                source_config["requestPolicy"] = {
+                    **request_policy,
+                    "userAgent": str(
+                        request_policy.get("userAgent")
+                        or (
+                            "ApertureGEOResearchBot/2.0 "
+                            "(Aperture GEO; +{contactUrl})"
+                        )
+                    ).replace("{contactUrl}", CRAWLER_CONTACT_URL),
+                }
+        source = {
+            "sourceId": item["id"],
+            "publisher": item["publisher"],
+            "title": item["name"],
+            "url": item["url"],
+            "sourceType": item["source_type"],
+            "ingestionMethod": item["ingestion_method"],
+            "maxItems": int(item["max_items"]),
+            "respectRobots": bool(item["respect_robots"]),
+            "trustTier": int(item["trust_tier"]),
+            "config": source_config if isinstance(source_config, dict) else {},
+        }
+        if item["access_model"] == "x402" or item["ingestion_method"] == "x402":
+            profile["paidSources"].append(source)
+        else:
+            profile["sources"].append(source)
+    if not profile["sources"] and not profile["paidSources"]:
+        raise ValueError(f"No usable registered sources assigned to {slug}")
+    return profile
 
 
 def strip_markup(value: str) -> str:
@@ -553,6 +660,123 @@ def update_artifact(artifact: dict[str, Any]) -> None:
     )
 
 
+def _json_bytes(value: Any) -> int:
+    return len(
+        json.dumps(
+            value,
+            ensure_ascii=False,
+            separators=(",", ":"),
+            default=str,
+        ).encode("utf-8")
+    )
+
+
+def _compact_json_value(
+    value: Any,
+    *,
+    depth: int = 0,
+    string_limit: int = 2_000,
+    list_head: int = 2,
+    list_tail: int = 20,
+    dict_limit: int = 80,
+) -> Any:
+    if depth >= 7:
+        return str(value)[:string_limit]
+    if isinstance(value, dict):
+        compacted: dict[str, Any] = {}
+        for key, item in list(value.items())[:dict_limit]:
+            compacted[str(key)[:200]] = _compact_json_value(
+                item,
+                depth=depth + 1,
+                string_limit=string_limit,
+                list_head=list_head,
+                list_tail=list_tail,
+                dict_limit=dict_limit,
+            )
+        if len(value) > dict_limit:
+            compacted["_omittedKeyCount"] = len(value) - dict_limit
+        return compacted
+    if isinstance(value, (list, tuple)):
+        items = list(value)
+        if len(items) > list_head + list_tail:
+            items = items[:list_head] + items[-list_tail:]
+        return [
+            _compact_json_value(
+                item,
+                depth=depth + 1,
+                string_limit=string_limit,
+                list_head=list_head,
+                list_tail=list_tail,
+                dict_limit=dict_limit,
+            )
+            for item in items
+        ]
+    if isinstance(value, str):
+        return value[:string_limit]
+    if value is None or isinstance(value, (bool, int, float)):
+        return value
+    return str(value)[:string_limit]
+
+
+def compact_evidence_data(data: dict[str, Any]) -> dict[str, Any]:
+    original_bytes = _json_bytes(data)
+    if original_bytes <= EVIDENCE_DATA_MAX_BYTES:
+        return data
+
+    compacted = _compact_json_value(data)
+    if not isinstance(compacted, dict):
+        compacted = {"value": compacted}
+    observations = data.get("observations")
+    if isinstance(observations, list):
+        compacted["observationCount"] = data.get(
+            "observationCount", len(observations)
+        )
+        compacted["observations"] = _compact_json_value(
+            observations,
+            list_head=2,
+            list_tail=20,
+            string_limit=1_000,
+            dict_limit=40,
+        )
+        compacted["_observationSample"] = {
+            "total": len(observations),
+            "kept": len(compacted["observations"]),
+        }
+    compacted["_compacted"] = True
+    compacted["_originalBytes"] = original_bytes
+    if _json_bytes(compacted) <= EVIDENCE_DATA_MAX_BYTES:
+        return compacted
+
+    compacted = _compact_json_value(
+        data,
+        string_limit=500,
+        list_head=1,
+        list_tail=8,
+        dict_limit=40,
+    )
+    if not isinstance(compacted, dict):
+        compacted = {"value": compacted}
+    compacted["_compacted"] = True
+    compacted["_originalBytes"] = original_bytes
+    if isinstance(observations, list):
+        compacted["observationCount"] = data.get(
+            "observationCount", len(observations)
+        )
+    if _json_bytes(compacted) <= EVIDENCE_DATA_MAX_BYTES:
+        return compacted
+
+    return {
+        "_compacted": True,
+        "_originalBytes": original_bytes,
+        "_preview": json.dumps(
+            data,
+            ensure_ascii=False,
+            separators=(",", ":"),
+            default=str,
+        )[:4_000],
+    }
+
+
 def normalize_evidence(evidence: list[dict[str, Any]]) -> list[dict[str, Any]]:
     normalized: list[dict[str, Any]] = []
     prioritized = sorted(
@@ -576,7 +800,11 @@ def normalize_evidence(evidence: list[dict[str, Any]]) -> list[dict[str, Any]]:
                 "retrievedAt": str(item.get("retrievedAt") or now())[:100],
                 "sourceType": str(item.get("sourceType") or "官方来源")[:200],
                 "excerpt": str(item.get("excerpt") or "")[:12_000],
-                "data": item.get("data") if isinstance(item.get("data"), dict) else {},
+                "data": compact_evidence_data(
+                    item.get("data")
+                    if isinstance(item.get("data"), dict)
+                    else {}
+                ),
             }
         )
     return normalized
@@ -587,9 +815,7 @@ def collect_evidence(
     payload: dict[str, Any],
 ) -> tuple[dict[str, Any], list[dict[str, Any]], list[str], dict[str, Any]]:
     slug = str(crawler["slug"])
-    profile = SOURCE_PROFILES.get(slug)
-    if not profile:
-        raise ValueError(f"No source profile configured for {slug}")
+    profile = load_source_profile(crawler, mark_selected=True)
     errors: list[str] = []
     session_name = f"{slug}-{datetime.now(timezone.utc).strftime('%Y%m%d-%H%M%S')}"
 
@@ -632,6 +858,7 @@ def collect_evidence(
                 )
     if payment_traces:
         trace["payments"] = payment_traces
+    trace["sourceRegistry"] = profile["sourceRegistry"]
     return profile, normalize_evidence(evidence), errors, trace
 
 
@@ -753,6 +980,91 @@ def evidence_prompt_block(
     return block
 
 
+def canonical_source_url(value: str) -> str:
+    parsed = urlsplit(str(value or "").strip())
+    ignored_query_prefixes = ("utm_",)
+    ignored_query_keys = {"ref", "source", "campaign"}
+    query = [
+        (key, item)
+        for key, item in parse_qsl(parsed.query, keep_blank_values=True)
+        if key.lower() not in ignored_query_keys
+        and not key.lower().startswith(ignored_query_prefixes)
+    ]
+    path = parsed.path.rstrip("/") or "/"
+    return urlunsplit(
+        (
+            parsed.scheme.lower(),
+            parsed.netloc.lower(),
+            path,
+            urlencode(sorted(query)),
+            "",
+        )
+    )
+
+
+def article_update_candidate(
+    crawler_id: int,
+    evidence: list[dict[str, Any]],
+) -> dict[str, Any] | None:
+    latest = rows(
+        execute_sql(
+            """
+            SELECT r.id run_id, r.output_article_id, a.slug article_slug,
+                   a.status article_status, a.published_at
+            FROM research_runs r
+            JOIN articles a ON a.id = r.output_article_id
+            WHERE r.agent_id = :agent_id
+              AND r.status = 'completed'
+              AND r.output_article_id IS NOT NULL
+            ORDER BY r.completed_at DESC, r.id DESC
+            LIMIT 1
+            """,
+            {"agent_id": crawler_id},
+        )
+    )
+    if not latest:
+        return None
+    candidate = latest[0]
+    published_at = datetime.fromisoformat(
+        str(candidate["published_at"]).replace("Z", "+00:00")
+    )
+    if published_at.tzinfo is None:
+        published_at = published_at.replace(tzinfo=timezone.utc)
+    age_hours = (
+        datetime.now(timezone.utc) - published_at.astimezone(timezone.utc)
+    ).total_seconds() / 3600
+    if age_hours > ARTICLE_UPDATE_WINDOW_HOURS:
+        return None
+
+    previous_urls = {
+        canonical_source_url(item["url"])
+        for item in rows(
+            execute_sql(
+                """
+                SELECT url FROM research_evidence
+                WHERE run_id = :run_id
+                """,
+                {"run_id": candidate["run_id"]},
+            )
+        )
+        if item.get("url")
+    }
+    current_urls = {
+        canonical_source_url(str(item.get("url") or ""))
+        for item in evidence
+        if item.get("url")
+    }
+    union = previous_urls | current_urls
+    overlap = len(previous_urls & current_urls) / len(union) if union else 0.0
+    if overlap < ARTICLE_SOURCE_OVERLAP_THRESHOLD:
+        return None
+    return {
+        **candidate,
+        "sourceOverlap": round(overlap, 4),
+        "ageHours": round(age_hours, 2),
+    }
+
+
 def fallback_research(
     text: str,
     profile: dict[str, Any],
@@ -778,8 +1090,14 @@ def fallback_research(
         for index, item in enumerate(evidence, start=1)
     ]
     return {
-        "title": f"{profile['topic']}：证据驱动研判",
-        "dek": f"用{style['name']}的方法解释最新证据：变化为何发生、影响谁，以及什么信息会推翻当前判断。",
+        "title": HUMAN_TITLE_FALLBACKS.get(
+            str(profile.get("category") or ""),
+            f"{profile['topic']}：最新进展与关键影响",
+        ),
+        "dek": (
+            "从最新行业变化出发，解释背后的约束、受影响的参与者，"
+            "以及接下来最值得跟踪的信号。"
+        ),
         "summary": " ".join(paragraphs[:2])[:900],
         "authorityScore": min(94, 84 + len(evidence)),
         "keywords": [profile["category"], "行业研究", "官方数据", "GEO"],
@@ -841,6 +1159,146 @@ def fallback_research(
     }
 
 
+def human_facing_title(title: str, profile: dict[str, Any]) -> str:
+    cleaned = re.sub(r"\s+", " ", str(title or "")).strip()
+    cleaned = re.sub(r"^\s*(?:【[^】]+】|事实|分析判断|研究结论)[：:，,\s]*", "", cleaned)
+    cleaned = re.sub(r"\s*\[S\d+(?:[-–][S]?\d+)?\]\s*", "", cleaned)
+
+    if any(
+        cleaned.startswith(prefix)
+        for prefix in (
+            "给定材料",
+            "给定证据",
+            "给定摘录",
+            "现有材料",
+            "现有证据",
+            "从给定材料看",
+            "从给定证据看",
+        )
+    ) and ("：" in cleaned or ":" in cleaned):
+        cleaned = re.split(r"[：:]", cleaned, maxsplit=1)[1].strip()
+
+    cleaned = re.split(
+        (
+            r"[；;，,]\s*(?:但|而|不过|同时)?\s*"
+            r"(?:给定|现有)(?:材料|证据|摘录|公开信息)"
+        ),
+        cleaned,
+        maxsplit=1,
+    )[0].strip(" ：:；;，,")
+
+    if (
+        not cleaned
+        or len(cleaned) < 8
+        or any(term in cleaned for term in TITLE_AUDIT_LANGUAGE)
+    ):
+        cleaned = HUMAN_TITLE_FALLBACKS.get(
+            str(profile.get("category") or ""),
+            f"{profile.get('topic') or '行业变化'}：最新进展与关键影响",
+        )
+    if len(cleaned) > 54:
+        shorter = re.split(r"[；;。]", cleaned, maxsplit=1)[0].strip()
+        cleaned = shorter if 12 <= len(shorter) <= 54 else cleaned[:54].rstrip()
+    return cleaned
+
+
+def humanize_research_prose(value: Any) -> Any:
+    if not isinstance(value, str):
+        return value
+    text = value
+    replacements = (
+        ("【事实】", ""),
+        ("【来源陈述】", ""),
+        ("【分析判断】", ""),
+        ("【条件性判断】", ""),
+        ("【证据边界】", "需要注意的是，"),
+        ("【专业观点】", ""),
+        ("给定材料", "现有公开信息"),
+        ("给定证据", "现有公开信息"),
+        ("给定摘录", "现有公开摘要"),
+        ("本研究", "本文"),
+    )
+    for original, replacement in replacements:
+        text = text.replace(original, replacement)
+    text = re.sub(
+        (
+            r"^(?:事实|事实层面|分析判断|条件性判断|专业观点|"
+            r"来源陈述|证据边界|替代解释)[：:，,\s]+"
+        ),
+        "",
+        text.strip(),
+    )
+    text = re.sub(r"([。！？])\s*事实[：:]", r"\1", text)
+    text = re.sub(r"([。！？])\s*分析判断[：:]", r"\1", text)
+    return re.sub(r"，{2,}", "，", text).strip()
+
+
+def humanize_research_sections(sections: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    for section in sections:
+        for field in ("heading", "quote"):
+            if isinstance(section.get(field), str):
+                section[field] = humanize_research_prose(section[field])
+        for field in ("paragraphs", "bullets"):
+            values = section.get(field)
+            if isinstance(values, list):
+                section[field] = [
+                    humanize_research_prose(item) for item in values
+                ]
+        rows = section.get("rows")
+        if isinstance(rows, list):
+            section["rows"] = [
+                [
+                    humanize_research_prose(cell)
+                    for cell in row
+                ]
+                if isinstance(row, list)
+                else row
+                for row in rows
+            ]
+    return sections
+
+
+def needs_human_editorial_revision(output: dict[str, Any]) -> bool:
+    generic_headings = {
+        "核心观点",
+        "数据与证据",
+        "分析过程",
+        "分析过程：从事实到判断",
+        "专业观点与产业影响",
+        "专业观点与潜在影响",
+        "结论与未来观察",
+    }
+    sections = output.get("sections")
+    headings = [
+        str(section.get("heading") or "").strip()
+        for section in sections
+        if isinstance(section, dict)
+    ] if isinstance(sections, list) else []
+    if sum(heading in generic_headings for heading in headings) >= 2:
+        return True
+    public_text = " ".join(
+        [
+            str(output.get("title") or ""),
+            str(output.get("dek") or ""),
+            str(output.get("summary") or ""),
+            *[
+                str(paragraph)
+                for section in sections or []
+                if isinstance(section, dict)
+                for paragraph in section.get("paragraphs") or []
+            ],
+        ]
+    )
+    audit_markers = re.findall(
+        (
+            r"(?:^|[。！？])\s*(?:事实|分析判断|条件性判断|"
+            r"证据边界|来源陈述)[：:]"
+        ),
+        public_text,
+    )
+    return len(audit_markers) >= 2
+
+
 def normalize_research_output(
     output: dict[str, Any],
     profile: dict[str, Any],
@@ -852,6 +1310,11 @@ def normalize_research_output(
     for field in ("title", "dek", "summary"):
         if not str(normalized.get(field) or "").strip():
             normalized[field] = fallback[field]
+    normalized["title"] = human_facing_title(
+        str(normalized["title"]), profile
+    )
+    normalized["dek"] = humanize_research_prose(normalized["dek"])
+    normalized["summary"] = humanize_research_prose(normalized["summary"])
 
     analysis_process = normalized.get("analysisProcess")
     if not isinstance(analysis_process, list) or not analysis_process:
@@ -923,7 +1386,7 @@ def normalize_research_output(
             }
         )
 
-    normalized["sections"] = sections
+    normalized["sections"] = humanize_research_sections(sections)
     normalized["authorityScore"] = max(
         80, min(98, int(normalized.get("authorityScore") or fallback["authorityScore"]))
     )
@@ -963,7 +1426,16 @@ def generate_deep_research(
 7. 删除“赋能、引领、重塑、深刻变革、值得关注”等没有信息量的套话。
 8. 句子尽量简洁。术语第一次出现时顺手解释，不要用术语显示专业。
 9. 金融内容必须声明“不构成投资建议”。
-10. 输出严格 JSON，不要 Markdown 代码围栏。
+10. 标题必须直接说清主体、变化或影响，像专业媒体文章标题。标题不得出现
+“给定材料、给定证据、现有证据、证据不足、未展示、未提供、无法确认、仍待核验、
+本研究”等审计措辞，也不要把资料缺口当作标题主语。
+11. 正文首先服务人类读者。不要在段首反复使用“事实：、分析判断：、条件性判断：、
+证据边界：、来源陈述：”等标签；用自然的转折和限定语把事实、解释与不确定性连接起来。
+12. 不要使用“核心观点、数据与证据、分析过程、专业观点与产业影响、结论与未来观察”
+这组通用章节名。每个章节标题都要针对本篇具体问题。
+13. [S#] 引用和 JSON 结构负责 Agent 可读性；不要为了机器读取牺牲人类文章的叙事、
+节奏和可读性。
+14. 输出严格 JSON，不要 Markdown 代码围栏。
 
 JSON 数据结构（字段固定，文章结构和标题不固定）：
 {{
@@ -1182,7 +1654,14 @@ def revise_research_output(
 4. 保留 title、dek、summary、authorityScore、keywords、analysisProcess、sections 结构。
 5. 保留原稿的研究方法和自然文章结构，不要改回统一模板。
 6. 用普通读者能看懂的中文重写有问题的句子，避免论文腔、新闻稿和空泛趋势词。
-7. 输出严格 JSON，不要 Markdown。
+7. 审计意见只用于内部修订，不得把 unsupportedClaims、citationIssues 的措辞直接写入
+标题、导语或正文，不要让文章看起来像审计报告。
+8. 标题直接说明主体、变化或影响，不得出现“给定材料、给定证据、现有证据、证据不足、
+未展示、未提供、无法确认、仍待核验、本研究”等措辞。
+9. 不要在段首使用“事实：、分析判断：、条件性判断：、证据边界：、来源陈述：”标签。
+用“与此同时、这意味着、需要注意的是、如果……那么……”等自然语言表达边界。
+10. [S#] 和结构化字段负责 Agent 可读性，公开正文首先要像写给专业人类读者的文章。
+11. 输出严格 JSON，不要 Markdown。
 
 主题：{profile['topic']}
 
@@ -1243,11 +1722,12 @@ def reverify_recent_research(exclude_run_id: int) -> list[dict[str, Any]]:
             execute_sql(
                 """
                 SELECT publisher, title, url, published_at, retrieved_at,
-                       source_type, content_excerpt, data_json
+                       source_type, content_excerpt,
+                       {evidence_data_sql} AS data_json
                 FROM research_evidence
                 WHERE run_id = :run_id
                 ORDER BY id
-                """,
+                """.format(evidence_data_sql=EVIDENCE_DATA_SQL),
                 {"run_id": candidate["id"]},
             )
         )
@@ -1266,7 +1746,11 @@ def reverify_recent_research(exclude_run_id: int) -> list[dict[str, Any]]:
         ]
         if not evidence:
             continue
-        output = {
+        profile = {
+            "category": candidate["category_slug"],
+            "topic": candidate["topic"],
+        }
+        output = normalize_research_output({
             "title": candidate["title"],
             "dek": candidate["dek"],
             "summary": candidate["summary"],
@@ -1274,16 +1758,15 @@ def reverify_recent_research(exclude_run_id: int) -> list[dict[str, Any]]:
             "keywords": json.loads(candidate["keywords"] or "[]"),
             "analysisProcess": [],
             "sections": json.loads(candidate["body_json"] or "[]"),
-        }
+        }, profile, evidence)
         verification = verify_research_output(output, evidence)
         initial_verification = verification
-        profile = {
-            "category": candidate["category_slug"],
-            "topic": candidate["topic"],
-        }
         revision_usages: list[dict[str, Any]] = []
         for _ in range(2):
-            if verification["status"] == "verified":
+            if (
+                verification["status"] == "verified"
+                and not needs_human_editorial_revision(output)
+            ):
                 break
             revised_output, revision_usage = revise_research_output(
                 profile, output, evidence, verification
@@ -1408,6 +1891,7 @@ def persist_research_output(
             {"agent_id": crawler["id"], "evidence_hash": evidence_hash},
         )
     )
+    update_candidate = article_update_candidate(int(crawler["id"]), evidence)
     run_status = "running" if force_analysis or not previous else "skipped"
     run = rows(
         execute_sql(
@@ -1512,7 +1996,10 @@ def persist_research_output(
     initial_verification = verification
     revision_usages: list[dict[str, Any]] = []
     for _ in range(2):
-        if verification["status"] == "verified":
+        if (
+            verification["status"] == "verified"
+            and not needs_human_editorial_revision(output)
+        ):
             break
         revised_output, revision_usage = revise_research_output(
             profile, output, evidence, verification
@@ -1560,50 +2047,111 @@ def persist_research_output(
         if AUTO_PUBLISH_RESEARCH and verification["status"] == "verified"
         else "review"
     )
-    article = rows(
-        execute_sql(
-            """
-            INSERT INTO articles(
-                category_id, slug, title, dek, summary, author, author_role,
-                read_minutes, published_at, updated_at, status, featured,
-                hero_style, authority_score, citation_count, access_model,
-                agent_price, keywords, body_json
-            ) VALUES(
-                :category_id, :slug, :title, :dek, :summary, :author, :author_role,
-                :read_minutes, :published_at, :updated_at, :status, FALSE,
-                :hero_style, :authority_score, :citation_count, 'open', 0,
-                :keywords, :body_json
-            ) RETURNING id
-            """,
-            {
-                "category_id": category["id"],
-                "slug": article_slug,
-                "title": str(output.get("title") or profile["topic"])[:240],
-                "dek": str(output.get("dek") or profile["topic"])[:500],
-                "summary": str(output.get("summary") or "")[:3000],
-                "author": "Aperture 研究编辑部",
-                "author_role": f"{writing_style['byline']} · {crawler['name']}",
-                "read_minutes": max(8, min(20, len(json.dumps(sections, ensure_ascii=False)) // 900)),
-                "published_at": published_at,
-                "updated_at": published_at,
-                "status": article_status,
-                "hero_style": {
-                    "ai": "orb",
-                    "agent": "network",
-                    "cloud": "blocks",
-                    "commerce": "commerce",
-                    "finance": "market",
-                }.get(profile["category"], "evidence"),
-                "authority_score": max(
-                    80, min(98, int(output.get("authorityScore") or 88))
-                ),
-                "citation_count": len(evidence),
-                "keywords": json.dumps(output.get("keywords") or [], ensure_ascii=False),
-                "body_json": json.dumps(sections, ensure_ascii=False),
-            },
+    should_update_article = bool(
+        update_candidate
+        and (
+            article_status == "published"
+            or update_candidate["article_status"] != "published"
         )
-    )[0]
+    )
+    article_values = {
+        "category_id": category["id"],
+        "title": str(output.get("title") or profile["topic"])[:240],
+        "dek": str(output.get("dek") or profile["topic"])[:500],
+        "summary": str(output.get("summary") or "")[:3000],
+        "author": "Aperture 研究编辑部",
+        "author_role": f"{writing_style['byline']} · {crawler['name']}",
+        "read_minutes": max(
+            8,
+            min(
+                20,
+                len(json.dumps(sections, ensure_ascii=False)) // 900,
+            ),
+        ),
+        "updated_at": published_at,
+        "status": article_status,
+        "hero_style": {
+            "ai": "orb",
+            "agent": "network",
+            "cloud": "blocks",
+            "commerce": "commerce",
+            "finance": "market",
+        }.get(profile["category"], "evidence"),
+        "authority_score": max(
+            80, min(98, int(output.get("authorityScore") or 88))
+        ),
+        "citation_count": len(evidence),
+        "keywords": json.dumps(
+            output.get("keywords") or [], ensure_ascii=False
+        ),
+        "body_json": json.dumps(sections, ensure_ascii=False),
+    }
+    if should_update_article:
+        article_values["article_id"] = update_candidate["output_article_id"]
+        article = rows(
+            execute_sql(
+                """
+                UPDATE articles
+                SET category_id = :category_id, title = :title, dek = :dek,
+                    summary = :summary, author = :author,
+                    author_role = :author_role, read_minutes = :read_minutes,
+                    updated_at = :updated_at, status = :status,
+                    hero_style = :hero_style,
+                    authority_score = :authority_score,
+                    citation_count = :citation_count, keywords = :keywords,
+                    body_json = :body_json
+                WHERE id = :article_id
+                RETURNING id, slug
+                """,
+                article_values,
+            )
+        )[0]
+        execute_sql(
+            "DELETE FROM sources WHERE article_id = :article_id",
+            {"article_id": article["id"]},
+        )
+        article_action = "更新"
+        verification["deduplication"] = {
+            "action": "updated_existing_article",
+            "sourceOverlap": update_candidate["sourceOverlap"],
+            "articleAgeHours": update_candidate["ageHours"],
+        }
+    else:
+        article_values.update(
+            {
+                "slug": article_slug,
+                "published_at": published_at,
+            }
+        )
+        article = rows(
+            execute_sql(
+                """
+                INSERT INTO articles(
+                    category_id, slug, title, dek, summary, author, author_role,
+                    read_minutes, published_at, updated_at, status, featured,
+                    hero_style, authority_score, citation_count, access_model,
+                    agent_price, keywords, body_json
+                ) VALUES(
+                    :category_id, :slug, :title, :dek, :summary, :author,
+                    :author_role, :read_minutes, :published_at, :updated_at,
+                    :status, FALSE, :hero_style, :authority_score,
+                    :citation_count, 'open', 0, :keywords, :body_json
+                ) RETURNING id, slug
+                """,
+                article_values,
+            )
+        )[0]
+        article_action = "生成"
+        verification["deduplication"] = {
+            "action": "created_new_article",
+            "sourceOverlap": (
+                update_candidate["sourceOverlap"]
+                if update_candidate
+                else None
+            ),
+        }
     article_id = article["id"]
+    article_slug = article["slug"]
     for item in evidence:
         execute_sql(
             """
@@ -1646,7 +2194,8 @@ def persist_research_output(
         },
     )
     message = (
-        f"已生成并{'自动发布' if article_status == 'published' else '提交审核'}"
+        f"已{article_action}并"
+        f"{'自动发布' if article_status == 'published' else '提交审核'}"
         f"深度研究《{output.get('title', profile['topic'])}》；"
         f"{len(evidence)} 条证据，审计 {verification['status']} "
         f"({verification['score']})，{usage.get('totalTokens', 0)} tokens"
@@ -1769,9 +2318,34 @@ def run_scheduled_crawler(payload: dict[str, Any]) -> dict[str, Any]:
         )
         result["scheduledTime"] = payload.get("scheduledTime")
         if slug == "evidence-verifier" and result.get("researchRunId"):
-            result["crossVerification"] = reverify_recent_research(
-                int(result["researchRunId"])
-            )
+            try:
+                result["crossVerification"] = reverify_recent_research(
+                    int(result["researchRunId"])
+                )
+            except Exception as error:
+                cross_verification_error = (
+                    f"{type(error).__name__}: {str(error)[:1200]}"
+                )
+                result["crossVerification"] = {
+                    "status": "failed",
+                    "error": cross_verification_error,
+                }
+                execute_sql(
+                    """
+                    UPDATE crawler_jobs
+                    SET message = left(
+                        message || :cross_verification_message,
+                        2000
+                    )
+                    WHERE id = :job_id
+                    """,
+                    {
+                        "cross_verification_message": (
+                            "；历史交叉复核失败：" + cross_verification_error
+                        ),
+                        "job_id": job_id,
+                    },
+                )
         return result
     except Exception as error:
         execute_sql(
@@ -1858,9 +2432,44 @@ def invoke(payload: dict[str, Any]) -> dict[str, Any]:
             "browserSigning": True,
             "crawlerIndustries": ["AI", "云计算", "电商", "媒体", "金融"],
         }
+    if action == "source_registry":
+        crawler_slug = str(payload.get("crawlerSlug") or "").strip()
+        if not crawler_slug:
+            raise ValueError("crawlerSlug is required")
+        crawler_matches = rows(
+            execute_sql(
+                """
+                SELECT id, name, slug, kind, industries, status
+                FROM crawler_agents WHERE slug = :slug
+                """,
+                {"slug": crawler_slug},
+            )
+        )
+        if not crawler_matches:
+            raise ValueError(f"Crawler not found: {crawler_slug}")
+        profile = load_source_profile(crawler_matches[0])
+        return {
+            "status": "ok",
+            "crawler": crawler_slug,
+            "registry": profile["sourceRegistry"],
+            "sources": profile["sources"],
+            "paidSources": profile["paidSources"],
+            "timestamp": now(),
+        }
     if action == "x402_fetch":
         crawler_slug = str(payload.get("crawlerSlug") or "commerce-feed-miner")
-        profile = SOURCE_PROFILES.get(crawler_slug) or {}
+        crawler_matches = rows(
+            execute_sql(
+                """
+                SELECT id, name, slug, kind, industries, status
+                FROM crawler_agents WHERE slug = :slug
+                """,
+                {"slug": crawler_slug},
+            )
+        )
+        if not crawler_matches:
+            raise ValueError(f"Crawler not found: {crawler_slug}")
+        profile = load_source_profile(crawler_matches[0])
         paid_sources = profile.get("paidSources") or []
         if not paid_sources:
             raise ValueError(f"No paid source configured for {crawler_slug}")

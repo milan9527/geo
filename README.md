@@ -271,13 +271,16 @@ GET /agent/v1/articles/agent-runtime-control-plane
 - A/B 页面访问、402 挑战、支付转化率以及 7/30/90 天或自定义日期统计
 - 内容详情、批量发布/转审核/删除、权威度、引用次数和访问模式管理
 - 爬虫 Agent 启停、立即运行与批量调度
+- 数据源注册中心：来源增删改查、HTTPS 连通性测试、可信等级、采集方式和多 Agent 动态分配
 - 研究输出：原始来源、结构化数据、分析过程、专业观点、结论和未来观察指标
 - AgentCore 任务记录和运行配置
 
 ### 运行爬虫与查看输出
 
 1. 打开管理后台 `http://127.0.0.1:4174`，进入“爬虫 Agent”。
-2. 点击单个 Agent 的“立即运行”，或等待 EventBridge Scheduler 自动触发。
+2. 点击“定期时间”选择每 10/15/20/30 分钟、每 1/2/3/6/12 小时，或每天指定
+   UTC 时间；保存会同步更新 PostgreSQL 和 EventBridge Scheduler，且不会改变计划
+   当前的启用或禁用状态。也可以点击“立即运行”手动触发。
 3. 在“研究输出”查看完整研究链路：
    - 每条一手来源的发布者、标题、原始链接、发布日期、抓取时间和结构化数据；
    - 问题定义、数据对照、因果约束识别、产业映射等分析过程；
@@ -289,6 +292,27 @@ GET /agent/v1/articles/agent-runtime-control-plane
 
 “任务记录”用于查看运行状态、工具会话、证据数量和错误信息，不是研究正文入口。
 来源无变化时，任务会标记为 `skipped` 并关联上一版研究稿，避免重复消耗模型。
+
+### 数据源注册中心
+
+管理后台“数据源注册中心”是生产 Runtime 的唯一来源配置入口。现有官方 RSS、动态网页、
+FRED 时间序列和 x402 来源会在数据库初始化时迁移到 `data_sources`，并通过
+`agent_source_assignments` 分配给一个或多个 Agent。新增、暂停、删除或重新分配来源后，
+下一次任务直接从 Aurora 读取最新配置，无需修改 Runtime 代码或重新部署。
+
+内置目录包含 86 个来源：AI 18、Agent 9、云计算 11、电商与媒体 18、金融 30。其中
+75 个公开来源启用，Reuters、FT、Bloomberg、WSJ 等 11 个受授权、反爬或限流约束的来源
+保留为暂停状态。每个 Agent 每次最多选择 8 个公开来源，并按最久未选时间轮换；因此扩展
+来源池不会让单次任务无上限增长。x402 付费来源不占公开来源配额。
+
+每个来源记录分类、采集方式、可信等级、单次条数、robots 策略、访问模式和连通性结果。
+公开机构来源包括 SEC EDGAR 8-K、XBRL Feed/Frames、Federal Reserve、BLS、FDIC、
+FINRA、CFTC、CFPB、PCAOB、FTC、ECB、IMF 和 World Bank。SEC 请求使用可识别的
+`User-Agent`，限制为每秒 1 次，遇到 429/503 时遵守 `Retry-After` 并退避，且同一来源
+至少间隔 15 分钟再分配。后台可为每个来源配置 User-Agent、每秒请求数、最短重抓间隔和
+重试次数；Runtime 在生成代码外层强制执行这些规则，不能仅依赖模型提示。
+连通性测试只接受公开 HTTPS 443 地址，并拒绝解析到内网、环回或保留地址。x402 来源仍然
+只有在任务显式传入 `allowPayment=true` 时才会付款；注册或测试来源不会触发支付。
 
 研究生成不是抓取摘要拼接。Runtime 会先保存可追溯证据，再调用 GPT-5.6 Sol 执行事实与
 观点分离、跨来源对照、因果边界检查和产业影响推演。结构化时间序列会直接进入生成、
@@ -340,8 +364,12 @@ PYTHONPATH=. .venv/bin/python scripts/create_admin_user.py \
 | `GET` | `/api/admin/articles` | 内容管理 |
 | `GET` | `/api/admin/articles/{id}` | 管理端完整内容详情与来源 |
 | `PATCH` | `/api/admin/articles/batch` | 批量发布、转审核或确认删除 |
-| `GET` | `/api/admin/crawlers` | 爬虫 Agent |
+| `GET` | `/api/admin/crawlers` | 爬虫 Agent 与 EventBridge 定期时间 |
+| `PATCH` | `/api/admin/crawlers/{id}` | 设置启停状态或定期执行时间 |
 | `POST` | `/api/admin/crawlers/{id}/run` | 运行 Agent |
+| `GET` / `POST` | `/api/admin/data-sources` | 查询或注册数据源 |
+| `PATCH` / `DELETE` | `/api/admin/data-sources/{id}` | 修改、分配或删除数据源 |
+| `POST` | `/api/admin/data-sources/{id}/test` | 从 API 服务执行 HTTPS 连通性测试 |
 | `GET` | `/api/admin/research` | 深度研究输出列表 |
 | `GET` | `/api/admin/research/{id}` | 研究过程、正文与来源详情 |
 

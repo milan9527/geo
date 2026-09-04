@@ -19,6 +19,19 @@ export interface CrawlRequest {
   allowedDomains: string[];
   requiredFields: string[];
   sampleUrls: string[];
+  sources: Array<{
+    publisher: string;
+    url: string;
+    maxItems: number;
+    requestPolicy: {
+      userAgent?: string;
+      requestsPerSecond?: number;
+      cacheTtlSeconds?: number;
+      maxRetries?: number;
+      retryStatusCodes?: number[];
+      maxRetryAfterSeconds?: number;
+    };
+  }>;
   robotsPolicy: string;
 }
 
@@ -60,10 +73,17 @@ Crawler style: ${request.style}
 Allowed network domains: ${request.allowedDomains.join(", ")}
 Required output fields: ${request.requiredFields.join(", ")}
 Sample URLs: ${request.sampleUrls.join(", ")}
+Per-source request policies: ${JSON.stringify(request.sources)}
 Robots policy: ${request.robotsPolicy}
 
 Requirements:
 - Respect robots policy, rate limits, authentication boundaries, and terms.
+- Use urllib.request.urlopen for every network request. Runtime wraps this
+  function to enforce the registered User-Agent, per-host rate limit,
+  Retry-After handling, retry cap, and URL allowlist. Do not create a custom
+  opener or use another HTTP client.
+- Fetch each sample URL at most once unless the Runtime wrapper retries a
+  configured 429/503 response. Do not crawl links discovered in a response.
 - Do not attempt CAPTCHA bypass, credential discovery, or access-control bypass.
 - Use only Python standard-library modules available in the sandbox.
 - Fetch only the exact HTTPS sample URLs and allowed domains listed above.
@@ -158,6 +178,9 @@ export async function repairCrawler(
   const result = await thread.run(`
 The crawler failed in AgentCore Code Interpreter.
 Repair only the necessary code and preserve all safety constraints.
+Use only urllib.request.urlopen for network requests. Do not use requests,
+urllib3, http.client, build_opener, or a custom opener. Runtime wraps urlopen
+to enforce the exact URL allowlist, User-Agent, rate limits, and retries.
 
   Failure log:
 ${failureLog.slice(0, 12_000)}

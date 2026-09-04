@@ -99,6 +99,45 @@ CREATE TABLE IF NOT EXISTS crawler_agents (
     config_json TEXT NOT NULL DEFAULT '{}'
 );
 
+CREATE TABLE IF NOT EXISTS data_sources (
+    id BIGSERIAL PRIMARY KEY,
+    publisher TEXT NOT NULL,
+    name TEXT NOT NULL,
+    url TEXT NOT NULL UNIQUE,
+    category_slug TEXT NOT NULL REFERENCES categories(slug),
+    source_type TEXT NOT NULL,
+    ingestion_method TEXT NOT NULL
+        CHECK(ingestion_method IN ('feed', 'web', 'browser', 'api', 'timeseries', 'x402')),
+    status TEXT NOT NULL DEFAULT 'active'
+        CHECK(status IN ('active', 'paused', 'error')),
+    trust_tier INTEGER NOT NULL DEFAULT 1 CHECK(trust_tier BETWEEN 1 AND 4),
+    max_items INTEGER NOT NULL DEFAULT 4 CHECK(max_items BETWEEN 1 AND 50),
+    respect_robots BOOLEAN NOT NULL DEFAULT TRUE,
+    access_model TEXT NOT NULL DEFAULT 'open'
+        CHECK(access_model IN ('open', 'authenticated', 'x402')),
+    secret_arn TEXT NOT NULL DEFAULT '',
+    notes TEXT NOT NULL DEFAULT '',
+    config_json TEXT NOT NULL DEFAULT '{}',
+    last_tested_at TEXT,
+    last_test_status TEXT CHECK(last_test_status IN ('success', 'failed')),
+    last_test_message TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS agent_source_assignments (
+    id BIGSERIAL PRIMARY KEY,
+    agent_id BIGINT NOT NULL REFERENCES crawler_agents(id) ON DELETE CASCADE,
+    source_id BIGINT NOT NULL REFERENCES data_sources(id) ON DELETE CASCADE,
+    enabled BOOLEAN NOT NULL DEFAULT TRUE,
+    priority INTEGER NOT NULL DEFAULT 100,
+    last_selected_at TEXT,
+    selection_count INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    UNIQUE(agent_id, source_id)
+);
+
 CREATE TABLE IF NOT EXISTS crawler_jobs (
     id BIGSERIAL PRIMARY KEY,
     agent_id BIGINT NOT NULL REFERENCES crawler_agents(id),
@@ -168,6 +207,8 @@ ALTER TABLE crawler_jobs ADD COLUMN IF NOT EXISTS tool_trace_json TEXT NOT NULL 
 ALTER TABLE research_runs ADD COLUMN IF NOT EXISTS tool_trace_json TEXT NOT NULL DEFAULT '{}';
 ALTER TABLE research_runs ADD COLUMN IF NOT EXISTS verification_status TEXT NOT NULL DEFAULT 'pending';
 ALTER TABLE research_runs ADD COLUMN IF NOT EXISTS verification_json TEXT NOT NULL DEFAULT '{}';
+ALTER TABLE agent_source_assignments ADD COLUMN IF NOT EXISTS last_selected_at TEXT;
+ALTER TABLE agent_source_assignments ADD COLUMN IF NOT EXISTS selection_count INTEGER NOT NULL DEFAULT 0;
 
 CREATE TABLE IF NOT EXISTS analytics_daily (
     day TEXT PRIMARY KEY,
@@ -227,6 +268,10 @@ CREATE TABLE IF NOT EXISTS admin_sessions (
 CREATE INDEX IF NOT EXISTS idx_articles_category ON articles(category_id);
 CREATE INDEX IF NOT EXISTS idx_articles_status ON articles(status);
 CREATE INDEX IF NOT EXISTS idx_sources_article ON sources(article_id);
+CREATE INDEX IF NOT EXISTS idx_data_sources_status ON data_sources(status);
+CREATE INDEX IF NOT EXISTS idx_data_sources_category ON data_sources(category_slug);
+CREATE INDEX IF NOT EXISTS idx_agent_source_agent ON agent_source_assignments(agent_id);
+CREATE INDEX IF NOT EXISTS idx_agent_source_source ON agent_source_assignments(source_id);
 CREATE INDEX IF NOT EXISTS idx_events_occurred ON traffic_events(occurred_at);
 CREATE INDEX IF NOT EXISTS idx_research_runs_started ON research_runs(started_at);
 CREATE INDEX IF NOT EXISTS idx_research_evidence_run ON research_evidence(run_id);
@@ -838,6 +883,260 @@ AGENTS = [
     ("Commerce Feed Miner", "commerce-feed-miner", "Code Interpreter", ["电商"], "paused", "0 */3 * * *"),
 ]
 
+DATA_SOURCES = [
+    {
+        "publisher": "OpenAI",
+        "name": "OpenAI News RSS",
+        "url": "https://openai.com/news/rss.xml",
+        "category": "ai",
+        "source_type": "官方发布",
+        "method": "feed",
+        "agents": ["research-coder", "evidence-verifier"],
+    },
+    {
+        "publisher": "AWS Machine Learning Blog",
+        "name": "AWS Machine Learning Blog RSS",
+        "url": "https://aws.amazon.com/blogs/machine-learning/feed/",
+        "category": "ai",
+        "source_type": "官方技术博客",
+        "method": "feed",
+        "agents": ["research-coder"],
+    },
+    {
+        "publisher": "Stripe",
+        "name": "Stripe Blog",
+        "url": "https://stripe.com/blog",
+        "category": "commerce",
+        "source_type": "动态官方页面",
+        "method": "browser",
+        "max_items": 3,
+        "agents": ["render-scout"],
+    },
+    {
+        "publisher": "Shopify",
+        "name": "Shopify News",
+        "url": "https://www.shopify.com/news",
+        "category": "commerce",
+        "source_type": "官方新闻",
+        "method": "web",
+        "max_items": 3,
+        "agents": ["render-scout", "commerce-feed-miner"],
+    },
+    {
+        "publisher": "Federal Reserve Bank of St. Louis",
+        "name": "FRED NASDAQ Composite",
+        "url": "https://fred.stlouisfed.org/graph/fredgraph.csv?id=NASDAQCOM",
+        "category": "finance",
+        "source_type": "官方市场数据",
+        "method": "timeseries",
+        "agents": ["market-signal"],
+    },
+    {
+        "publisher": "Federal Reserve Bank of St. Louis",
+        "name": "FRED 10-Year Treasury",
+        "url": "https://fred.stlouisfed.org/graph/fredgraph.csv?id=DGS10",
+        "category": "finance",
+        "source_type": "官方利率数据",
+        "method": "timeseries",
+        "agents": ["market-signal"],
+    },
+    {
+        "publisher": "Federal Reserve Bank of St. Louis",
+        "name": "FRED Federal Funds Rate",
+        "url": "https://fred.stlouisfed.org/graph/fredgraph.csv?id=FEDFUNDS",
+        "category": "finance",
+        "source_type": "官方宏观数据",
+        "method": "timeseries",
+        "agents": ["market-signal"],
+    },
+    {
+        "publisher": "AWS",
+        "name": "AWS Bedrock AgentCore",
+        "url": "https://aws.amazon.com/bedrock/agentcore/",
+        "category": "agent",
+        "source_type": "官方产品资料",
+        "method": "web",
+        "agents": ["evidence-verifier"],
+    },
+    {
+        "publisher": "AWS What's New",
+        "name": "AWS What's New",
+        "url": "https://aws.amazon.com/new/",
+        "category": "cloud",
+        "source_type": "动态官方发布页面",
+        "method": "browser",
+        "max_items": 3,
+        "agents": ["cloud-release-watch"],
+    },
+    {
+        "publisher": "Google Cloud",
+        "name": "Google Cloud Release Notes",
+        "url": "https://cloud.google.com/release-notes",
+        "category": "cloud",
+        "source_type": "动态官方发布说明",
+        "method": "browser",
+        "max_items": 3,
+        "agents": ["cloud-release-watch"],
+    },
+    {
+        "publisher": "Stripe",
+        "name": "Stripe Blog RSS",
+        "url": "https://stripe.com/blog/feed.rss",
+        "category": "commerce",
+        "source_type": "官方发布",
+        "method": "feed",
+        "agents": ["commerce-feed-miner"],
+    },
+    {
+        "publisher": "Aperture GEO",
+        "name": "Agent买方进入定价议程",
+        "url": (
+            "https://d1tsbnft7iv51.cloudfront.net/agent/v1/articles/"
+            "commerce-research-20260903-0927-212/paid"
+        ),
+        "category": "commerce",
+        "source_type": "本站 x402 付费深度分析",
+        "method": "x402",
+        "access_model": "x402",
+        "agents": ["commerce-feed-miner"],
+    },
+]
+
+
+def catalog_source(
+    publisher: str,
+    name: str,
+    url: str,
+    category: str,
+    source_type: str,
+    method: str,
+    agents: list[str],
+    *,
+    status: str = "active",
+    access_model: str = "open",
+    trust_tier: int = 1,
+    max_items: int = 4,
+    notes: str = "",
+    config: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    return {
+        "publisher": publisher,
+        "name": name,
+        "url": url,
+        "category": category,
+        "source_type": source_type,
+        "method": method,
+        "agents": agents,
+        "status": status,
+        "access_model": access_model,
+        "trust_tier": trust_tier,
+        "max_items": max_items,
+        "notes": notes,
+        "config": config or {},
+    }
+
+
+SEC_REQUEST_POLICY = {
+    "requestPolicy": {
+        "userAgent": (
+            "ApertureGEOResearchBot/2.0 "
+            "(Aperture GEO; +{contactUrl})"
+        ),
+        "requestsPerSecond": 1,
+        "cacheTtlSeconds": 900,
+        "maxRetries": 2,
+        "retryStatusCodes": [429, 503],
+        "maxRetryAfterSeconds": 120,
+    }
+}
+
+
+DATA_SOURCES += [
+    # AI vendors, research institutions, and specialist media.
+    catalog_source("Anthropic", "Anthropic News", "https://www.anthropic.com/news", "ai", "厂商官方发布", "web", ["research-coder"]),
+    catalog_source("Google DeepMind", "Google DeepMind Blog", "https://deepmind.google/discover/blog/", "ai", "研究机构官方博客", "web", ["research-coder"]),
+    catalog_source("Meta AI", "Meta AI Blog", "https://ai.meta.com/blog/", "ai", "厂商官方技术博客", "web", ["research-coder"]),
+    catalog_source("Microsoft Research", "Microsoft Research RSS", "https://www.microsoft.com/en-us/research/feed/", "ai", "研究机构官方发布", "feed", ["research-coder"], status="paused", access_model="authenticated", notes="公开测试返回 403；取得稳定访问授权后启用"),
+    catalog_source("Hugging Face", "Hugging Face Blog RSS", "https://huggingface.co/blog/feed.xml", "ai", "开源生态官方发布", "feed", ["research-coder"]),
+    catalog_source("MIT News", "MIT Artificial Intelligence RSS", "https://news.mit.edu/rss/topic/artificial-intelligence2", "ai", "高校研究新闻", "feed", ["research-coder"]),
+    catalog_source("arXiv", "arXiv cs.AI Latest", "https://export.arxiv.org/api/query?search_query=cat%3Acs.AI&sortBy=submittedDate&sortOrder=descending&max_results=20", "ai", "学术预印本 API", "api", ["research-coder"], max_items=8),
+    catalog_source("MIT Technology Review", "MIT Technology Review AI", "https://www.technologyreview.com/topic/artificial-intelligence/", "ai", "专业科技媒体", "web", ["research-coder"], trust_tier=2),
+    catalog_source("TechCrunch", "TechCrunch Artificial Intelligence", "https://techcrunch.com/category/artificial-intelligence/", "ai", "科技行业媒体", "web", ["research-coder"], trust_tier=3),
+    catalog_source("CNBC", "CNBC Technology", "https://www.cnbc.com/technology/", "ai", "主流财经媒体", "web", ["research-coder"], trust_tier=2),
+    catalog_source("The Verge", "The Verge AI", "https://www.theverge.com/ai-artificial-intelligence", "ai", "科技行业媒体", "web", ["research-coder"], trust_tier=3),
+    catalog_source("VentureBeat", "VentureBeat AI RSS", "https://venturebeat.com/category/ai/feed/", "ai", "AI 行业媒体", "feed", ["research-coder"], status="paused", trust_tier=3, notes="公开测试触发 429 限流；配置授权或更低频率后启用"),
+    catalog_source("Reuters", "Reuters Artificial Intelligence", "https://www.reuters.com/technology/artificial-intelligence/", "ai", "国际通讯社", "web", ["research-coder"], status="paused", access_model="authenticated", trust_tier=2, notes="返回 401；需内容许可或 Web Bot Auth"),
+    catalog_source("Financial Times", "FT Artificial Intelligence", "https://www.ft.com/artificial-intelligence", "ai", "国际财经媒体", "browser", ["research-coder"], status="paused", access_model="authenticated", trust_tier=2, notes="付费媒体，仅在获得机构授权后启用"),
+    catalog_source("Bloomberg", "Bloomberg AI", "https://www.bloomberg.com/ai", "ai", "国际财经媒体", "browser", ["research-coder"], status="paused", access_model="authenticated", trust_tier=2, notes="付费媒体，仅在获得机构授权后启用"),
+    catalog_source("The Wall Street Journal", "WSJ Artificial Intelligence", "https://www.wsj.com/tech/ai", "ai", "国际财经媒体", "browser", ["research-coder"], status="paused", access_model="authenticated", trust_tier=2, notes="付费媒体，仅在获得机构授权后启用"),
+
+    # Agent engineering, standards, releases, and governance.
+    catalog_source("Anthropic", "Anthropic Engineering", "https://www.anthropic.com/engineering", "agent", "厂商官方工程博客", "web", ["evidence-verifier"]),
+    catalog_source("Model Context Protocol", "MCP Blog", "https://blog.modelcontextprotocol.io/", "agent", "开放协议官方博客", "web", ["evidence-verifier"]),
+    catalog_source("Model Context Protocol", "MCP Specification Releases", "https://api.github.com/repos/modelcontextprotocol/specification/releases?per_page=20", "agent", "开源项目发布 API", "api", ["evidence-verifier"]),
+    catalog_source("LangChain", "LangChain Releases", "https://api.github.com/repos/langchain-ai/langchain/releases?per_page=20", "agent", "开源框架发布 API", "api", ["evidence-verifier"]),
+    catalog_source("LlamaIndex", "LlamaIndex Releases", "https://api.github.com/repos/run-llama/llama_index/releases?per_page=20", "agent", "开源框架发布 API", "api", ["evidence-verifier"]),
+    catalog_source("CrewAI", "CrewAI Releases", "https://api.github.com/repos/crewAIInc/crewAI/releases?per_page=20", "agent", "开源框架发布 API", "api", ["evidence-verifier"]),
+    catalog_source("OWASP", "OWASP GenAI Security Project", "https://genai.owasp.org/", "agent", "安全行业标准", "web", ["evidence-verifier"]),
+    catalog_source("NIST", "NIST AI Risk Management Framework", "https://www.nist.gov/itl/ai-risk-management-framework", "agent", "政府治理框架", "web", ["evidence-verifier"]),
+
+    # Cloud platforms and infrastructure ecosystem.
+    catalog_source("Microsoft Azure", "Azure Updates", "https://azure.microsoft.com/en-us/updates/", "cloud", "云厂商官方发布", "browser", ["cloud-release-watch"]),
+    catalog_source("Microsoft Azure", "Azure Blog RSS", "https://azure.microsoft.com/en-us/blog/feed/", "cloud", "云厂商官方博客", "feed", ["cloud-release-watch"]),
+    catalog_source("Cloudflare", "Cloudflare Blog RSS", "https://blog.cloudflare.com/rss/", "cloud", "基础设施厂商官方博客", "feed", ["cloud-release-watch"]),
+    catalog_source("Oracle Cloud", "Oracle Cloud Infrastructure RSS", "https://blogs.oracle.com/cloud-infrastructure/rss", "cloud", "云厂商官方博客", "feed", ["cloud-release-watch"], status="paused", access_model="authenticated", notes="公开测试返回 403；取得稳定访问授权后启用"),
+    catalog_source("IBM", "IBM Cloud Blog", "https://www.ibm.com/blog/category/cloud/", "cloud", "云厂商官方博客", "browser", ["cloud-release-watch"]),
+    catalog_source("Snowflake", "Snowflake Engineering Blog", "https://www.snowflake.com/en/engineering-blog/", "cloud", "数据云厂商工程博客", "browser", ["cloud-release-watch"]),
+    catalog_source("AWS", "AWS Architecture Blog RSS", "https://aws.amazon.com/blogs/architecture/feed/", "cloud", "云架构官方博客", "feed", ["cloud-release-watch"]),
+    catalog_source("CNCF", "CNCF Blog RSS", "https://www.cncf.io/feed/", "cloud", "云原生基金会发布", "feed", ["cloud-release-watch"]),
+    catalog_source("Alibaba Cloud", "Alibaba Cloud Blog", "https://www.alibabacloud.com/blog", "cloud", "云厂商官方博客", "browser", ["cloud-release-watch"]),
+
+    # Commerce, payments, advertising, retail, and media.
+    catalog_source("Amazon", "Amazon Retail News", "https://www.aboutamazon.com/news/retail", "commerce", "零售平台官方新闻", "browser", ["render-scout"]),
+    catalog_source("Walmart", "Walmart Corporate News", "https://corporate.walmart.com/news", "commerce", "零售企业官方新闻", "browser", ["render-scout"]),
+    catalog_source("PayPal", "PayPal Newsroom", "https://newsroom.paypal-corp.com/", "commerce", "支付厂商官方新闻", "browser", ["render-scout"]),
+    catalog_source("Salesforce", "Salesforce News", "https://www.salesforce.com/news/stories/", "commerce", "企业软件官方新闻", "browser", ["render-scout"]),
+    catalog_source("Adobe", "Adobe News", "https://news.adobe.com/", "commerce", "数字媒体厂商官方新闻", "browser", ["render-scout"]),
+    catalog_source("IAB Tech Lab", "IAB Tech Lab Blog", "https://iabtechlab.com/blog/", "commerce", "广告技术行业组织", "browser", ["render-scout"], trust_tier=2),
+    catalog_source("Nieman Lab", "Nieman Lab RSS", "https://www.niemanlab.org/feed/", "commerce", "新闻媒体研究机构", "feed", ["commerce-feed-miner"], trust_tier=2),
+    catalog_source("eBay", "eBay Tech Blog", "https://innovation.ebayinc.com/tech/", "commerce", "电商平台技术博客", "browser", ["render-scout"]),
+    catalog_source("Amazon Science", "Amazon Science Blog", "https://www.amazon.science/blog", "commerce", "企业研究官方博客", "browser", ["render-scout"]),
+    catalog_source("Digiday", "Digiday RSS", "https://digiday.com/feed/", "commerce", "数字媒体行业媒体", "feed", ["commerce-feed-miner"], trust_tier=3),
+    catalog_source("Marketing Dive", "Marketing Dive RSS", "https://www.marketingdive.com/feeds/news/", "commerce", "营销行业媒体", "feed", ["commerce-feed-miner"], trust_tier=3),
+    catalog_source("Modern Retail", "Modern Retail RSS", "https://www.modernretail.co/feed/", "commerce", "零售行业媒体", "feed", ["commerce-feed-miner"], trust_tier=3),
+    catalog_source("Reuters", "Reuters Retail & Consumer", "https://www.reuters.com/business/retail-consumer/", "commerce", "国际通讯社", "browser", ["render-scout"], status="paused", access_model="authenticated", trust_tier=2, notes="返回 401；需内容许可或 Web Bot Auth"),
+
+    # Markets, regulators, and macroeconomic institutions.
+    catalog_source("Federal Reserve", "Federal Reserve Press Releases RSS", "https://www.federalreserve.gov/feeds/press_all.xml", "finance", "央行官方发布", "feed", ["market-signal"]),
+    catalog_source("U.S. SEC", "SEC Current 8-K Filings", "https://www.sec.gov/cgi-bin/browse-edgar?action=getcurrent&type=8-k&company=&dateb=&owner=include&start=0&count=40&output=atom", "finance", "监管申报 Atom", "feed", ["market-signal"], max_items=8, notes="遵守 SEC Fair Access：可识别 User-Agent、每秒 1 次、429/503 退避、15 分钟抓取间隔", config=SEC_REQUEST_POLICY),
+    catalog_source("U.S. SEC", "SEC Company Tickers JSON", "https://www.sec.gov/files/company_tickers.json", "finance", "上市公司 CIK 官方目录", "api", ["market-signal"], max_items=10, notes="用于把公司名称和股票代码解析为 SEC CIK", config=SEC_REQUEST_POLICY),
+    catalog_source("U.S. SEC", "SEC Latest US-GAAP Filings RSS", "https://www.sec.gov/Archives/edgar/usgaap.rss.xml", "finance", "XBRL 财务申报官方 Feed", "feed", ["market-signal"], max_items=8, notes="SEC EDGAR XBRL 最新申报", config=SEC_REQUEST_POLICY),
+    catalog_source("U.S. SEC", "SEC XBRL Assets Frame 2026 Q2", "https://data.sec.gov/api/xbrl/frames/us-gaap/Assets/USD/CY2026Q2I.json", "finance", "XBRL 跨公司资产数据", "api", ["market-signal"], max_items=10, notes="2026 Q2 美元资产 instant frame；季度更新 URL", config=SEC_REQUEST_POLICY),
+    catalog_source("Federal Reserve", "Federal Reserve Speeches RSS", "https://www.federalreserve.gov/feeds/speeches.xml", "finance", "央行官员讲话", "feed", ["market-signal"], max_items=6),
+    catalog_source("Federal Reserve", "Federal Reserve Testimony RSS", "https://www.federalreserve.gov/feeds/testimony.xml", "finance", "央行国会证词", "feed", ["market-signal"], max_items=6),
+    catalog_source("U.S. BLS", "BLS Latest Releases RSS", "https://www.bls.gov/feed/bls_latest.rss", "finance", "官方劳工与通胀数据发布", "feed", ["market-signal"], max_items=8),
+    catalog_source("FDIC", "FDIC Press Releases RSS", "https://public.govdelivery.com/topics/USFDIC_26/feed.rss", "finance", "银行监管官方发布", "feed", ["market-signal"], max_items=6, notes="FDIC 官网链接的 GovDelivery 官方 Feed"),
+    catalog_source("FDIC", "FDIC Active Institutions API", "https://banks.data.fdic.gov/api/institutions?filters=ACTIVE%3A1&fields=NAME%2CCERT%2CCITY%2CSTALP&limit=10&format=json", "finance", "受保存款机构官方数据", "api", ["market-signal"], max_items=10),
+    catalog_source("FINRA", "FINRA Regulatory Notices RSS", "https://www.finra.org/rules-guidance/notices/rss", "finance", "证券自律监管通知", "feed", ["market-signal"], max_items=8),
+    catalog_source("CFTC", "CFTC Press Releases", "https://www.cftc.gov/PressRoom/PressReleases/rss", "finance", "衍生品监管官方发布", "web", ["market-signal"], max_items=6),
+    catalog_source("CFPB", "CFPB Newsroom RSS", "https://www.consumerfinance.gov/about-us/newsroom/feed/", "finance", "消费者金融监管发布", "feed", ["market-signal"], max_items=6),
+    catalog_source("PCAOB", "PCAOB News Releases", "https://pcaobus.org/news-events/news-releases", "finance", "公众公司审计监管发布", "web", ["market-signal"], max_items=6),
+    catalog_source("European Central Bank", "ECB Supervisory Press Releases RSS", "https://www.bankingsupervision.europa.eu/rss/press.html", "finance", "银行监管官方发布", "feed", ["market-signal"], max_items=6),
+    catalog_source("European Central Bank", "ECB Policy Rate Data API", "https://data-api.ecb.europa.eu/service/data/FM/B.U2.EUR.4F.KR.MRR_FR.LEV?startPeriod=2024-01-01&format=csvdata", "finance", "央行政策利率官方数据", "timeseries", ["market-signal"], max_items=10),
+    catalog_source("International Monetary Fund", "IMF World Economic Outlook Data API", "https://www.imf.org/external/datamapper/api/v1/NGDP_RPCH/USA/CHN/EU", "finance", "官方宏观预测 API", "api", ["market-signal"], max_items=10),
+    catalog_source("World Bank", "World Bank Global GDP API", "https://api.worldbank.org/v2/country/WLD/indicator/NY.GDP.MKTP.CD?format=json&per_page=10&date=2015%3A2025", "finance", "全球宏观官方数据 API", "api", ["market-signal"], max_items=10),
+    catalog_source("U.S. FTC", "FTC Press Releases RSS", "https://www.ftc.gov/feeds/press-release.xml", "commerce", "竞争与消费者保护监管发布", "feed", ["commerce-feed-miner", "render-scout"], max_items=6),
+    catalog_source("U.S. Treasury", "Treasury Average Interest Rates API", "https://api.fiscaldata.treasury.gov/services/api/fiscal_service/v2/accounting/od/avg_interest_rates?sort=-record_date&page%5Bsize%5D=12", "finance", "财政部官方数据 API", "api", ["market-signal"]),
+    catalog_source("European Central Bank", "ECB Press Releases RSS", "https://www.ecb.europa.eu/rss/press.html", "finance", "央行官方发布", "feed", ["market-signal"]),
+    catalog_source("Bank for International Settlements", "BIS Press Releases RSS", "https://www.bis.org/doclist/all_pressrels.rss", "finance", "国际金融机构发布", "feed", ["market-signal"]),
+    catalog_source("International Monetary Fund", "IMF Blog RSS", "https://www.imf.org/en/Blogs/rss", "finance", "国际金融机构研究", "feed", ["market-signal"], status="paused", access_model="authenticated", notes="公开测试返回 403；取得稳定访问授权后启用"),
+    catalog_source("U.S. BEA", "BEA News Releases", "https://www.bea.gov/news", "finance", "官方经济数据发布", "web", ["market-signal"]),
+    catalog_source("U.S. BLS", "BLS News Releases", "https://www.bls.gov/bls/newsrels.htm", "finance", "官方劳工数据发布", "web", ["market-signal"], status="paused", access_model="authenticated", notes="公开测试返回 403；配置合规访问后启用"),
+    catalog_source("Federal Reserve Bank of New York", "New York Fed Markets", "https://www.newyorkfed.org/markets", "finance", "央行市场操作资料", "web", ["market-signal"]),
+    catalog_source("U.S. SEC", "SEC Press Releases RSS", "https://www.sec.gov/news/pressreleases.rss", "finance", "监管机构官方发布", "feed", ["market-signal"], config=SEC_REQUEST_POLICY),
+    catalog_source("Reuters", "Reuters Markets", "https://www.reuters.com/markets/", "finance", "国际通讯社", "web", ["market-signal"], status="paused", access_model="authenticated", trust_tier=2, notes="返回 401；需内容许可或 Web Bot Auth"),
+]
+
 
 def init_db() -> None:
     with connection() as conn:
@@ -851,6 +1150,8 @@ def init_db() -> None:
             _seed_categories(conn)
             _seed_articles(conn)
             _seed_agents(conn)
+        _seed_data_sources(conn)
+        _reconcile_managed_source_defaults(conn)
         settings_count = conn.execute(
             "SELECT COUNT(*) AS count FROM app_settings"
         ).fetchone()["count"]
@@ -936,6 +1237,105 @@ def _seed_agents(conn: Any) -> None:
                 json.dumps({"maxPages": 12000, "respectRobots": True}),
             ),
         )
+
+
+def _seed_data_sources(conn: Any) -> None:
+    agent_ids = {
+        row["slug"]: row["id"]
+        for row in conn.execute("SELECT id, slug FROM crawler_agents")
+    }
+    timestamp = utc_now()
+    for item in DATA_SOURCES:
+        inserted = conn.execute(
+            """
+            INSERT INTO data_sources(
+                publisher, name, url, category_slug, source_type,
+                ingestion_method, status, trust_tier, max_items,
+                respect_robots, access_model, secret_arn, notes, config_json,
+                created_at, updated_at
+            ) VALUES(
+                %s, %s, %s, %s, %s, %s, %s, %s, %s,
+                TRUE, %s, '', %s, %s, %s, %s
+            )
+            ON CONFLICT (url) DO NOTHING
+            RETURNING id
+            """,
+            (
+                item["publisher"],
+                item["name"],
+                item["url"],
+                item["category"],
+                item["source_type"],
+                item["method"],
+                item.get("status", "active"),
+                int(item.get("trust_tier", 1)),
+                int(item.get("max_items", 4)),
+                item.get("access_model", "open"),
+                item.get("notes", ""),
+                json.dumps(item.get("config") or {}, ensure_ascii=False),
+                timestamp,
+                timestamp,
+            ),
+        ).fetchone()
+        if not inserted:
+            continue
+        source_id = inserted["id"]
+        for priority, slug in enumerate(item["agents"], start=1):
+            agent_id = agent_ids.get(slug)
+            if not agent_id:
+                continue
+            conn.execute(
+                """
+                INSERT INTO agent_source_assignments(
+                    agent_id, source_id, enabled, priority, created_at, updated_at
+                ) VALUES(%s, %s, TRUE, %s, %s, %s)
+                ON CONFLICT (agent_id, source_id) DO NOTHING
+                """,
+                (agent_id, source_id, priority * 10, timestamp, timestamp),
+            )
+
+
+def _reconcile_managed_source_defaults(conn: Any) -> None:
+    """Upgrade known legacy SEC seeds without replacing admin-edited values."""
+    timestamp = utc_now()
+    policy_json = json.dumps(SEC_REQUEST_POLICY, ensure_ascii=False)
+    conn.execute(
+        """
+        UPDATE data_sources
+        SET status = 'active',
+            access_model = 'open',
+            max_items = 8,
+            notes = %s,
+            config_json = %s,
+            updated_at = %s
+        WHERE url = %s
+          AND status = 'paused'
+          AND access_model = 'authenticated'
+          AND notes = %s
+          AND config_json = '{}'
+        """,
+        (
+            "遵守 SEC Fair Access：可识别 User-Agent、每秒 1 次、"
+            "429/503 退避、15 分钟抓取间隔",
+            policy_json,
+            timestamp,
+            (
+                "https://www.sec.gov/cgi-bin/browse-edgar?action=getcurrent"
+                "&type=8-k&company=&dateb=&owner=include&start=0&count=40"
+                "&output=atom"
+            ),
+            "SEC 要求可识别联系信息和限速策略；完成专用 User-Agent 后启用",
+        ),
+    )
+    conn.execute(
+        """
+        UPDATE data_sources
+        SET config_json = %s, updated_at = %s
+        WHERE url = 'https://www.sec.gov/news/pressreleases.rss'
+          AND config_json = '{}'
+        """,
+        (policy_json, timestamp),
+    )
 
 
 def _seed_settings(conn: Any) -> None:

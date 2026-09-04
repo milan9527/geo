@@ -110,6 +110,19 @@ def build_codex_request(profile: dict[str, Any]) -> dict[str, Any]:
             "data",
         ],
         "sampleUrls": [str(source["url"]) for source in sources],
+        "sources": [
+            {
+                "publisher": str(source["publisher"]),
+                "url": str(source["url"]),
+                "maxItems": int(source.get("maxItems") or 4),
+                "requestPolicy": (
+                    source.get("config", {}).get("requestPolicy", {})
+                    if isinstance(source.get("config"), dict)
+                    else {}
+                ),
+            }
+            for source in sources
+        ],
         "robotsPolicy": (
             "Public official publisher endpoints only. One request per URL, "
             "no authentication bypass, no CAPTCHA bypass, 2.5 MB maximum per response."
@@ -125,6 +138,8 @@ def validate_generated_code(source_code: str, profile: dict[str, Any]) -> None:
         r"\bsocket\b": "raw socket",
         r"\bos\.system\b": "shell execution",
         r"\b(eval|exec)\s*\(": "dynamic code execution",
+        r"\bbuild_opener\b|\bOpenerDirector\b": "custom URL opener",
+        r"\burlretrieve\b": "unmanaged URL retrieval",
         r"169\.254\.169\.254": "cloud metadata",
         r"/proc/|/sys/|/etc/": "host filesystem",
     }
@@ -136,12 +151,54 @@ def validate_generated_code(source_code: str, profile: dict[str, Any]) -> None:
         urlsplit(str(source["url"])).hostname
         for source in profile.get("sources") or []
     }
+    for source in profile.get("sources") or []:
+        config = source.get("config")
+        policy = (
+            config.get("requestPolicy")
+            if isinstance(config, dict)
+            else {}
+        )
+        user_agent = (
+            str(policy.get("userAgent") or "")
+            if isinstance(policy, dict)
+            else ""
+        )
+        for contact_url in re.findall(r"https://[^\s\"'<>;)]+", user_agent):
+            contact_hostname = urlsplit(contact_url.rstrip(".,]})")).hostname
+            if contact_hostname:
+                allowed.add(contact_hostname)
     try:
         tree = ast.parse(source_code)
     except SyntaxError as error:
         raise CrawlerToolError(
             f"Generated crawler is not valid Python: {error.msg}"
         ) from error
+
+    unmanaged_http_modules = {
+        "aiohttp",
+        "ftplib",
+        "http.client",
+        "requests",
+        "urllib3",
+    }
+    imported_http_modules: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            imported_http_modules.update(
+                alias.name
+                for alias in node.names
+                if alias.name in unmanaged_http_modules
+            )
+        elif (
+            isinstance(node, ast.ImportFrom)
+            and node.module in unmanaged_http_modules
+        ):
+            imported_http_modules.add(str(node.module))
+    if imported_http_modules:
+        raise CrawlerToolError(
+            "Generated crawler imports unmanaged HTTP client(s): "
+            + ", ".join(sorted(imported_http_modules))
+        )
 
     class UrlLiteralVisitor(ast.NodeVisitor):
         def __init__(self) -> None:
@@ -158,18 +215,43 @@ def validate_generated_code(source_code: str, profile: dict[str, Any]) -> None:
             self.generic_visit(node)
             self.function_stack.pop()
 
-        def visit_Constant(self, node: ast.Constant) -> None:
-            if not isinstance(node.value, str):
+        def visit_Call(self, node: ast.Call) -> None:
+            function_name = ""
+            if isinstance(node.func, ast.Name):
+                function_name = node.func.id
+            elif isinstance(node.func, ast.Attribute):
+                function_name = node.func.attr
+            if function_name not in {"urlopen", "Request"} or not node.args:
+                self.generic_visit(node)
+                return
+            target = node.args[0]
+            if not isinstance(target, ast.Constant) or not isinstance(target.value, str):
+                self.generic_visit(node)
                 return
             in_test = any(
                 name.startswith("test_")
+                or name.endswith("_test")
+                or name.endswith("_tests")
                 or name in {"self_test", "run_tests"}
                 for name in self.function_stack
             )
-            for url in re.findall(r"https://[^\s\"'<>]+", node.value):
+            for url in re.findall(r"https://[^\s\"'<>]+", target.value):
                 hostname = urlsplit(url.rstrip(".,;)]}")).hostname
-                if hostname and hostname not in allowed and not in_test:
+                reserved_test_domain = bool(
+                    hostname
+                    and (
+                        hostname == "example"
+                        or hostname.endswith(".example")
+                    )
+                )
+                if (
+                    hostname
+                    and hostname not in allowed
+                    and not in_test
+                    and not reserved_test_domain
+                ):
                     self.unapproved.add(hostname)
+            self.generic_visit(node)
 
     visitor = UrlLiteralVisitor()
     visitor.visit(tree)
@@ -231,10 +313,91 @@ def _code_interpreter_output(response: dict[str, Any]) -> tuple[str, dict[str, A
     return output, trace
 
 
+def request_policy_bootstrap(profile: dict[str, Any]) -> str:
+    """Inject an urllib policy layer before the generated crawler imports it."""
+    policies: dict[str, dict[str, Any]] = {}
+    for source in profile.get("sources") or []:
+        config = source.get("config")
+        raw_policy = (
+            config.get("requestPolicy")
+            if isinstance(config, dict)
+            else {}
+        )
+        policy = dict(raw_policy) if isinstance(raw_policy, dict) else {}
+        policy.setdefault(
+            "userAgent",
+            "ApertureGEOResearchBot/2.0 "
+            "(+https://d1tsbnft7iv51.cloudfront.net/)",
+        )
+        policy.setdefault("requestsPerSecond", 2)
+        policy.setdefault("maxRetries", 1)
+        policy.setdefault("retryStatusCodes", [429, 503])
+        policy.setdefault("maxRetryAfterSeconds", 60)
+        policies[str(source["url"])] = policy
+    encoded = repr(
+        json.dumps(policies, ensure_ascii=False, separators=(",", ":"))
+    )
+    return f"""
+import json as _ag_json
+import threading as _ag_threading
+import time as _ag_time
+import urllib.error as _ag_urlerror
+import urllib.parse as _ag_urlparse
+import urllib.request as _ag_urlrequest
+
+_ag_policies = _ag_json.loads({encoded})
+_ag_original_urlopen = _ag_urlrequest.urlopen
+_ag_policy_lock = _ag_threading.Lock()
+_ag_last_request = {{}}
+
+def _ag_policy_for(url):
+    return _ag_policies.get(url, {{}})
+
+def _ag_wait_for_rate_limit(hostname, requests_per_second):
+    interval = 1.0 / max(0.1, min(float(requests_per_second), 10.0))
+    with _ag_policy_lock:
+        elapsed = _ag_time.monotonic() - _ag_last_request.get(hostname, 0.0)
+        if elapsed < interval:
+            _ag_time.sleep(interval - elapsed)
+        _ag_last_request[hostname] = _ag_time.monotonic()
+
+def _ag_policy_urlopen(target, *args, **kwargs):
+    if isinstance(target, _ag_urlrequest.Request):
+        request = target
+    else:
+        request = _ag_urlrequest.Request(target)
+    url = request.full_url
+    hostname = (_ag_urlparse.urlsplit(url).hostname or "").lower()
+    policy = _ag_policy_for(url)
+    if not policy:
+        raise ValueError("Network URL is not present in the source registry")
+    request.remove_header("User-agent")
+    request.add_unredirected_header("User-Agent", str(policy["userAgent"]))
+    retries = max(0, min(int(policy.get("maxRetries", 1)), 5))
+    retry_statuses = {{int(value) for value in policy.get("retryStatusCodes", [429, 503])}}
+    max_retry_after = max(1, min(int(policy.get("maxRetryAfterSeconds", 60)), 900))
+    for attempt in range(retries + 1):
+        _ag_wait_for_rate_limit(hostname, policy.get("requestsPerSecond", 2))
+        try:
+            return _ag_original_urlopen(request, *args, **kwargs)
+        except _ag_urlerror.HTTPError as error:
+            if error.code not in retry_statuses or attempt >= retries:
+                raise
+            retry_after = str(error.headers.get("Retry-After", "")).strip()
+            delay = int(retry_after) if retry_after.isdigit() else 2 ** attempt
+            error.close()
+            _ag_time.sleep(min(delay, max_retry_after))
+    raise RuntimeError("Request retry loop exhausted")
+
+_ag_urlrequest.urlopen = _ag_policy_urlopen
+"""
+
+
 def execute_code_interpreter(
     source_code: str,
     *,
     session_name: str,
+    profile: dict[str, Any],
 ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
     if not CODE_INTERPRETER_ID:
         raise CrawlerToolError("AGENTCORE_CODE_INTERPRETER_ID is not configured")
@@ -248,6 +411,7 @@ def execute_code_interpreter(
         executable_source = (
             "import sys\n"
             "sys.argv = ['agentcore_crawler.py']\n"
+            + request_policy_bootstrap(profile)
             + source_code
         )
         response = agentcore.invoke_code_interpreter(
@@ -293,6 +457,7 @@ def execute_code_interpreter(
                 "provider": "AgentCore Code Interpreter",
                 "sessionId": session_id,
                 "documents": len(evidence),
+                "requestPoliciesEnforced": len(profile.get("sources") or []),
             }
         )
         return evidence, trace
@@ -310,27 +475,41 @@ def run_generated_crawler(
     session_name: str,
 ) -> tuple[list[dict[str, Any]], dict[str, Any], dict[str, Any]]:
     source_code = str(artifact["sourceCode"])
-    validate_generated_code(source_code, profile)
     try:
+        validate_generated_code(source_code, profile)
         evidence, trace = execute_code_interpreter(
             source_code,
             session_name=session_name,
+            profile=profile,
         )
         return evidence, trace, artifact
     except Exception as first_error:
-        repaired = codex_request(
-            "repair",
-            thread_id=str(artifact["threadId"]),
-            failure_log=str(first_error),
-        )
-        validate_generated_code(str(repaired["sourceCode"]), profile)
+        try:
+            recovered = codex_request(
+                "repair",
+                thread_id=str(artifact["threadId"]),
+                failure_log=str(first_error),
+            )
+            recovery_mode = "thread_repair"
+        except Exception as repair_error:
+            recovered = codex_request(
+                "generate",
+                request=build_codex_request(profile),
+            )
+            recovery_mode = "regenerated_after_stale_thread"
+            stale_thread_error = str(repair_error)[:1000]
+        validate_generated_code(str(recovered["sourceCode"]), profile)
         evidence, trace = execute_code_interpreter(
-            str(repaired["sourceCode"]),
-            session_name=f"{session_name}-repair",
+            str(recovered["sourceCode"]),
+            session_name=f"{session_name}-recovery",
+            profile=profile,
         )
-        trace["repairApplied"] = True
+        trace["repairApplied"] = recovery_mode == "thread_repair"
+        trace["recoveryMode"] = recovery_mode
         trace["firstFailure"] = str(first_error)[:1000]
-        return evidence, trace, repaired
+        if recovery_mode == "regenerated_after_stale_thread":
+            trace["staleThreadFailure"] = stale_thread_error
+        return evidence, trace, recovered
 
 
 def run_browser_crawler(

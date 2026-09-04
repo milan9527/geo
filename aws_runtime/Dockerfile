@@ -4,7 +4,8 @@ WORKDIR /build
 COPY agent_runtime/package.json agent_runtime/package-lock.json ./
 RUN npm ci
 COPY agent_runtime/tsconfig.json agent_runtime/codex_crawler.ts agent_runtime/codex_cli.ts agent_runtime/browser_cli.ts ./
-RUN npm run build && npm prune --omit=dev
+RUN npm run build \
+    && npm prune --omit=dev --no-audit --no-fund --ignore-scripts
 
 FROM public.ecr.aws/docker/library/python:3.13-alpine@sha256:7415fbc3c9e4979cc717d92377ab2bc7b2b4a2af1ac03cc52b5f3f88efedaf3a
 

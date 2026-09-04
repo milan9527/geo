@@ -71,6 +71,7 @@
           <button class="nav-item" data-view="content"><svg><use href="#i-content"></use></svg><span>内容管理</span><b id="contentCount">—</b></button>
           <button class="nav-item" data-view="research"><svg><use href="#i-citation"></use></svg><span>研究输出</span><b id="researchCount">—</b></button>
           <button class="nav-item" data-view="crawlers"><svg><use href="#i-agent"></use></svg><span>爬虫 Agent</span><i></i></button>
+          <button class="nav-item" data-view="sources"><svg><use href="#i-trend"></use></svg><span>数据源注册中心</span><b id="sourceRegistryCount">—</b></button>
           <button class="nav-item" data-view="jobs"><svg><use href="#i-jobs"></use></svg><span>任务记录</span></button>
           <p class="nav-space">系统</p>
           <button class="nav-item" data-view="settings"><svg><use href="#i-settings"></use></svg><span>数据与设置</span></button>
@@ -141,6 +142,118 @@
         <div class="content-detail-body" id="contentDetailBody"></div>
       </div>
     </div>
-    <script src="/app.js?v=20260903-11"></script>
+
+    <div class="modal-backdrop" id="crawlerScheduleModal" aria-hidden="true">
+      <div class="modal schedule-modal">
+        <div class="modal-header">
+          <div><span>EVENTBRIDGE SCHEDULER</span><h2>设置 <b id="crawlerScheduleName">Agent</b> 定期时间</h2></div>
+          <button type="button" id="closeCrawlerScheduleModal">×</button>
+        </div>
+        <form id="crawlerScheduleForm">
+          <input type="hidden" id="crawlerScheduleId" />
+          <label>
+            执行频率
+            <select id="crawlerSchedulePreset" required>
+              <option value="*/10 * * * *">每 10 分钟</option>
+              <option value="*/15 * * * *">每 15 分钟</option>
+              <option value="*/20 * * * *">每 20 分钟</option>
+              <option value="*/30 * * * *">每 30 分钟</option>
+              <option value="0 * * * *">每小时</option>
+              <option value="0 */2 * * *">每 2 小时</option>
+              <option value="0 */3 * * *">每 3 小时</option>
+              <option value="0 */6 * * *">每 6 小时</option>
+              <option value="0 */12 * * *">每 12 小时</option>
+              <option value="daily">每天固定时间</option>
+            </select>
+          </label>
+          <label id="crawlerDailyTimeField" hidden>
+            每日执行时间（UTC）
+            <input type="time" id="crawlerDailyTime" value="00:00" />
+          </label>
+          <p class="schedule-note">修改会立即同步到 PostgreSQL 和 EventBridge Scheduler。只修改时间不会改变计划当前的启用或禁用状态。</p>
+          <div class="modal-actions">
+            <button type="button" class="ghost-button" id="cancelCrawlerScheduleModal">取消</button>
+            <button type="submit" class="primary-button">保存定期时间</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <div class="modal-backdrop" id="dataSourceModal" aria-hidden="true">
+      <div class="modal source-modal">
+        <div class="modal-header">
+          <div><span>SOURCE REGISTRY</span><h2 id="dataSourceModalTitle">新增数据源</h2></div>
+          <button type="button" id="closeDataSourceModal">×</button>
+        </div>
+        <form id="dataSourceForm">
+          <input type="hidden" name="sourceId" />
+          <div class="form-grid">
+            <label>发布机构<input name="publisher" required maxlength="200" placeholder="例如 Anthropic" /></label>
+            <label>来源名称<input name="name" required maxlength="300" placeholder="例如 Anthropic News" /></label>
+          </div>
+          <label>HTTPS 地址<input name="url" type="url" required placeholder="https://..." /></label>
+          <div class="form-grid">
+            <label>内容分类<select name="categorySlug" id="dataSourceCategory" required></select></label>
+            <label>来源类型<input name="sourceType" required maxlength="200" placeholder="官方发布、监管数据、学术论文…" /></label>
+          </div>
+          <div class="form-grid source-form-three">
+            <label>采集方式
+              <select name="ingestionMethod" required>
+                <option value="feed">RSS / Atom</option>
+                <option value="web">普通网页</option>
+                <option value="browser">Browser 渲染</option>
+                <option value="api">API</option>
+                <option value="timeseries">时间序列</option>
+                <option value="x402">x402 付费</option>
+              </select>
+            </label>
+            <label>访问模式
+              <select name="accessModel" required>
+                <option value="open">公开</option>
+                <option value="authenticated">需认证</option>
+                <option value="x402">x402</option>
+              </select>
+            </label>
+            <label>状态
+              <select name="status" required>
+                <option value="active">启用</option>
+                <option value="paused">暂停</option>
+                <option value="error">异常</option>
+              </select>
+            </label>
+          </div>
+          <div class="form-grid">
+            <label>可信等级
+              <select name="trustTier" required>
+                <option value="1">T1 · 一手权威来源</option>
+                <option value="2">T2 · 专业独立来源</option>
+                <option value="3">T3 · 主流媒体与行业分析</option>
+                <option value="4">T4 · 线索来源</option>
+              </select>
+            </label>
+            <label>单次最多条数<input name="maxItems" type="number" min="1" max="50" value="4" required /></label>
+          </div>
+          <div class="form-grid source-form-three">
+            <label>每秒请求上限<input name="requestsPerSecond" type="number" min="0.1" max="10" step="0.1" value="2" required /></label>
+            <label>最短重抓间隔（秒）<input name="cacheTtlSeconds" type="number" min="0" max="604800" step="1" value="0" required /></label>
+            <label>限流重试次数<input name="maxRetries" type="number" min="0" max="5" step="1" value="1" required /></label>
+          </div>
+          <label>请求 User-Agent（可选）
+            <input name="requestUserAgent" maxlength="500" placeholder="留空使用 Aperture GEO 默认身份；支持 {contactUrl}" />
+          </label>
+          <fieldset class="source-agent-fieldset">
+            <legend>动态分配给 Agent</legend>
+            <div id="dataSourceAgents"></div>
+          </fieldset>
+          <label class="source-checkbox"><input name="respectRobots" type="checkbox" checked />遵守 robots.txt 与来源访问政策</label>
+          <label>备注<textarea name="notes" rows="2" maxlength="2000" placeholder="许可、更新频率或解析规则说明"></textarea></label>
+          <div class="modal-actions">
+            <button type="button" class="ghost-button" id="cancelDataSourceModal">取消</button>
+            <button type="submit" class="primary-button">保存并立即生效</button>
+          </div>
+        </form>
+      </div>
+    </div>
+    <script src="/app.js?v=20260904-14"></script>
   </body>
 </html>

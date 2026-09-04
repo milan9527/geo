@@ -21,6 +21,8 @@ ADMIN_USERNAME = os.environ.get("GEO_ADMIN_USERNAME", "admin")
 ADMIN_PASSWORD = os.environ.get("GEO_ADMIN_PASSWORD", "")
 SESSION_COOKIE = ""
 TEST_SLUG = f"postgres-smoke-{int(time.time())}"
+TEST_SOURCE_NAME = f"Registry smoke source {int(time.time())}"
+TEST_SOURCE_URL = f"https://www.iana.org/domains/reserved?geo-smoke={int(time.time())}"
 
 
 def request(
@@ -94,6 +96,9 @@ def cleanup() -> None:
             ('%"smokeTest": true%',),
         )
         conn.execute("DELETE FROM articles WHERE slug LIKE 'postgres-smoke-%%'")
+        conn.execute(
+            "DELETE FROM data_sources WHERE name LIKE 'Registry smoke source %'"
+        )
 
 
 def main() -> None:
@@ -101,7 +106,9 @@ def main() -> None:
     created_article_id = None
     original_setting = None
     original_crawler_status = None
+    original_crawler_schedule = None
     tested_crawler_id = None
+    created_source_id = None
     created_job_ids: list[int] = []
     try:
         status, health = request(PUBLIC_PORT, "GET", "/api/health")
@@ -247,8 +254,96 @@ def main() -> None:
         status, crawlers = request(ADMIN_PORT, "GET", "/api/admin/crawlers", admin=True)
         check(status == 200 and crawlers, "Crawler Agent listing")
         crawler = crawlers[-1]
+        status, data_sources = request(
+            ADMIN_PORT, "GET", "/api/admin/data-sources", admin=True
+        )
+        check(
+            status == 200 and data_sources and data_sources[0]["assignments"],
+            "Data source registry listing and Agent assignments",
+        )
+        status, created_source = request(
+            ADMIN_PORT,
+            "POST",
+            "/api/admin/data-sources",
+            {
+                "publisher": "IANA",
+                "name": TEST_SOURCE_NAME,
+                "url": TEST_SOURCE_URL,
+                "categorySlug": "ai",
+                "sourceType": "Smoke test",
+                "ingestionMethod": "web",
+                "trustTier": 2,
+                "maxItems": 2,
+                "respectRobots": True,
+                "accessModel": "open",
+                "agentIds": [crawler["id"]],
+            },
+            admin=True,
+        )
+        check(
+            status == 201 and created_source["sourceId"],
+            "Register and assign data source",
+        )
+        created_source_id = created_source["sourceId"]
+        status, source_test = request(
+            ADMIN_PORT,
+            "POST",
+            f"/api/admin/data-sources/{created_source_id}/test",
+            {},
+            admin=True,
+        )
+        check(
+            status == 200 and source_test["ok"],
+            "Data source HTTPS connectivity test",
+        )
+        status, source_update = request(
+            ADMIN_PORT,
+            "PATCH",
+            f"/api/admin/data-sources/{created_source_id}",
+            {"status": "paused", "trustTier": 3, "agentIds": []},
+            admin=True,
+        )
+        check(status == 200 and source_update["ok"], "Update and unassign data source")
+        status, source_delete = request(
+            ADMIN_PORT,
+            "DELETE",
+            f"/api/admin/data-sources/{created_source_id}",
+            admin=True,
+        )
+        check(status == 200 and source_delete["ok"], "Delete data source")
+        created_source_id = None
         tested_crawler_id = crawler["id"]
         original_crawler_status = crawler["status"]
+        original_crawler_schedule = crawler["schedule"]
+        test_schedule = (
+            "0 */6 * * *"
+            if original_crawler_schedule != "0 */6 * * *"
+            else "0 */3 * * *"
+        )
+        status, schedule_update = request(
+            ADMIN_PORT,
+            "PATCH",
+            f"/api/admin/crawlers/{crawler['id']}",
+            {"schedule": test_schedule},
+            admin=True,
+        )
+        check(
+            status == 200
+            and schedule_update["schedule"] == test_schedule
+            and schedule_update["scheduleLabel"],
+            "Crawler recurring schedule update",
+        )
+        status, invalid_schedule = request(
+            ADMIN_PORT,
+            "PATCH",
+            f"/api/admin/crawlers/{crawler['id']}",
+            {"schedule": "* * * * *"},
+            admin=True,
+        )
+        check(
+            status == 400 and "支持" in invalid_schedule["error"],
+            "Crawler schedule validation",
+        )
         target_status = "running" if original_crawler_status == "paused" else "paused"
         status, crawler_update = request(
             ADMIN_PORT,
@@ -315,12 +410,24 @@ def main() -> None:
             if created_job_ids:
                 for job_id in created_job_ids:
                     conn.execute("DELETE FROM crawler_jobs WHERE id = %s", (job_id,))
-        if original_crawler_status is not None and tested_crawler_id is not None:
+            if created_source_id is not None:
+                conn.execute(
+                    "DELETE FROM data_sources WHERE id = %s",
+                    (created_source_id,),
+                )
+        if (
+            original_crawler_status is not None
+            and original_crawler_schedule is not None
+            and tested_crawler_id is not None
+        ):
             request(
                 ADMIN_PORT,
                 "PATCH",
                 f"/api/admin/crawlers/{tested_crawler_id}",
-                {"status": original_crawler_status},
+                {
+                    "status": original_crawler_status,
+                    "schedule": original_crawler_schedule,
+                },
                 admin=True,
             )
         if SESSION_COOKIE:
