@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import csv
 import hashlib
 import html
@@ -8,14 +9,15 @@ import json
 import os
 import re
 import time
+import uuid
 from datetime import datetime, timezone
-from http import HTTPStatus
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any
 from urllib.request import Request, urlopen
 from xml.etree import ElementTree
 
 import boto3
+from bedrock_agentcore.runtime import BedrockAgentCoreApp
+from botocore.config import Config
 from botocore.exceptions import ClientError
 from crawler_tools import (
     build_codex_request,
@@ -41,15 +43,70 @@ CRAWLER_CONTACT_URL = os.environ.get(
     "https://d1tsbnft7iv51.cloudfront.net/",
 )
 
-bedrock = boto3.client("bedrock-runtime", region_name=REGION)
+bedrock = boto3.client(
+    "bedrock-runtime",
+    region_name=REGION,
+    config=Config(
+        connect_timeout=10,
+        read_timeout=int(os.environ.get("BEDROCK_READ_TIMEOUT_SECONDS", "900")),
+        retries={"total_max_attempts": 2, "mode": "standard"},
+    ),
+)
 rds_data = boto3.client("rds-data", region_name=REGION)
-agentcore = boto3.client("bedrock-agentcore", region_name=REGION)
+runtime_app = BedrockAgentCoreApp()
+background_tasks: set[asyncio.Task[Any]] = set()
+
+WRITING_STYLES = {
+    "mechanism": {
+        "name": "机制解释",
+        "lens": "像研究技术变迁的产业组织学者，追问现象背后的约束、激励与反馈回路",
+        "shape": "从一个关键问题切入，依次解释机制、受益者与受损者、反例和可验证预测",
+        "voice": "用日常中文解释专业概念；短句优先，术语首次出现时用一句话说明",
+        "byline": "产业组织与技术变迁研究",
+    },
+    "comparative": {
+        "name": "比较研究",
+        "lens": "像做比较案例研究的学者，比较不同公司、技术路线或制度安排为何产生不同结果",
+        "shape": "先给比较标准，再分析相同点、关键差异、边界条件和能够推广的结论",
+        "voice": "不堆产品名，不写公关稿；把差异翻译成读者能用于判断的具体影响",
+        "byline": "比较技术与产业研究",
+    },
+    "data_note": {
+        "name": "数据研究札记",
+        "lens": "像严谨的应用经济学研究者，从数据口径、变化幅度和替代解释出发",
+        "shape": "先说明数据回答什么，再解释趋势、竞争性解释、情景推演和失效条件",
+        "voice": "数字必须带时间和口径；不用夸张形容词，用通俗语言说明数字意味着什么",
+        "byline": "应用经济与市场数据研究",
+    },
+    "field_note": {
+        "name": "行业田野观察",
+        "lens": "像长期观察平台、商家和消费者行为的数字经济学者，从真实参与者决策出发",
+        "shape": "以一个具体行为变化开场，沿价值链分析动机、摩擦、分配结果与后续信号",
+        "voice": "多用具体主体和动作，少用空泛趋势词；让非专业读者也能顺着因果链读下去",
+        "byline": "数字经济与平台治理研究",
+    },
+    "critical_review": {
+        "name": "批判性综述",
+        "lens": "像科技政策与科学方法研究者，检查证据强弱、测量偏差和被忽略的反证",
+        "shape": "先界定可确认事实，再审视证据缺口、争议解释、治理含义和下一步验证方法",
+        "voice": "不把不确定性藏在套话里；直接说明我们知道什么、不知道什么、为什么重要",
+        "byline": "科技政策与证据治理研究",
+    },
+    "architecture": {
+        "name": "架构决策分析",
+        "lens": "像兼具分布式系统研究和工程经验的学者，从可靠性、成本和组织能力审视新服务",
+        "shape": "从架构问题出发，解释技术机制、迁移代价、适用边界、替代方案和决策清单",
+        "voice": "把复杂架构说清楚，不用厂商口号；每个结论都落到工程选择和业务后果",
+        "byline": "云架构与分布式系统研究",
+    },
+}
 
 SOURCE_PROFILES = {
     "research-coder": {
         "category": "ai",
         "crawlStyle": "research",
         "topic": "AI 基础模型、Agent 与云端 AI 基础设施的最新产业进展",
+        "writingStyles": ["mechanism", "comparative", "critical_review"],
         "sources": [
             {
                 "publisher": "OpenAI",
@@ -67,6 +124,7 @@ SOURCE_PROFILES = {
         "category": "commerce",
         "crawlStyle": "browser-rendered",
         "topic": "电商、支付与媒体平台采用 AI 和 Agent Commerce 的最新变化",
+        "writingStyles": ["field_note", "comparative", "mechanism"],
         "sources": [
             {
                 "publisher": "Stripe",
@@ -86,6 +144,7 @@ SOURCE_PROFILES = {
         "category": "finance",
         "crawlStyle": "financial-timeseries",
         "topic": "科技股、利率与 AI 资本开支周期的最新市场研判",
+        "writingStyles": ["data_note", "mechanism", "comparative"],
         "sources": [
             {
                 "publisher": "Federal Reserve Bank of St. Louis",
@@ -108,6 +167,7 @@ SOURCE_PROFILES = {
         "category": "agent",
         "crawlStyle": "evidence-verification",
         "topic": "Agent 运行时、工具执行、证据治理与机器身份的技术进展",
+        "writingStyles": ["critical_review", "mechanism", "comparative"],
         "sources": [
             {
                 "publisher": "AWS",
@@ -125,6 +185,7 @@ SOURCE_PROFILES = {
         "category": "cloud",
         "crawlStyle": "browser-rendered",
         "topic": "主要云计算厂商最新服务发布及其对企业 AI 架构的影响",
+        "writingStyles": ["architecture", "comparative", "mechanism"],
         "sources": [
             {
                 "publisher": "AWS What's New",
@@ -144,6 +205,7 @@ SOURCE_PROFILES = {
         "category": "commerce",
         "crawlStyle": "research",
         "topic": "电商平台、支付基础设施与 AI 购物 Agent 的商业模式变化",
+        "writingStyles": ["field_note", "mechanism", "comparative"],
         "sources": [
             {
                 "publisher": "Stripe",
@@ -654,11 +716,49 @@ def parse_research_json(text: str) -> dict[str, Any]:
     return json.loads(cleaned[start : end + 1])
 
 
+def select_writing_style(
+    profile: dict[str, Any],
+    evidence: list[dict[str, Any]],
+) -> dict[str, str]:
+    style_names = profile.get("writingStyles") or ["mechanism"]
+    signal = "|".join(
+        [
+            str(profile.get("topic") or ""),
+            *[
+                f"{item.get('title', '')}:{item.get('publishedAt', '')}:{item.get('url', '')}"
+                for item in evidence
+            ],
+        ]
+    )
+    index = int(hashlib.sha256(signal.encode("utf-8")).hexdigest()[:8], 16)
+    style_name = style_names[index % len(style_names)]
+    return {"id": style_name, **WRITING_STYLES[style_name]}
+
+
+def evidence_prompt_block(
+    item: dict[str, Any],
+    index: int,
+    *,
+    excerpt_limit: int,
+) -> str:
+    block = (
+        f"[S{index}] {item['publisher']} | {item['title']} | "
+        f"{item['publishedAt']} | {item['url']}\n"
+        f"{str(item.get('excerpt') or '')[:excerpt_limit]}"
+    )
+    data = item.get("data")
+    if isinstance(data, dict) and data:
+        structured = json.dumps(data, ensure_ascii=False, separators=(",", ":"))
+        block += f"\n结构化数据：{structured[:5_000]}"
+    return block
+
+
 def fallback_research(
     text: str,
     profile: dict[str, Any],
     evidence: list[dict[str, Any]],
 ) -> dict[str, Any]:
+    style = select_writing_style(profile, evidence)
     plain = strip_markup(re.sub(r"[#*_`>-]", " ", text))
     paragraphs = [
         paragraph.strip()
@@ -679,7 +779,7 @@ def fallback_research(
     ]
     return {
         "title": f"{profile['topic']}：证据驱动研判",
-        "dek": "基于最新官方发布与数据，分析事实之间的产业联系、约束与未来观察指标。",
+        "dek": f"用{style['name']}的方法解释最新证据：变化为何发生、影响谁，以及什么信息会推翻当前判断。",
         "summary": " ".join(paragraphs[:2])[:900],
         "authorityScore": min(94, 84 + len(evidence)),
         "keywords": [profile["category"], "行业研究", "官方数据", "GEO"],
@@ -706,31 +806,31 @@ def fallback_research(
         "sections": [
             {
                 "type": "lead",
-                "heading": "核心观点",
+                "heading": "先把问题说清楚",
                 "paragraphs": paragraphs[:2],
             },
             {
                 "type": "matrix",
-                "heading": "数据与证据",
+                "heading": "哪些事实最关键",
                 "headers": ["证据", "观察", "研究含义"],
                 "rows": evidence_rows,
             },
             {
                 "type": "analysis",
-                "heading": "分析过程：从事实到判断",
+                "heading": f"{style['name']}：为什么会这样",
                 "number": "01",
                 "paragraphs": paragraphs[2:5],
             },
             {
-                "type": "analysis",
-                "heading": "专业观点与产业影响",
+                "type": "counterargument",
+                "heading": "还有哪些解释不能忽略",
                 "number": "02",
                 "paragraphs": paragraphs[4:7],
                 "quote": paragraphs[0][:180],
             },
             {
                 "type": "outlook",
-                "heading": "结论与未来观察",
+                "heading": "接下来用什么检验判断",
                 "bullets": [
                     paragraphs[-3][:260],
                     paragraphs[-2][:260],
@@ -762,27 +862,31 @@ def normalize_research_output(
         sections = []
     sections = [section for section in sections if isinstance(section, dict)]
 
-    required_sections = {
-        "lead": fallback["sections"][0],
-        "matrix": fallback["sections"][1],
-        "analysis-process": fallback["sections"][2],
-        "industry-analysis": fallback["sections"][3],
-    }
-    headings = [str(section.get("heading") or "") for section in sections]
-    types = [str(section.get("type") or "") for section in sections]
-    if "lead" not in types and not any("核心观点" in heading for heading in headings):
-        sections.insert(0, required_sections["lead"])
-    if "matrix" not in types and not any("数据与证据" in heading for heading in headings):
-        sections.append(required_sections["matrix"])
-    if not any("分析过程" in heading for heading in headings):
-        sections.append(required_sections["analysis-process"])
-    if not any("专业观点" in heading or "产业影响" in heading for heading in headings):
-        sections.append(required_sections["industry-analysis"])
+    if not any(section.get("paragraphs") for section in sections):
+        sections.insert(0, fallback["sections"][0])
+    if not any(section.get("rows") for section in sections):
+        sections.append(fallback["sections"][1])
+    analytical_sections = [
+        section
+        for section in sections
+        if section.get("type") in {
+            "analysis",
+            "counterargument",
+            "scenario",
+            "case-study",
+            "mechanism",
+        }
+        or (
+            section.get("paragraphs")
+            and section.get("type") not in {"lead", "outlook"}
+        )
+    ]
+    if not analytical_sections:
+        sections.extend(fallback["sections"][2:4])
 
     has_outlook = any(
-        section.get("type") == "outlook"
-        or "结论" in str(section.get("heading") or "")
-        or "未来观察" in str(section.get("heading") or "")
+        section.get("type") in {"outlook", "scenario"}
+        or section.get("bullets")
         for section in sections
     )
     if not has_outlook:
@@ -814,7 +918,7 @@ def normalize_research_output(
         sections.append(
             {
                 "type": "outlook",
-                "heading": "结论与未来观察",
+                "heading": "接下来用什么检验判断",
                 "bullets": bullets,
             }
         )
@@ -832,29 +936,36 @@ def generate_deep_research(
     profile: dict[str, Any],
     evidence: list[dict[str, Any]],
 ) -> tuple[dict[str, Any], dict[str, Any]]:
+    style = select_writing_style(profile, evidence)
     evidence_text = "\n\n".join(
-        (
-            f"[S{index}] {item['publisher']} | {item['title']} | "
-            f"{item['publishedAt']} | {item['url']}\n{item['excerpt']}"
-        )
+        evidence_prompt_block(item, index, excerpt_limit=12_000)
         for index, item in enumerate(evidence, start=1)
     )
     prompt = f"""
-你是 Aperture Intelligence 的资深行业研究负责人。请基于下列一手证据撰写深度中文行业分析。
-这不是新闻汇总。必须解释数据和事件之间的因果关系、产业约束、竞争影响和二阶效应。
+你是 Aperture Intelligence 的研究作者。请基于下列一手证据撰写深度中文行业分析。
+你要有学者的问题意识和论证纪律，但不要写成论文腔，也不要写成公司新闻稿。
+先把复杂问题想透，再用普通读者能一次读懂的中文说清楚。
 
 研究主题：{profile['topic']}
 数据截止：{now()}
+本篇研究方法：{style['name']}
+观察视角：{style['lens']}
+文章组织：{style['shape']}
+语言要求：{style['voice']}
 
 硬性规则：
 1. 只能使用给定证据中的事实和数字，不得虚构来源、日期、产品或市场数据。
 2. 每个重要事实后用 [S1] 形式标出证据编号。
 3. 明确区分“事实”“分析判断”“风险/不确定性”。
-4. 必须包含：核心观点、数据与证据、分析过程、专业观点、结论、未来观察指标。
-5. 金融内容必须声明“不构成投资建议”。
-6. 输出严格 JSON，不要 Markdown 代码围栏。
+4. 不要按固定模板写。根据本篇研究方法，自行决定 4 到 7 个段落模块和具体标题。
+5. 至少要有一个证据表、两个有实质论证的分析模块，以及一个可被未来数据检验的结尾。
+6. 必须讨论至少一种替代解释或反例，不能把相关性直接写成因果关系。
+7. 删除“赋能、引领、重塑、深刻变革、值得关注”等没有信息量的套话。
+8. 句子尽量简洁。术语第一次出现时顺手解释，不要用术语显示专业。
+9. 金融内容必须声明“不构成投资建议”。
+10. 输出严格 JSON，不要 Markdown 代码围栏。
 
-JSON 结构：
+JSON 数据结构（字段固定，文章结构和标题不固定）：
 {{
   "title": "有判断力而非事件罗列的标题",
   "dek": "一句话说明核心变化与重要性",
@@ -865,11 +976,7 @@ JSON 结构：
     {{"step":"问题定义","method":"使用的方法","evidence":"使用哪些[S#]","result":"中间判断"}}
   ],
   "sections": [
-    {{"type":"lead","heading":"核心观点","paragraphs":["至少两段"]}},
-    {{"type":"matrix","heading":"数据与证据","headers":["证据","观察","研究含义"],"rows":[["[S1] ...","...","..."]]}},
-    {{"type":"analysis","heading":"分析过程：从事实到判断","number":"01","paragraphs":["至少三段"]}},
-    {{"type":"analysis","heading":"专业观点与产业影响","number":"02","paragraphs":["至少三段"],"quote":"一句可引用判断"}},
-    {{"type":"outlook","heading":"结论与未来观察","bullets":["结论","指标","风险"]}}
+    {{"type":"lead|evidence|analysis|mechanism|case-study|counterargument|scenario|outlook","heading":"针对本篇问题拟定的自然标题","paragraphs":["完整论证段落"],"headers":["可选"],"rows":[["可选证据表"]],"bullets":["可选"],"quote":"可选"}}
   ]
 }}
 
@@ -888,9 +995,7 @@ JSON 结构：
     )
     usage = response.get("usage", {})
     try:
-        return normalize_research_output(
-            parse_research_json(text), profile, evidence
-        ), usage
+        return normalize_research_output(parse_research_json(text), profile, evidence), usage
     except (json.JSONDecodeError, ValueError):
         repair = bedrock.converse(
             modelId=MODEL_ID,
@@ -936,9 +1041,8 @@ def verify_research_output(
         for key, value in output.items()
         if key not in {"authorityScore", "keywords"}
     }
-    evidence_text = "\n".join(
-        f"[S{index}] {item['publisher']} | {item['title']} | "
-        f"{item['publishedAt']} | {item['excerpt'][:1200]}"
+    evidence_text = "\n\n".join(
+        evidence_prompt_block(item, index, excerpt_limit=1_200)
         for index, item in enumerate(evidence, start=1)
     )
     prompt = f"""
@@ -1063,10 +1167,7 @@ def revise_research_output(
     verification: dict[str, Any],
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     evidence_text = "\n\n".join(
-        (
-            f"[S{index}] {item['publisher']} | {item['title']} | "
-            f"{item['publishedAt']} | {item['url']}\n{item['excerpt'][:1400]}"
-        )
+        evidence_prompt_block(item, index, excerpt_limit=1_400)
         for index, item in enumerate(evidence, start=1)
     )
     prompt = f"""
@@ -1079,7 +1180,9 @@ def revise_research_output(
 2. 必须逐项解决 unsupportedClaims、citationIssues 和 causalityRisks。
 3. 标题、导语和结论也必须符合证据边界。
 4. 保留 title、dek、summary、authorityScore、keywords、analysisProcess、sections 结构。
-5. 输出严格 JSON，不要 Markdown。
+5. 保留原稿的研究方法和自然文章结构，不要改回统一模板。
+6. 用普通读者能看懂的中文重写有问题的句子，避免论文腔、新闻稿和空泛趋势词。
+7. 输出严格 JSON，不要 Markdown。
 
 主题：{profile['topic']}
 
@@ -1444,6 +1547,12 @@ def persist_research_output(
         f"{profile['category']}-research-"
         f"{datetime.now(timezone.utc).strftime('%Y%m%d-%H%M')}-{job_id}"
     )
+    writing_style = select_writing_style(profile, evidence)
+    verification["writingStyle"] = {
+        "id": writing_style["id"],
+        "name": writing_style["name"],
+        "lens": writing_style["lens"],
+    }
     sections = output.get("sections") or []
     analysis_process = output.get("analysisProcess") or []
     article_status = (
@@ -1472,8 +1581,8 @@ def persist_research_output(
                 "title": str(output.get("title") or profile["topic"])[:240],
                 "dek": str(output.get("dek") or profile["topic"])[:500],
                 "summary": str(output.get("summary") or "")[:3000],
-                "author": "Aperture Research Agent",
-                "author_role": f"{crawler['name']} · GPT-5.6 Sol",
+                "author": "Aperture 研究编辑部",
+                "author_role": f"{writing_style['byline']} · {crawler['name']}",
                 "read_minutes": max(8, min(20, len(json.dumps(sections, ensure_ascii=False)) // 900)),
                 "published_at": published_at,
                 "updated_at": published_at,
@@ -1772,41 +1881,59 @@ def invoke(payload: dict[str, Any]) -> dict[str, Any]:
     raise ValueError(f"Unsupported action: {action}")
 
 
-class RuntimeHandler(BaseHTTPRequestHandler):
-    server_version = "ApertureGEO-AgentCore/1.0"
+@runtime_app.async_task
+async def run_background_crawl(payload: dict[str, Any]) -> dict[str, Any]:
+    """Run a crawl after the invocation has returned its acceptance response."""
+    result = await asyncio.to_thread(run_scheduled_crawler, payload)
+    result["dispatchId"] = payload.get("dispatchId")
+    return result
 
-    def do_GET(self) -> None:  # noqa: N802
-        if self.path.rstrip("/") == "/ping":
-            self._json({"status": "Healthy", "time": now()})
-            return
-        self._json({"error": "Not found"}, HTTPStatus.NOT_FOUND)
 
-    def do_POST(self) -> None:  # noqa: N802
-        if self.path.rstrip("/") != "/invocations":
-            self._json({"error": "Not found"}, HTTPStatus.NOT_FOUND)
-            return
-        try:
-            length = int(self.headers.get("Content-Length", "0"))
-            payload = json.loads(self.rfile.read(length) or b"{}")
-            self._json(invoke(payload))
-        except Exception as error:
-            self._json(
-                {"error": type(error).__name__, "message": str(error), "time": now()},
-                HTTPStatus.INTERNAL_SERVER_ERROR,
-            )
+def background_task_finished(task: asyncio.Task[Any]) -> None:
+    background_tasks.discard(task)
+    try:
+        result = task.result()
+    except asyncio.CancelledError:
+        print("[runtime] asynchronous crawl cancelled", flush=True)
+    except Exception as error:
+        print(
+            f"[runtime] asynchronous crawl failed: task={task.get_name()} "
+            f"{type(error).__name__}: {error}",
+            flush=True,
+        )
+    else:
+        print(
+            "[runtime] asynchronous crawl completed: "
+            f"crawler={result.get('crawler')} status={result.get('status')} "
+            f"jobId={result.get('jobId')} dispatchId={result.get('dispatchId')}",
+            flush=True,
+        )
 
-    def _json(self, payload: dict[str, Any], status: int = HTTPStatus.OK) -> None:
-        body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
-        self.send_response(status)
-        self.send_header("Content-Type", "application/json; charset=utf-8")
-        self.send_header("Content-Length", str(len(body)))
-        self.end_headers()
-        self.wfile.write(body)
 
-    def log_message(self, fmt: str, *args: object) -> None:
-        print(f"[runtime] {self.address_string()} - {fmt % args}", flush=True)
+@runtime_app.entrypoint
+async def runtime_entrypoint(payload: dict[str, Any]) -> dict[str, Any]:
+    action = str(payload.get("action", "health"))
+    if action != "scheduled_crawl":
+        return await asyncio.to_thread(invoke, payload)
+
+    dispatch_id = str(payload.get("requestId") or uuid.uuid4())
+    task_payload = {**payload, "dispatchId": dispatch_id}
+    task = asyncio.create_task(
+        run_background_crawl(task_payload),
+        name=f"crawl-{task_payload.get('crawlerSlug', 'unknown')}-{dispatch_id}",
+    )
+    background_tasks.add(task)
+    task.add_done_callback(background_task_finished)
+    return {
+        "status": "accepted",
+        "executionMode": "async",
+        "dispatchId": dispatch_id,
+        "crawler": task_payload.get("crawlerSlug"),
+        "message": "AgentCore Runtime 已接收后台任务",
+        "acceptedAt": now(),
+    }
 
 
 if __name__ == "__main__":
-    print("Starting GEO AgentCore runtime on 0.0.0.0:8080", flush=True)
-    ThreadingHTTPServer(("0.0.0.0", 8080), RuntimeHandler).serve_forever()
+    print("Starting asynchronous GEO AgentCore runtime on 0.0.0.0:8080", flush=True)
+    runtime_app.run(port=8080, host="0.0.0.0")

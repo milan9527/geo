@@ -94,5 +94,7 @@ Scheduler -> Lambda bridge -> AgentCore Runtime -> Aurora
 The one-time preflight created Aurora job `36`, completed a real AgentCore Code Interpreter session,
 deleted itself after completion, and left zero messages in the DLQ.
 
-The Lambda bridge timeout is 900 seconds. Its asynchronous retry count is zero so a long-running
-AgentCore invocation cannot be replayed and create duplicate crawls, model usage, or x402 payments.
+The Lambda bridge waits only for the Runtime acceptance response and has a 60-second timeout.
+AgentCore tracks the crawl with its native asynchronous task status and continues processing after
+Lambda returns. Lambda asynchronous retries remain disabled to avoid duplicate crawls, model usage,
+or x402 payments.

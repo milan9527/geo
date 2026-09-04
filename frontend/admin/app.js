@@ -1,9 +1,40 @@
 const API = location.origin;
-const state = { view: "dashboard", range: "30d", user: null, metrics: null, articles: [], research: [], categories: [], crawlers: [], jobs: [], events: [], settings: {} };
+const todayIso = () => new Date().toISOString().slice(0, 10);
+const daysAgoIso = (days) => new Date(Date.now() - days * 86400000).toISOString().slice(0, 10);
+const state = {
+  view: "dashboard",
+  range: "30d",
+  customStart: daysAgoIso(29),
+  customEnd: todayIso(),
+  selectedArticles: new Set(),
+  user: null,
+  metrics: null,
+  articles: [],
+  research: [],
+  categories: [],
+  crawlers: [],
+  jobs: [],
+  events: [],
+  settings: {},
+};
 const $ = (selector, root = document) => root.querySelector(selector);
 const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
 const fmt = (value) => new Intl.NumberFormat("zh-CN").format(value || 0);
 const money = (value) => `$${Number(value || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 6 })}`;
+const escapeHtml = (value) => String(value ?? "").replace(/[&<>"']/g, (character) => ({
+  "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
+}[character]));
+const safeExternalUrl = (value) => {
+  try {
+    const url = new URL(String(value ?? ""));
+    return ["http:", "https:"].includes(url.protocol) ? url.href : "";
+  } catch {
+    return "";
+  }
+};
+const metricsPath = () => state.range === "custom"
+  ? `/api/admin/metrics?start=${encodeURIComponent(state.customStart)}&end=${encodeURIComponent(state.customEnd)}`
+  : `/api/admin/metrics?range=${state.range}`;
 const relativeTime = (value) => {
   const minutes = Math.max(0, Math.floor((Date.now() - new Date(value).getTime()) / 60000));
   if (minutes < 1) return "刚刚";
@@ -151,7 +182,15 @@ function renderDashboard() {
   $("#adminApp").innerHTML = `
     <section class="dashboard-header">
       <p>监测内容可见度、Agent 访问和机器流量变现表现。</p>
-      <div class="range-tabs">${["7d","30d","90d"].map((range) => `<button class="${state.range === range ? "active" : ""}" data-range="${range}">${range.toUpperCase()}</button>`).join("")}</div>
+      <div class="range-controls">
+        <div class="range-tabs">${["7d","30d","90d"].map((range) => `<button class="${state.range === range ? "active" : ""}" data-range="${range}">${range.toUpperCase()}</button>`).join("")}</div>
+        <div class="custom-range ${state.range === "custom" ? "active" : ""}">
+          <input type="date" id="rangeStart" value="${state.customStart}" max="${todayIso()}" aria-label="统计开始日期" />
+          <span>至</span>
+          <input type="date" id="rangeEnd" value="${state.customEnd}" max="${todayIso()}" aria-label="统计结束日期" />
+          <button data-apply-custom-range>应用</button>
+        </div>
+      </div>
     </section>
     <section class="metric-grid">
       ${metricCard("i-users", "teal", "Agent 独立访问", fmt(summary.agentViews), data.growth.agent, `占总流量 ${summary.agentShare}%`)}
@@ -160,7 +199,7 @@ function renderDashboard() {
       ${metricCard("i-wallet", "amber", "x402 收入", money(summary.revenue), data.growth.revenue, `${fmt(summary.payments)} 笔支付`)}
     </section>
     <section class="panel ab-panel">
-      <div class="panel-header"><div><p>GEO + X402 EXPERIMENT</p><h2>Agent 内容 A/B 实测</h2></div><span>${data.range} 天真实事件</span></div>
+      <div class="panel-header"><div><p>GEO + X402 EXPERIMENT</p><h2>Agent 内容 A/B 实测</h2></div><span>${data.startDate} 至 ${data.endDate}</span></div>
       <div class="ab-grid">
         <div><span>A · 开放机器页</span><strong>${fmt(ab.variantAViews)}</strong><small>无需支付的 Agent 请求</small></div>
         <div><span>B · x402 付费页</span><strong>${fmt(ab.variantBViews)}</strong><small>${fmt(ab.challenges)} 次支付挑战</small></div>
@@ -214,8 +253,16 @@ function renderContent() {
     <section class="view-page">
       <div class="view-header"><div><h2>专业内容库</h2><p>管理发布状态、GEO 权威度、访问模式与 Agent 定价。</p></div><div class="view-actions"><button class="ghost-button" id="exportContent">导出内容</button><button class="primary-button" id="createContent">创建研究</button></div></div>
       <div class="table-panel">
-        <div class="table-toolbar"><input id="contentSearch" placeholder="搜索标题或作者…"/><select id="statusFilter"><option value="">全部状态</option><option value="published">已发布</option><option value="review">待审核</option><option value="draft">草稿</option></select></div>
-        <table class="data-table"><thead><tr><th>内容</th><th>分类</th><th>状态</th><th>GEO 权威度</th><th>AI 引用</th><th>Agent 访问</th><th>更新时间</th><th>操作</th></tr></thead><tbody id="contentRows"></tbody></table>
+        <div class="table-toolbar">
+          <div class="content-filters"><input id="contentSearch" placeholder="搜索标题或作者…"/><select id="statusFilter"><option value="">全部状态</option><option value="published">已发布</option><option value="review">待审核</option><option value="draft">草稿</option></select></div>
+          <div class="bulk-actions" id="bulkActions">
+            <span>已选择 <b id="selectedCount">0</b> 篇</span>
+            <button data-batch-action="publish" disabled>批量发布</button>
+            <button data-batch-action="review" disabled>转为审核</button>
+            <button class="danger" data-batch-action="delete" disabled>删除</button>
+          </div>
+        </div>
+        <table class="data-table"><thead><tr><th class="select-column"><input type="checkbox" id="selectAllArticles" aria-label="选择当前列表全部内容" /></th><th>内容</th><th>分类</th><th>状态</th><th>GEO 权威度</th><th>AI 引用</th><th>Agent 访问</th><th>更新时间</th><th>操作</th></tr></thead><tbody id="contentRows"></tbody></table>
       </div>
     </section>
   `;
@@ -224,20 +271,114 @@ function renderContent() {
   $("#statusFilter").addEventListener("change", renderContentRows);
 }
 
-function renderContentRows() {
+function filteredContentRows() {
   const term = ($("#contentSearch")?.value || "").toLowerCase();
   const status = $("#statusFilter")?.value || "";
-  const rows = state.articles.filter((item) => (!term || `${item.title}${item.author}`.toLowerCase().includes(term)) && (!status || item.status === status));
+  return state.articles.filter((item) => (!term || `${item.title}${item.author}`.toLowerCase().includes(term)) && (!status || item.status === status));
+}
+
+function renderContentRows() {
+  const rows = filteredContentRows();
   $("#contentRows").innerHTML = rows.map((item) => `
     <tr>
-      <td><div class="content-title"><strong>${item.title}</strong><span>${item.author} · /${item.slug}</span></div></td>
-      <td>${item.category_name}</td><td><span class="status-pill ${item.status}">${statusLabel(item.status)}</span></td>
+      <td class="select-column"><input type="checkbox" data-select-article="${item.id}" ${state.selectedArticles.has(item.id) ? "checked" : ""} aria-label="选择 ${escapeHtml(item.title)}" /></td>
+      <td><button class="content-title content-link" data-open-article="${item.id}"><strong>${escapeHtml(item.title)}</strong><span>${escapeHtml(item.author)} · /${escapeHtml(item.slug)}</span></button></td>
+      <td>${escapeHtml(item.category_name)}</td><td><span class="status-pill ${escapeHtml(item.status)}">${escapeHtml(statusLabel(item.status))}</span></td>
       <td><b>${item.authority_score}</b> / 100</td><td>${fmt(item.citation_count)}</td>
       <td><span class="access-pill">${item.access_model === "open" ? "开放" : `x402 · $${item.agent_price}`}</span></td>
       <td>${relativeTime(item.updated_at)}</td>
-      <td><div class="action-group"><button class="table-action" data-toggle-publish="${item.id}" data-status="${item.status}" title="${item.status === "published" ? "转为审核" : "发布"}"><svg><use href="#${item.status === "published" ? "i-pause" : "i-play"}"></use></svg></button></div></td>
+      <td><div class="action-group"><button class="table-action" data-open-article="${item.id}" title="查看内容"><svg><use href="#i-content"></use></svg></button><button class="table-action" data-toggle-publish="${item.id}" data-status="${item.status}" title="${item.status === "published" ? "转为审核" : "发布"}"><svg><use href="#${item.status === "published" ? "i-pause" : "i-play"}"></use></svg></button></div></td>
     </tr>
   `).join("");
+  updateBulkActions();
+}
+
+function updateBulkActions() {
+  const count = state.selectedArticles.size;
+  if ($("#selectedCount")) $("#selectedCount").textContent = count;
+  $$("[data-batch-action]").forEach((button) => { button.disabled = count === 0; });
+  const visible = filteredContentRows().map((item) => item.id);
+  if ($("#selectAllArticles")) {
+    $("#selectAllArticles").checked = visible.length > 0 && visible.every((id) => state.selectedArticles.has(id));
+    $("#selectAllArticles").indeterminate = visible.some((id) => state.selectedArticles.has(id)) && !$("#selectAllArticles").checked;
+  }
+}
+
+function renderDetailSection(section) {
+  const paragraphs = (Array.isArray(section.paragraphs) ? section.paragraphs : []).map((paragraph) => `<p>${escapeHtml(paragraph)}</p>`).join("");
+  const bullets = Array.isArray(section.bullets) && section.bullets.length
+    ? `<ul>${section.bullets.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>`
+    : "";
+  const quote = section.quote ? `<blockquote>${escapeHtml(section.quote)}</blockquote>` : "";
+  const rows = Array.isArray(section.rows) && section.rows.length
+    ? `<div class="detail-table-wrap"><table><thead><tr>${(Array.isArray(section.headers) ? section.headers : []).map((cell) => `<th>${escapeHtml(cell)}</th>`).join("")}</tr></thead><tbody>${section.rows.map((row) => `<tr>${(Array.isArray(row) ? row : []).map((cell) => `<td>${escapeHtml(cell)}</td>`).join("")}</tr>`).join("")}</tbody></table></div>`
+    : "";
+  return `<section><h3>${escapeHtml(section.heading || "分析")}</h3>${paragraphs}${quote}${rows}${bullets}</section>`;
+}
+
+function renderDetailSource(source, index) {
+  const url = safeExternalUrl(source.url);
+  const content = `
+    <span>[S${index + 1}] ${escapeHtml(source.publisher)} · ${escapeHtml(source.source_type)}</span>
+    <strong>${escapeHtml(source.title)}</strong>
+    <small>${escapeHtml(source.published_at)}</small>
+  `;
+  return url
+    ? `<a href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer">${content}</a>`
+    : `<div class="detail-source-unlinked">${content}</div>`;
+}
+
+async function openArticleDetail(articleId) {
+  const modal = $("#contentDetailModal");
+  const body = $("#contentDetailBody");
+  modal.classList.add("open");
+  modal.setAttribute("aria-hidden", "false");
+  body.innerHTML = '<div class="detail-loading">正在读取完整内容…</div>';
+  try {
+    const article = await api(`/api/admin/articles/${articleId}`);
+    $("#contentDetailEyebrow").textContent = `${article.category_name} · ${statusLabel(article.status)}`;
+    $("#contentDetailTitle").textContent = article.title;
+    body.innerHTML = `
+      <div class="detail-meta">
+        <span>${escapeHtml(article.author)} · ${escapeHtml(article.author_role)}</span>
+        <span>权威度 ${article.authority_score}/100</span>
+        <span>${article.citation_count} 条引用</span>
+        <span>${escapeHtml(article.updated_at.slice(0, 10))} 更新</span>
+      </div>
+      <p class="detail-dek">${escapeHtml(article.dek)}</p>
+      <p class="detail-summary">${escapeHtml(article.summary)}</p>
+      <div class="detail-sections">${(Array.isArray(article.sections) ? article.sections : []).map(renderDetailSection).join("")}</div>
+      <div class="detail-sources">
+        <h3>数据与来源</h3>
+        ${Array.isArray(article.sources) && article.sources.length
+          ? article.sources.map(renderDetailSource).join("")
+          : "<p>暂无来源记录。</p>"}
+      </div>
+    `;
+  } catch (error) {
+    body.innerHTML = `<div class="empty-state">${escapeHtml(error.message || "内容读取失败")}</div>`;
+  }
+}
+
+function closeArticleDetail() {
+  $("#contentDetailModal").classList.remove("open");
+  $("#contentDetailModal").setAttribute("aria-hidden", "true");
+}
+
+async function batchArticles(action) {
+  const ids = [...state.selectedArticles];
+  if (!ids.length) return;
+  if (action === "delete" && !window.confirm(`确认永久删除所选 ${ids.length} 篇内容？相关来源会一并删除，研究任务记录将保留。`)) return;
+  const result = await api("/api/admin/articles/batch", {
+    method: "PATCH",
+    body: JSON.stringify({ ids, action, confirm: action === "delete" }),
+  });
+  state.selectedArticles.clear();
+  state.articles = await api("/api/admin/articles");
+  $("#contentCount").textContent = state.articles.length;
+  renderContent();
+  const labels = { publish: "已批量发布", review: "已转为待审核", delete: "已删除" };
+  showToast(labels[action], `${result.count} 篇内容已处理`);
 }
 
 function renderCrawlers() {
@@ -283,7 +424,7 @@ function renderResearch() {
             </div>
             <p class="research-summary">${run.summary || run.error_message || "研究任务正在执行。"}</p>
             ${run.toolTrace?.provider ? `<div class="research-process"><h3>真实工具执行</h3><div><b>${run.toolTrace.provider}</b><span>Session ${run.toolTrace.sessionId || "n/a"}</span><p>${run.toolTrace.documents || 0} 条文档${run.toolTrace.codexThreadId ? ` · Codex Thread ${run.toolTrace.codexThreadId}` : ""}${run.toolTrace.webBotAuth ? " · Web Bot Auth" : ""}</p></div></div>` : ""}
-            ${run.verification?.status ? `<div class="research-process"><h3>证据审计</h3><div><b>${run.verification.status === "verified" ? "已通过" : "需要人工复核"} · ${run.verification.score || 0}</b><span>${run.verification.notes || ""}</span><p>${(run.verification.unsupportedClaims || []).join("；") || "未发现无证据支持的关键表述"}</p></div></div>` : ""}
+            ${run.verification?.status ? `<div class="research-process"><h3>证据审计</h3><div><b>${run.verification.status === "verified" ? "已通过" : "需要人工复核"} · ${run.verification.score || 0}</b><span>${run.verification.writingStyle?.name ? `${run.verification.writingStyle.name} · ` : ""}${run.verification.notes || ""}</span><p>${(run.verification.unsupportedClaims || []).join("；") || "未发现无证据支持的关键表述"}</p></div></div>` : ""}
             ${run.analysisProcess?.length ? `<div class="research-process"><h3>分析过程</h3>${run.analysisProcess.map((step, index) => `<div><b>0${index + 1} ${step.step}</b><span>${step.method}</span><p>${step.result}</p><small>${step.evidence}</small></div>`).join("")}</div>` : ""}
             ${run.sections?.length ? `<div class="research-sections"><h3>观点与结论</h3>${run.sections.map((section) => `<div><b>${section.heading}</b>${(section.paragraphs || []).slice(0, 2).map((text) => `<p>${text}</p>`).join("")}${(section.bullets || []).length ? `<ul>${section.bullets.map((item) => `<li>${item}</li>`).join("")}</ul>` : ""}</div>`).join("")}</div>` : ""}
             <div class="research-evidence"><h3>数据与来源</h3>${run.evidence.map((source, index) => `<a href="${source.url}" target="_blank" rel="noreferrer"><span>[S${index + 1}] ${source.publisher} · ${source.source_type}</span><b>${source.title}</b><small>${source.published_at}</small><p>${source.content_excerpt.slice(0, 260)}</p></a>`).join("")}</div>
@@ -339,7 +480,7 @@ async function switchView(view) {
 
 async function loadAll() {
   [state.metrics, state.articles, state.research, state.categories, state.crawlers, state.jobs, state.events, state.settings] = await Promise.all([
-    api(`/api/admin/metrics?range=${state.range}`),
+    api(metricsPath()),
     api("/api/admin/articles"),
     api("/api/admin/research"),
     api("/api/v1/categories"),
@@ -382,9 +523,26 @@ function bindEvents() {
     const range = event.target.closest("[data-range]");
     if (range) {
       state.range = range.dataset.range;
-      state.metrics = await api(`/api/admin/metrics?range=${state.range}`);
+      state.metrics = await api(metricsPath());
       renderDashboard();
     }
+    if (event.target.closest("[data-apply-custom-range]")) {
+      const start = $("#rangeStart").value;
+      const end = $("#rangeEnd").value;
+      if (!start || !end || start > end) {
+        showToast("时间范围无效", "请选择正确的开始和结束日期");
+        return;
+      }
+      state.customStart = start;
+      state.customEnd = end;
+      state.range = "custom";
+      state.metrics = await api(metricsPath());
+      renderDashboard();
+    }
+    const articleDetail = event.target.closest("[data-open-article]");
+    if (articleDetail) await openArticleDetail(Number(articleDetail.dataset.openArticle));
+    const batchAction = event.target.closest("[data-batch-action]");
+    if (batchAction) await batchArticles(batchAction.dataset.batchAction);
     const publish = event.target.closest("[data-toggle-publish]");
     if (publish) {
       const status = publish.dataset.status === "published" ? "review" : "published";
@@ -433,10 +591,31 @@ function bindEvents() {
     }
     if (event.target.closest("[data-open-content]")) switchView("content");
   });
+  document.addEventListener("change", (event) => {
+    const article = event.target.closest("[data-select-article]");
+    if (article) {
+      const articleId = Number(article.dataset.selectArticle);
+      if (article.checked) state.selectedArticles.add(articleId);
+      else state.selectedArticles.delete(articleId);
+      updateBulkActions();
+    }
+    if (event.target.id === "selectAllArticles") {
+      const visibleIds = filteredContentRows().map((item) => item.id);
+      visibleIds.forEach((articleId) => {
+        if (event.target.checked) state.selectedArticles.add(articleId);
+        else state.selectedArticles.delete(articleId);
+      });
+      renderContentRows();
+    }
+  });
   $("#closeArticleModal").addEventListener("click", closeArticleModal);
   $("#cancelArticleModal").addEventListener("click", closeArticleModal);
   $("#articleModal").addEventListener("click", (event) => {
     if (event.target === $("#articleModal")) closeArticleModal();
+  });
+  $("#closeContentDetail").addEventListener("click", closeArticleDetail);
+  $("#contentDetailModal").addEventListener("click", (event) => {
+    if (event.target === $("#contentDetailModal")) closeArticleDetail();
   });
   $("#createArticleForm").addEventListener("submit", createArticle);
 }

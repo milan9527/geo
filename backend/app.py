@@ -239,6 +239,12 @@ class ApiHandler(BaseHTTPRequestHandler):
                 return
             self._admin_articles()
             return
+        admin_article_match = re.fullmatch(r"/api/admin/articles/(\d+)", path)
+        if admin_article_match:
+            if not self._require_admin():
+                return
+            self._admin_article_detail(int(admin_article_match.group(1)))
+            return
         if path == "/api/admin/crawlers":
             if not self._require_admin():
                 return
@@ -551,6 +557,9 @@ class ApiHandler(BaseHTTPRequestHandler):
         path = urlparse(self.path).path.rstrip("/")
         payload = self._read_json()
         if not self._require_admin():
+            return
+        if path == "/api/admin/articles/batch":
+            self._batch_articles(payload)
             return
         article_match = re.fullmatch(r"/api/admin/articles/(\d+)", path)
         if article_match:
@@ -960,9 +969,36 @@ class ApiHandler(BaseHTTPRequestHandler):
         self._json({"ok": True}, HTTPStatus.CREATED)
 
     def _admin_metrics(self, query: dict) -> None:
-        days = {"7d": 7, "30d": 30, "90d": 90}.get(query.get("range", ["30d"])[0], 30)
-        start = (date.today() - timedelta(days=days - 1)).isoformat()
-        previous_start = (date.today() - timedelta(days=days * 2 - 1)).isoformat()
+        range_key = query.get("range", ["30d"])[0]
+        custom_start = query.get("start", [""])[0]
+        custom_end = query.get("end", [""])[0]
+        if custom_start or custom_end:
+            try:
+                start_date = date.fromisoformat(custom_start)
+                end_date = date.fromisoformat(custom_end)
+            except ValueError:
+                self._json(
+                    {"error": "start 和 end 必须是 YYYY-MM-DD"},
+                    HTTPStatus.BAD_REQUEST,
+                )
+                return
+            days = (end_date - start_date).days + 1
+            if days < 1 or days > 366:
+                self._json(
+                    {"error": "统计时间范围必须为 1 到 366 天"},
+                    HTTPStatus.BAD_REQUEST,
+                )
+                return
+            range_key = "custom"
+        else:
+            days = {"7d": 7, "30d": 30, "90d": 90}.get(range_key, 30)
+            end_date = date.today()
+            start_date = end_date - timedelta(days=days - 1)
+        previous_start_date = start_date - timedelta(days=days)
+        next_date = end_date + timedelta(days=1)
+        start = start_date.isoformat()
+        end = end_date.isoformat()
+        previous_start = previous_start_date.isoformat()
         with connection() as conn:
             events = [
                 dict(row)
@@ -970,10 +1006,10 @@ class ApiHandler(BaseHTTPRequestHandler):
                     """
                     SELECT event_type, visitor_type, agent_name, occurred_at, metadata
                     FROM traffic_events
-                    WHERE occurred_at >= %s
+                    WHERE occurred_at >= %s AND occurred_at < %s
                     ORDER BY occurred_at
                     """,
-                    (previous_start,),
+                    (previous_start, next_date.isoformat()),
                 ).fetchall()
             ]
             status_counts = {
@@ -1039,17 +1075,17 @@ class ApiHandler(BaseHTTPRequestHandler):
         current = empty_totals()
         previous = empty_totals()
         daily_map = {
-            (date.today() - timedelta(days=offset)).isoformat(): empty_totals()
-            for offset in range(days - 1, -1, -1)
+            (start_date + timedelta(days=offset)).isoformat(): empty_totals()
+            for offset in range(days)
         }
         source_counts: dict[str, int] = {}
         for event in events:
             event_day = str(event["occurred_at"])[:10]
-            target = current if event_day >= start else previous
+            target = current if start <= event_day <= end else previous
             add_event(target, event)
             if event_day in daily_map:
                 add_event(daily_map[event_day], event)
-            if event_day >= start and event["event_type"] in agent_event_types:
+            if start <= event_day <= end and event["event_type"] in agent_event_types:
                 name = event["agent_name"] or "Machine client"
                 source_counts[name] = source_counts.get(name, 0) + 1
 
@@ -1085,6 +1121,9 @@ class ApiHandler(BaseHTTPRequestHandler):
         self._json(
             {
                 "range": days,
+                "rangeKey": range_key,
+                "startDate": start,
+                "endDate": end,
                 "summary": {
                     "humanViews": int(current["human"]),
                     "agentViews": int(current["agent"]),
@@ -1144,6 +1183,140 @@ class ApiHandler(BaseHTTPRequestHandler):
                 }
                 for row in rows
             ]
+        )
+
+    def _admin_article_detail(self, article_id: int) -> None:
+        with connection() as conn:
+            row = conn.execute(
+                """
+                SELECT a.*, c.slug category_slug, c.name category_name,
+                       c.eyebrow category_eyebrow
+                FROM articles a JOIN categories c ON c.id = a.category_id
+                WHERE a.id = %s
+                """,
+                (article_id,),
+            ).fetchone()
+            if not row:
+                self._json({"error": "Article not found"}, HTTPStatus.NOT_FOUND)
+                return
+            sources = conn.execute(
+                """
+                SELECT publisher, title, url, published_at, source_type
+                FROM sources WHERE article_id = %s ORDER BY id
+                """,
+                (article_id,),
+            ).fetchall()
+        item = dict(row)
+        item["featured"] = bool(item["featured"])
+        item["keywords"] = parse_json(item["keywords"], [])
+        item["sections"] = parse_json(item.pop("body_json"), [])
+        item["sources"] = [dict(source) for source in sources]
+        self._json(item)
+
+    def _batch_articles(self, payload: dict) -> None:
+        raw_ids = payload.get("ids")
+        if not isinstance(raw_ids, list):
+            self._json({"error": "ids must be an array"}, HTTPStatus.BAD_REQUEST)
+            return
+        try:
+            article_ids = sorted(
+                {
+                    int(article_id)
+                    for article_id in raw_ids
+                    if not isinstance(article_id, bool) and int(article_id) > 0
+                }
+            )
+        except (TypeError, ValueError):
+            self._json({"error": "ids contains an invalid value"}, HTTPStatus.BAD_REQUEST)
+            return
+        if not article_ids or len(article_ids) > 100:
+            self._json(
+                {"error": "请选择 1 到 100 篇内容"},
+                HTTPStatus.BAD_REQUEST,
+            )
+            return
+        action = str(payload.get("action", "")).strip().lower()
+        if action not in {"publish", "review", "delete"}:
+            self._json({"error": "Unsupported batch action"}, HTTPStatus.BAD_REQUEST)
+            return
+        if action == "delete" and payload.get("confirm") is not True:
+            self._json(
+                {"error": "删除操作需要 confirm=true"},
+                HTTPStatus.BAD_REQUEST,
+            )
+            return
+
+        placeholders = ", ".join(["%s"] * len(article_ids))
+        timestamp = utc_now()
+        with connection() as conn:
+            existing = conn.execute(
+                f"SELECT id FROM articles WHERE id IN ({placeholders})",
+                article_ids,
+            ).fetchall()
+            existing_ids = [int(row["id"]) for row in existing]
+            if not existing_ids:
+                self._json({"error": "未找到所选内容"}, HTTPStatus.NOT_FOUND)
+                return
+            existing_placeholders = ", ".join(["%s"] * len(existing_ids))
+            if action == "delete":
+                conn.execute(
+                    f"""
+                    UPDATE research_runs SET output_article_id = NULL
+                    WHERE output_article_id IN ({existing_placeholders})
+                    """,
+                    existing_ids,
+                )
+                conn.execute(
+                    f"""
+                    UPDATE crawler_jobs SET article_id = NULL
+                    WHERE article_id IN ({existing_placeholders})
+                    """,
+                    existing_ids,
+                )
+                conn.execute(
+                    f"""
+                    UPDATE traffic_events SET article_id = NULL
+                    WHERE article_id IN ({existing_placeholders})
+                    """,
+                    existing_ids,
+                )
+                conn.execute(
+                    f"DELETE FROM articles WHERE id IN ({existing_placeholders})",
+                    existing_ids,
+                )
+            else:
+                status = "published" if action == "publish" else "review"
+                conn.execute(
+                    f"""
+                    UPDATE articles SET status = %s, updated_at = %s
+                    WHERE id IN ({existing_placeholders})
+                    """,
+                    [status, timestamp, *existing_ids],
+                )
+            conn.execute(
+                """
+                INSERT INTO traffic_events(
+                    event_type, visitor_type, agent_name, article_id,
+                    occurred_at, metadata
+                ) VALUES(%s, 'human', %s, NULL, %s, %s)
+                """,
+                (
+                    f"admin_batch_{action}",
+                    self.admin_user.get("username", "administrator"),
+                    timestamp,
+                    json.dumps(
+                        {"articleIds": existing_ids, "count": len(existing_ids)},
+                        ensure_ascii=False,
+                    ),
+                ),
+            )
+        self._json(
+            {
+                "ok": True,
+                "action": action,
+                "count": len(existing_ids),
+                "articleIds": existing_ids,
+            }
         )
 
     def _admin_crawlers(self) -> None:
@@ -1215,15 +1388,13 @@ class ApiHandler(BaseHTTPRequestHandler):
                     for evidence in conn.execute(
                         """
                         SELECT publisher, title, url, published_at, retrieved_at,
-                               source_type, content_excerpt, data_json
+                               source_type, content_excerpt
                         FROM research_evidence
                         WHERE run_id = %s ORDER BY id
                         """,
                         (run["id"],),
                     ).fetchall()
                 ]
-                for evidence in item["evidence"]:
-                    evidence["data"] = parse_json(evidence.pop("data_json"), {})
                 result.append(item)
         self._json(result)
 
@@ -1251,19 +1422,27 @@ class ApiHandler(BaseHTTPRequestHandler):
             item["toolTrace"] = parse_json(item.pop("tool_trace_json"), {})
             item["verification"] = parse_json(item.pop("verification_json"), {})
             item["sections"] = parse_json(item.pop("body_json"), [])
-            item["evidence"] = [
+            evidence_rows = [
                 dict(evidence)
                 for evidence in conn.execute(
                     """
-                    SELECT publisher, title, url, published_at, retrieved_at,
-                           source_type, content_excerpt, data_json
+                    SELECT id, publisher, title, url, published_at, retrieved_at,
+                           source_type, content_excerpt
                     FROM research_evidence WHERE run_id = %s ORDER BY id
                     """,
                     (run_id,),
                 ).fetchall()
             ]
-            for evidence in item["evidence"]:
-                evidence["data"] = parse_json(evidence.pop("data_json"), {})
+            item["evidence"] = []
+            for evidence in evidence_rows:
+                payload = conn.execute(
+                    "SELECT data_json FROM research_evidence WHERE id = %s",
+                    (evidence.pop("id"),),
+                ).fetchone()
+                evidence["data"] = parse_json(
+                    payload["data_json"] if payload else "{}", {}
+                )
+                item["evidence"].append(evidence)
         self._json(item)
 
     def _admin_events(self) -> None:
@@ -1490,8 +1669,11 @@ class ApiHandler(BaseHTTPRequestHandler):
                 {
                     "ok": True,
                     "jobId": runtime_result.get("jobId"),
+                    "dispatchId": runtime_result.get("dispatchId"),
                     "agent": crawler["name"],
-                    "message": runtime_result.get("message", "AgentCore 任务已完成"),
+                    "message": runtime_result.get(
+                        "message", "AgentCore Runtime 已接收后台任务"
+                    ),
                     "runtimeSessionId": result.get("runtimeSessionId"),
                 },
                 HTTPStatus.ACCEPTED,

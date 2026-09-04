@@ -101,6 +101,7 @@ def main() -> None:
     created_article_id = None
     original_setting = None
     original_crawler_status = None
+    tested_crawler_id = None
     created_job_ids: list[int] = []
     try:
         status, health = request(PUBLIC_PORT, "GET", "/api/health")
@@ -149,6 +150,22 @@ def main() -> None:
         )
         check(status == 200 and metrics["daily"], "GEO metrics aggregation")
 
+        today = time.strftime("%Y-%m-%d", time.gmtime())
+        status, custom_metrics = request(
+            ADMIN_PORT,
+            "GET",
+            f"/api/admin/metrics?start={today}&end={today}",
+            admin=True,
+        )
+        check(
+            status == 200
+            and custom_metrics["rangeKey"] == "custom"
+            and custom_metrics["startDate"] == today
+            and custom_metrics["endDate"] == today
+            and len(custom_metrics["daily"]) == 1,
+            "Custom GEO metrics date range",
+        )
+
         status, created = request(
             ADMIN_PORT,
             "POST",
@@ -166,14 +183,44 @@ def main() -> None:
         check(status == 201 and created["status"] == "draft", "Create draft article")
         created_article_id = created["articleId"]
 
+        status, detail = request(
+            ADMIN_PORT,
+            "GET",
+            f"/api/admin/articles/{created_article_id}",
+            admin=True,
+        )
+        check(
+            status == 200 and detail["id"] == created_article_id,
+            "Read complete admin article detail",
+        )
+
+        status, reviewed = request(
+            ADMIN_PORT,
+            "PATCH",
+            "/api/admin/articles/batch",
+            {"ids": [created_article_id], "action": "review"},
+            admin=True,
+        )
+        check(
+            status == 200
+            and reviewed["count"] == 1
+            and reviewed["action"] == "review",
+            "Batch move article to review",
+        )
+
         status, published = request(
             ADMIN_PORT,
             "PATCH",
-            f"/api/admin/articles/{created_article_id}",
-            {"status": "published"},
+            "/api/admin/articles/batch",
+            {"ids": [created_article_id], "action": "publish"},
             admin=True,
         )
-        check(status == 200 and published["ok"], "Publish article")
+        check(
+            status == 200
+            and published["count"] == 1
+            and published["action"] == "publish",
+            "Batch publish article",
+        )
 
         status, public_test_article = request(
             PUBLIC_PORT, "GET", f"/api/v1/articles/{TEST_SLUG}"
@@ -200,6 +247,7 @@ def main() -> None:
         status, crawlers = request(ADMIN_PORT, "GET", "/api/admin/crawlers", admin=True)
         check(status == 200 and crawlers, "Crawler Agent listing")
         crawler = crawlers[-1]
+        tested_crawler_id = crawler["id"]
         original_crawler_status = crawler["status"]
         target_status = "running" if original_crawler_status == "paused" else "paused"
         status, crawler_update = request(
@@ -238,6 +286,21 @@ def main() -> None:
         status, events = request(ADMIN_PORT, "GET", "/api/admin/events", admin=True)
         check(status == 200 and events, "Admin activity event listing")
 
+        status, deleted = request(
+            ADMIN_PORT,
+            "PATCH",
+            "/api/admin/articles/batch",
+            {"ids": [created_article_id], "action": "delete", "confirm": True},
+            admin=True,
+        )
+        check(
+            status == 200
+            and deleted["count"] == 1
+            and deleted["action"] == "delete",
+            "Batch delete temporary draft",
+        )
+        created_article_id = None
+
         print("\nAll PostgreSQL end-to-end checks passed.")
     finally:
         with connection() as conn:
@@ -252,11 +315,11 @@ def main() -> None:
             if created_job_ids:
                 for job_id in created_job_ids:
                     conn.execute("DELETE FROM crawler_jobs WHERE id = %s", (job_id,))
-        if original_crawler_status is not None:
+        if original_crawler_status is not None and tested_crawler_id is not None:
             request(
                 ADMIN_PORT,
                 "PATCH",
-                "/api/admin/crawlers/6",
+                f"/api/admin/crawlers/{tested_crawler_id}",
                 {"status": original_crawler_status},
                 admin=True,
             )

@@ -187,8 +187,9 @@ EventBridge Scheduler
 
 所有计划使用 UTC、关闭 Flexible Time Window、最多重试 2 次、事件最长保留 300 秒。
 重试失败后事件进入 SQS DLQ。管理后台暂停或恢复爬虫时，会同步更新对应 Scheduler
-计划状态。Lambda bridge 超时为 900 秒，异步自动重试为 0；Scheduler 事件不会因为
-长时间的模型分析而重复执行、重复付费或重复生成文章。
+计划状态。Lambda bridge 只等待 AgentCore 返回 `accepted`，爬虫由 Runtime 的
+`async_task` 在后台继续执行；Lambda 超时为 60 秒，异步自动重试为 0，避免长任务
+占用 Lambda 并降低重复执行、重复付费或重复生成文章的风险。
 
 各 Agent 的生产职责与执行工具：
 
@@ -267,8 +268,8 @@ GET /agent/v1/articles/agent-runtime-control-plane
 
 - 7/30/90 天 GEO、人类流量和 Agent 流量统计
 - AI 引用率、Agent 来源、x402 收入与实时事件
-- A/B 页面访问、402 挑战、支付转化率和按时间范围统计
-- 内容发布状态、权威度、引用次数和访问模式管理
+- A/B 页面访问、402 挑战、支付转化率以及 7/30/90 天或自定义日期统计
+- 内容详情、批量发布/转审核/删除、权威度、引用次数和访问模式管理
 - 爬虫 Agent 启停、立即运行与批量调度
 - 研究输出：原始来源、结构化数据、分析过程、专业观点、结论和未来观察指标
 - AgentCore 任务记录和运行配置
@@ -290,10 +291,12 @@ GET /agent/v1/articles/agent-runtime-control-plane
 来源无变化时，任务会标记为 `skipped` 并关联上一版研究稿，避免重复消耗模型。
 
 研究生成不是抓取摘要拼接。Runtime 会先保存可追溯证据，再调用 GPT-5.6 Sol 执行事实与
-观点分离、跨来源对照、因果边界检查和产业影响推演。文章结构强制包含“核心观点”、
-“数据与证据”、“分析过程”、“专业观点与产业影响”以及“结论与未来观察”；金融内容
-额外强制显示“不构成投资建议”。`RESEARCH_AUTO_PUBLISH` 默认为 `true`；如需恢复人工
-审核流程，可将其设置为 `false`。
+观点分离、跨来源对照、因果边界检查和产业影响推演。结构化时间序列会直接进入生成、
+审计和修订上下文。系统根据主题和证据选择机制解释、比较研究、数据研究札记、行业田野
+观察、批判性综述或架构决策分析，不强制统一章节标题；每篇仍必须包含证据表、实质分析、
+替代解释和可由未来数据检验的结尾。语言要求普通读者可读，禁止公关套话；金融内容额外
+强制显示“不构成投资建议”。`RESEARCH_AUTO_PUBLISH` 默认为 `true`；如需恢复人工审核
+流程，可将其设置为 `false`。
 
 ### 管理员登录
 
@@ -332,8 +335,11 @@ PYTHONPATH=. .venv/bin/python scripts/create_admin_user.py \
 | `POST` | `/api/admin/auth/login` | 管理员登录并创建 Cookie 会话 |
 | `GET` | `/api/admin/auth/me` | 获取当前登录用户 |
 | `POST` | `/api/admin/auth/logout` | 注销并删除服务端会话 |
-| `GET` | `/api/admin/metrics` | GEO 与流量统计 |
+| `GET` | `/api/admin/metrics?range=30d` | GEO 与流量统计（7d/30d/90d） |
+| `GET` | `/api/admin/metrics?start=YYYY-MM-DD&end=YYYY-MM-DD` | 自定义统计时间范围（最多 366 天） |
 | `GET` | `/api/admin/articles` | 内容管理 |
+| `GET` | `/api/admin/articles/{id}` | 管理端完整内容详情与来源 |
+| `PATCH` | `/api/admin/articles/batch` | 批量发布、转审核或确认删除 |
 | `GET` | `/api/admin/crawlers` | 爬虫 Agent |
 | `POST` | `/api/admin/crawlers/{id}/run` | 运行 Agent |
 | `GET` | `/api/admin/research` | 深度研究输出列表 |

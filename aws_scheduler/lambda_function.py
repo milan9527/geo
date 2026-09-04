@@ -15,7 +15,7 @@ agentcore = boto3.client(
     region_name=REGION,
     config=Config(
         connect_timeout=10,
-        read_timeout=840,
+        read_timeout=50,
         retries={"total_max_attempts": 1, "mode": "standard"},
     ),
 )
@@ -31,6 +31,7 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         "scheduledTime": event.get("scheduledTime", "eventbridge"),
         "scheduleName": event.get("scheduleName"),
         "requestId": getattr(context, "aws_request_id", None),
+        "executionMode": "async",
         "allowPayment": bool(event.get("allowPayment")),
         "forceAnalysis": bool(event.get("forceAnalysis")),
         "overridePaused": bool(event.get("overridePaused")),
@@ -46,9 +47,13 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     body = json.loads(raw.decode("utf-8")) if raw else {}
     if response["statusCode"] >= 300:
         raise RuntimeError(f"AgentCore returned {response['statusCode']}: {body}")
+    if body.get("status") != "accepted":
+        raise RuntimeError(f"AgentCore did not accept asynchronous task: {body}")
     return {
-        "statusCode": response["statusCode"],
+        "statusCode": 202,
+        "runtimeStatusCode": response["statusCode"],
         "runtimeSessionId": response.get("runtimeSessionId"),
         "crawler": crawler_slug,
+        "accepted": True,
         "result": body,
     }
