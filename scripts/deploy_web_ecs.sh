@@ -31,6 +31,7 @@ X402_FACILITATOR_URL="${X402_FACILITATOR_URL:-https://x402.org/facilitator}"
 X402_NETWORK="${X402_NETWORK:-eip155:84532}"
 X402_DEFAULT_PRICE_USD="${X402_DEFAULT_PRICE_USD:-0.002}"
 X402_PUBLIC_BASE_URL="${X402_PUBLIC_BASE_URL:-}"
+X402_INTERNAL_PAYER_ADDRESSES="${X402_INTERNAL_PAYER_ADDRESSES:-0xac80AcB75B732f4E2141A0B0785BfD79F745F045}"
 PUBLIC_BASE_URL="${GEO_PUBLIC_BASE_URL:-}"
 INDEXING_NOTIFIER_FUNCTION="${GEO_INDEXING_NOTIFIER_FUNCTION:-geo-intelligence-indexing-notifier}"
 
@@ -231,6 +232,7 @@ jq \
   --arg x402Network "$X402_NETWORK" \
   --arg x402Price "$X402_DEFAULT_PRICE_USD" \
   --arg x402PublicBaseUrl "$X402_PUBLIC_BASE_URL" \
+  --arg x402InternalPayers "$X402_INTERNAL_PAYER_ADDRESSES" \
   --arg publicBaseUrl "$PUBLIC_BASE_URL" \
   --arg indexingFunction "$INDEXING_NOTIFIER_FUNCTION" \
   --arg indexnowKey "$INDEXNOW_KEY" \
@@ -260,6 +262,7 @@ jq \
                         and .name != "X402_NETWORK"
                         and .name != "X402_DEFAULT_PRICE_USD"
                         and .name != "X402_PUBLIC_BASE_URL"
+                        and .name != "X402_INTERNAL_PAYER_ADDRESSES"
                         and .name != "GEO_PUBLIC_BASE_URL"
                         and .name != "GEO_INDEXING_NOTIFIER_FUNCTION"
                         and .name != "INDEXNOW_KEY"
@@ -272,6 +275,7 @@ jq \
                       {"name": "X402_NETWORK", "value": $x402Network},
                       {"name": "X402_DEFAULT_PRICE_USD", "value": $x402Price},
                       {"name": "X402_PUBLIC_BASE_URL", "value": $x402PublicBaseUrl},
+                      {"name": "X402_INTERNAL_PAYER_ADDRESSES", "value": $x402InternalPayers},
                       {"name": "GEO_PUBLIC_BASE_URL", "value": $publicBaseUrl},
                       {"name": "GEO_INDEXING_NOTIFIER_FUNCTION", "value": $indexingFunction},
                       {"name": "INDEXNOW_KEY", "value": $indexnowKey}

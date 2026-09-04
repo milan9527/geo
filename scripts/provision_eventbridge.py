@@ -30,7 +30,7 @@ SCHEDULES = [
     ("geo-market-signal", "market-signal", "cron(0 * * * ? *)", "ENABLED"),
     ("geo-evidence-verifier", "evidence-verifier", "cron(0/10 * * * ? *)", "ENABLED"),
     ("geo-cloud-release-watch", "cloud-release-watch", "cron(0 0/2 * * ? *)", "ENABLED"),
-    ("geo-commerce-feed-miner", "commerce-feed-miner", "cron(0 0/3 * * ? *)", "DISABLED"),
+    ("geo-commerce-feed-miner", "commerce-feed-miner", "cron(0 0/12 * * ? *)", "ENABLED"),
 ]
 
 
@@ -38,6 +38,7 @@ def target(crawler_slug: str, marker: str = "eventbridge") -> dict:
     api_input = {
         "crawlerSlug": crawler_slug,
         "scheduledTime": marker,
+        "allowPayment": crawler_slug == "commerce-feed-miner",
     }
     return {
         "Arn": TARGET_ARN,

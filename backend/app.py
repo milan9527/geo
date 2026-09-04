@@ -115,6 +115,14 @@ CRAWLER_CONTACT_URL = os.environ.get(
         "https://d1tsbnft7iv51.cloudfront.net/",
     ),
 )
+X402_INTERNAL_PAYER_ADDRESSES = {
+    address.strip().lower()
+    for address in os.environ.get(
+        "X402_INTERNAL_PAYER_ADDRESSES",
+        "0xac80AcB75B732f4E2141A0B0785BfD79F745F045",
+    ).split(",")
+    if address.strip()
+}
 
 
 class _NoRedirect(HTTPRedirectHandler):
@@ -1688,6 +1696,11 @@ The open article and JSON-LD representation may be quoted with a link and clear 
             or self.headers.get("X-Agent-Name")
             or "Machine client"
         )[:120]
+        request_id = (
+            self.headers.get("X-Amz-Cf-Id")
+            or self.headers.get("X-Request-Id")
+            or secrets.token_hex(12)
+        )[:160]
         sections = parse_json(row["body_json"], [])
         claims = []
         for section in sections:
@@ -1749,7 +1762,16 @@ The open article and JSON-LD representation may be quoted with a link and clear 
                     event_type="x402_service_error",
                     article_id=row["id"],
                     agent_name=agent_name,
-                    metadata={"variant": "B", "error": str(error)[:500]},
+                    metadata={
+                        "variant": "B",
+                        "articleSlug": row["slug"],
+                        "requestId": request_id,
+                        "paymentSupplied": bool(
+                            self.headers.get("PAYMENT-SIGNATURE")
+                            or self.headers.get("X-PAYMENT")
+                        ),
+                        "error": str(error)[:500],
+                    },
                 )
             self._send_instructions(
                 error_instructions(error),
@@ -1774,6 +1796,9 @@ The open article and JSON-LD representation may be quoted with a link and clear 
                     agent_name=agent_name,
                     metadata={
                         "variant": "B",
+                        "articleSlug": row["slug"],
+                        "requestId": request_id,
+                        "paymentSupplied": supplied_payment,
                         "priceUsd": payment_request.price_usd,
                         "network": X402_NETWORK,
                     },
@@ -1795,6 +1820,9 @@ The open article and JSON-LD representation may be quoted with a link and clear 
                     agent_name=agent_name,
                     metadata={
                         "variant": "B",
+                        "articleSlug": row["slug"],
+                        "requestId": request_id,
+                        "paymentSupplied": True,
                         "priceUsd": payment_request.price_usd,
                         "network": settlement.network or X402_NETWORK,
                         "error": (settlement.error_reason or "")[:500],
@@ -1826,6 +1854,9 @@ The open article and JSON-LD representation may be quoted with a link and clear 
                 agent_name=agent_name,
                 metadata={
                     "variant": "B",
+                    "articleSlug": row["slug"],
+                    "requestId": request_id,
+                    "paymentSupplied": True,
                     "priceUsd": payment_request.price_usd,
                     "amountUsd": payment_request.price_usd,
                     "amountBaseUnits": requirements.amount,
@@ -1951,10 +1982,14 @@ The open article and JSON-LD representation may be quoted with a link and clear 
                 dict(row)
                 for row in conn.execute(
                     """
-                    SELECT event_type, visitor_type, agent_name, occurred_at, metadata
-                    FROM traffic_events
-                    WHERE occurred_at >= %s AND occurred_at < %s
-                    ORDER BY occurred_at
+                    SELECT te.id, te.event_type, te.visitor_type,
+                           te.agent_name, te.article_id, te.occurred_at,
+                           te.metadata, a.slug article_slug,
+                           a.title article_title
+                    FROM traffic_events te
+                    LEFT JOIN articles a ON a.id = te.article_id
+                    WHERE te.occurred_at >= %s AND te.occurred_at < %s
+                    ORDER BY te.occurred_at
                     """,
                     (previous_start, next_date.isoformat()),
                 ).fetchall()
@@ -1994,29 +2029,70 @@ The open article and JSON-LD representation may be quoted with a link and clear 
             elif row["access_variant"] == "B":
                 target["variantB"] += int(row["requests"] or 0)
 
-        def empty_business() -> dict[str, float]:
+        def empty_business() -> dict:
             return {
                 "citations": 0,
                 "clicks": 0,
                 "payments": 0,
                 "revenue": 0.0,
                 "challenges": 0,
+                "paymentAttempts": 0,
+                "verificationFailures": 0,
+                "settlementFailures": 0,
+                "serviceErrors": 0,
+                "internalPayments": 0,
+                "externalPayments": 0,
+                "internalRevenue": 0.0,
+                "externalRevenue": 0.0,
+                "payers": set(),
+                "payees": set(),
+                "transactionHashes": set(),
             }
 
-        def add_business(totals: dict[str, float], event: dict) -> None:
+        def add_business(totals: dict, event: dict) -> None:
             event_type = event["event_type"]
             metadata = parse_json(event["metadata"], {})
             if event_type == "citation":
                 totals["citations"] += 1
             if event_type == "human_click":
                 totals["clicks"] += 1
+            if event_type in {
+                "x402_payment",
+                "x402_verification_failed",
+                "x402_settlement_failed",
+            }:
+                totals["paymentAttempts"] += 1
             if event_type == "x402_payment":
-                totals["payments"] += 1
-                totals["revenue"] += float(
+                amount = float(
                     metadata.get("amountUsd", metadata.get("amount", 0)) or 0
                 )
+                totals["payments"] += 1
+                totals["revenue"] += amount
+                payer = str(metadata.get("payer") or "").strip().lower()
+                payee = str(metadata.get("payTo") or "").strip().lower()
+                transaction_hash = str(
+                    metadata.get("transactionHash") or ""
+                ).strip().lower()
+                if payer:
+                    totals["payers"].add(payer)
+                if payee:
+                    totals["payees"].add(payee)
+                if transaction_hash:
+                    totals["transactionHashes"].add(transaction_hash)
+                if payer and payer in X402_INTERNAL_PAYER_ADDRESSES:
+                    totals["internalPayments"] += 1
+                    totals["internalRevenue"] += amount
+                else:
+                    totals["externalPayments"] += 1
+                    totals["externalRevenue"] += amount
             if event_type == "x402_challenge":
                 totals["challenges"] += 1
+            if event_type == "x402_verification_failed":
+                totals["verificationFailures"] += 1
+            if event_type == "x402_settlement_failed":
+                totals["settlementFailures"] += 1
+            if event_type == "x402_service_error":
+                totals["serviceErrors"] += 1
 
         current_access = empty_access()
         previous_access = empty_access()
@@ -2063,6 +2139,68 @@ The open article and JSON-LD representation may be quoted with a link and clear 
             add_business(target, event)
             if event_day in daily_business:
                 add_business(daily_business[event_day], event)
+
+        x402_status_labels = {
+            "x402_challenge": "challenge",
+            "x402_payment": "settled",
+            "x402_verification_failed": "verification_failed",
+            "x402_settlement_failed": "settlement_failed",
+            "x402_service_error": "service_error",
+        }
+        recent_x402_events = []
+        for event in reversed(business_events):
+            event_day = str(event["occurred_at"])[:10]
+            event_type = str(event["event_type"])
+            if (
+                not start <= event_day <= end
+                or event_type not in x402_status_labels
+            ):
+                continue
+            metadata = parse_json(event["metadata"], {})
+            payer = str(metadata.get("payer") or "").strip()
+            recent_x402_events.append(
+                {
+                    "id": int(event["id"]),
+                    "type": event_type,
+                    "status": x402_status_labels[event_type],
+                    "occurredAt": event["occurred_at"],
+                    "agentName": event["agent_name"] or "Machine client",
+                    "articleSlug": event.get("article_slug") or "",
+                    "articleTitle": event.get("article_title") or "",
+                    "requestId": str(metadata.get("requestId") or ""),
+                    "paymentSupplied": bool(
+                        metadata.get(
+                            "paymentSupplied",
+                            event_type
+                            in {
+                                "x402_payment",
+                                "x402_verification_failed",
+                                "x402_settlement_failed",
+                            },
+                        )
+                    ),
+                    "amountUsd": float(
+                        metadata.get(
+                            "amountUsd",
+                            metadata.get("priceUsd", 0),
+                        )
+                        or 0
+                    ),
+                    "network": str(metadata.get("network") or ""),
+                    "payer": payer,
+                    "payTo": str(metadata.get("payTo") or ""),
+                    "transactionHash": str(
+                        metadata.get("transactionHash") or ""
+                    ),
+                    "internal": bool(
+                        payer
+                        and payer.lower() in X402_INTERNAL_PAYER_ADDRESSES
+                    ),
+                    "error": str(metadata.get("error") or "")[:300],
+                }
+            )
+            if len(recent_x402_events) == 20:
+                break
 
         daily = [
             {
@@ -2173,6 +2311,23 @@ The open article and JSON-LD representation may be quoted with a link and clear 
                     "variantAViews": int(current_access["variantA"]),
                     "variantBViews": int(current_access["variantB"]),
                     "challenges": int(current_business["challenges"]),
+                    "unpaidChallengesEstimate": max(
+                        0,
+                        int(current_business["challenges"])
+                        - int(current_business["payments"]),
+                    ),
+                    "paymentAttempts": int(
+                        current_business["paymentAttempts"]
+                    ),
+                    "verificationFailures": int(
+                        current_business["verificationFailures"]
+                    ),
+                    "settlementFailures": int(
+                        current_business["settlementFailures"]
+                    ),
+                    "serviceErrors": int(
+                        current_business["serviceErrors"]
+                    ),
                     "payments": int(current_business["payments"]),
                     "conversionRate": round(
                         current_business["payments"]
@@ -2180,7 +2335,38 @@ The open article and JSON-LD representation may be quoted with a link and clear 
                         * 100,
                         1,
                     ),
+                    "paymentSuccessRate": round(
+                        current_business["payments"]
+                        / max(1, current_business["paymentAttempts"])
+                        * 100,
+                        1,
+                    ),
                     "revenue": round(current_business["revenue"], 6),
+                    "averagePayment": round(
+                        current_business["revenue"]
+                        / max(1, current_business["payments"]),
+                        6,
+                    ),
+                    "internalPayments": int(
+                        current_business["internalPayments"]
+                    ),
+                    "externalPayments": int(
+                        current_business["externalPayments"]
+                    ),
+                    "internalRevenue": round(
+                        current_business["internalRevenue"],
+                        6,
+                    ),
+                    "externalRevenue": round(
+                        current_business["externalRevenue"],
+                        6,
+                    ),
+                    "uniquePayers": len(current_business["payers"]),
+                    "uniquePayees": len(current_business["payees"]),
+                    "confirmedTransactions": len(
+                        current_business["transactionHashes"]
+                    ),
+                    "recentEvents": recent_x402_events,
                 },
                 "dataSource": {
                     "traffic": "cloudfront-standard-logs-v2",

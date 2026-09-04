@@ -46,6 +46,43 @@ const relativeTime = (value) => {
   if (minutes < 1440) return `${Math.floor(minutes / 60)} 小时前`;
   return `${Math.floor(minutes / 1440)} 天前`;
 };
+const compactIdentifier = (value, head = 8, tail = 6) => {
+  const text = String(value || "");
+  return text.length > head + tail + 3
+    ? `${text.slice(0, head)}…${text.slice(-tail)}`
+    : text || "—";
+};
+const x402EventLabels = {
+  x402_challenge: "402 Challenge",
+  x402_payment: "链上结算成功",
+  x402_verification_failed: "支付凭证验证失败",
+  x402_settlement_failed: "链上结算失败",
+  x402_service_error: "支付服务错误",
+};
+
+function renderX402Event(event) {
+  const transactionUrl = event.transactionHash
+    ? safeExternalUrl(`https://sepolia.basescan.org/tx/${event.transactionHash}`)
+    : "";
+  const detail = event.error
+    || (event.transactionHash ? compactIdentifier(event.transactionHash) : compactIdentifier(event.requestId));
+  return `
+    <div class="x402-event ${escapeHtml(event.status)}">
+      <span class="x402-event-state">${escapeHtml(x402EventLabels[event.type] || event.type)}</span>
+      <div>
+        <strong>${escapeHtml(event.articleTitle || event.articleSlug || "付费机器内容")}</strong>
+        <small>${escapeHtml(event.agentName)} · ${relativeTime(event.occurredAt)}</small>
+      </div>
+      <div class="x402-event-payment">
+        <b>${event.type === "x402_payment" ? money(event.amountUsd) : "—"}</b>
+        <small>${event.internal ? "内部 Agent" : event.payer ? "外部付款人" : "未提供付款"}</small>
+      </div>
+      ${transactionUrl
+        ? `<a href="${escapeHtml(transactionUrl)}" target="_blank" rel="noreferrer">${escapeHtml(detail)}</a>`
+        : `<span class="x402-event-detail">${escapeHtml(detail)}</span>`}
+    </div>
+  `;
+}
 
 async function api(path, options = {}) {
   const response = await fetch(`${API}${path}`, {
@@ -225,15 +262,31 @@ function renderDashboard() {
       ${metricCard("i-users", "teal", "Agent 独立访问", fmt(summary.agentViews), data.growth.agent, `占总流量 ${summary.agentShare}%`)}
       ${metricCard("i-citation", "purple", "AI 内容引用", fmt(summary.citations), data.growth.citations, `引用率 ${summary.citationRate}%`)}
       ${metricCard("i-trend", "blue", "人类独立访问", fmt(summary.humanViews), data.growth.human, `${fmt(summary.humanRequests || 0)} 次页面请求`)}
-      ${metricCard("i-wallet", "amber", "x402 收入", money(summary.revenue), data.growth.revenue, `${fmt(summary.payments)} 笔支付`)}
+      ${metricCard("i-wallet", "amber", "x402 测试网结算", money(summary.revenue), data.growth.revenue, `${fmt(ab.internalPayments)} 笔内部 · ${fmt(ab.externalPayments)} 笔外部`)}
     </section>
     <section class="panel ab-panel">
       <div class="panel-header"><div><p>GEO + X402 EXPERIMENT</p><h2>Agent 内容 A/B 实测</h2></div><span>${data.startDate} 至 ${data.endDate}</span></div>
       <div class="ab-grid">
         <div><span>A · 开放机器页</span><strong>${fmt(ab.variantAViews)}</strong><small>无需支付的 Agent 请求</small></div>
         <div><span>B · x402 付费页</span><strong>${fmt(ab.variantBViews)}</strong><small>${fmt(ab.challenges)} 次支付挑战</small></div>
-        <div><span>支付转化</span><strong>${ab.conversionRate}%</strong><small>${fmt(ab.payments)} 笔链上结算</small></div>
-        <div><span>机器流量收入</span><strong>${money(ab.revenue)}</strong><small>由 PAYMENT-RESPONSE 结算事件确认</small></div>
+        <div><span>支付尝试成功率</span><strong>${ab.paymentSuccessRate}%</strong><small>${fmt(ab.payments)} / ${fmt(ab.paymentAttempts)} 次付款尝试</small></div>
+        <div><span>测试网结算总额</span><strong>${money(ab.revenue)}</strong><small>外部收入 ${money(ab.externalRevenue)}</small></div>
+      </div>
+      <div class="x402-detail-grid">
+        <div><span>未跟进 Challenge</span><strong>${fmt(ab.unpaidChallengesEstimate)}</strong><small>challenge − 成功结算，近似值</small></div>
+        <div><span>凭证验证失败</span><strong>${fmt(ab.verificationFailures)}</strong><small>已提交支付头但验证未通过</small></div>
+        <div><span>链上结算失败</span><strong>${fmt(ab.settlementFailures)}</strong><small>凭证有效但结算失败</small></div>
+        <div><span>支付服务错误</span><strong>${fmt(ab.serviceErrors)}</strong><small>商户配置或 facilitator 异常</small></div>
+        <div><span>内部 Agent 结算</span><strong>${fmt(ab.internalPayments)}</strong><small>${money(ab.internalRevenue)} · 测试流量</small></div>
+        <div><span>外部付款结算</span><strong>${fmt(ab.externalPayments)}</strong><small>${money(ab.externalRevenue)} · 真实变现</small></div>
+        <div><span>独立付款地址</span><strong>${fmt(ab.uniquePayers)}</strong><small>${fmt(ab.confirmedTransactions)} 个交易哈希</small></div>
+        <div><span>Challenge 转结算</span><strong>${ab.conversionRate}%</strong><small>仅作漏斗观察，不等于付款意图</small></div>
+      </div>
+      <div class="x402-events">
+        <div class="x402-events-header"><strong>最近 x402 事件</strong><span>Base Sepolia · 自动支付保持启用</span></div>
+        ${(ab.recentEvents || []).length
+          ? ab.recentEvents.map(renderX402Event).join("")
+          : '<div class="empty-state">所选周期暂无 x402 事件。</div>'}
       </div>
     </section>
     <section class="dashboard-grid">

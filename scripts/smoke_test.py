@@ -244,7 +244,21 @@ def main() -> None:
         status, metrics = request(
             ADMIN_PORT, "GET", "/api/admin/metrics?range=30d", admin=True
         )
-        check(status == 200 and metrics["daily"], "GEO metrics aggregation")
+        check(
+            status == 200
+            and metrics["daily"]
+            and {
+                "challenges",
+                "paymentAttempts",
+                "verificationFailures",
+                "settlementFailures",
+                "serviceErrors",
+                "internalPayments",
+                "externalPayments",
+                "recentEvents",
+            }.issubset(metrics["abTest"]),
+            "GEO and detailed x402 metrics aggregation",
+        )
 
         today = time.strftime("%Y-%m-%d", time.gmtime())
         status, custom_metrics = request(

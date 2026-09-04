@@ -203,7 +203,7 @@ Python 3.13 Alpine ARM64 镜像，以非 root UID `10001` 运行；当前 ECR �
 | ECR | `geo-intelligence-api` | Alpine 镜像扫描 0 findings |
 | ECR | `geo-intelligence-agent` | 固定 digest 的 Alpine 镜像，扫描 0 findings |
 | IAM | `geo-intelligence-agentcore-role` | 项目资源范围内的 Bedrock、Data API、工具和日志权限 |
-| EventBridge Scheduler | `geo-intelligence-crawlers` | 6 条 UTC 计划，5 条启用、1 条暂停 |
+| EventBridge Scheduler | `geo-intelligence-crawlers` | 6 条 UTC 计划全部启用 |
 | Lambda | `geo-intelligence-scheduler-bridge` | ARM64 Python 3.13，Scheduler 到 AgentCore 桥接 |
 | Lambda | `geo-intelligence-traffic-aggregator` | ARM64 Python 3.13，CloudFront 日志 HLL 聚合 |
 | SQS | `geo-intelligence-traffic-log-events` | 日志聚合缓冲队列，失败转入专用 DLQ |
@@ -242,7 +242,7 @@ EventBridge Scheduler
 | Research Coder | 每 20 分钟 | ENABLED |
 | Market Signal | 每小时 | ENABLED |
 | Cloud Release Watch | 每 2 小时 | ENABLED |
-| Commerce Feed Miner | 每 3 小时 | DISABLED，与后台暂停状态一致 |
+| Commerce Feed Miner | 每 12 小时 | ENABLED，固定允许测试网 x402 支付 |
 
 所有计划使用 UTC、关闭 Flexible Time Window、最多重试 2 次、事件最长保留 300 秒。
 重试失败后事件进入 SQS DLQ。管理后台暂停或恢复爬虫时，会同步更新对应 Scheduler
@@ -302,8 +302,9 @@ Commerce Feed Miner 已在正常研究任务中购买本站 Variant B 内容。�
 HTTP 结果和交易哈希均写入 Aurora。代表性交易：
 `0x8257af51cd0b8a1efc97dd308f68f930e0ac38a07492ee5288d5141dc612f289`。
 
-为防止无人值守持续扣费，Commerce Feed Miner 的 Scheduler 默认暂停；只有后台手动
-运行并明确传入 `allowPayment=true` 才会付款。其他五个 Agent 保持自动调度。
+Commerce Feed Miner 的 Scheduler 持续启用，每 12 小时运行一次，计划输入固定包含
+`allowPayment=true`。每次 AgentCore Payment Session 的最高支出为 `0.01 USD`，当前只在
+Base Sepolia 测试网使用测试 USDC。管理后台手动“运行 x402”也会明确允许支付。
 
 ## 用户内容站
 
@@ -326,8 +327,9 @@ GET /agent/v1/articles/agent-runtime-control-plane
 ## 管理后台
 
 - 7/30/90 天 GEO、人类流量和 Agent 流量统计
-- AI 引用率、Agent 来源、x402 收入与实时事件
-- A/B 页面访问、402 挑战、支付转化率以及 7/30/90 天或自定义日期统计
+- AI 引用率、Agent 来源、x402 测试网结算与实时事件
+- A/B 页面访问、402 challenge、支付尝试、验证/结算失败、服务错误、内部/外部付款、
+  交易哈希以及 7/30/90 天或自定义日期统计
 - 内容详情、批量发布/转审核/删除、权威度、引用次数和访问模式管理
 - 爬虫 Agent 启停、立即运行与批量调度
 - 数据源注册中心：来源增删改查、HTTPS 连通性测试、可信等级、采集方式和多 Agent 动态分配
@@ -370,8 +372,9 @@ FINRA、CFTC、CFPB、PCAOB、FTC、ECB、IMF 和 World Bank。SEC 请求使用�
 `User-Agent`，限制为每秒 1 次，遇到 429/503 时遵守 `Retry-After` 并退避，且同一来源
 至少间隔 15 分钟再分配。后台可为每个来源配置 User-Agent、每秒请求数、最短重抓间隔和
 重试次数；Runtime 在生成代码外层强制执行这些规则，不能仅依赖模型提示。
-连通性测试只接受公开 HTTPS 443 地址，并拒绝解析到内网、环回或保留地址。x402 来源仍然
-只有在任务显式传入 `allowPayment=true` 时才会付款；注册或测试来源不会触发支付。
+连通性测试只接受公开 HTTPS 443 地址，并拒绝解析到内网、环回或保留地址。Commerce
+Feed Miner 的定时输入固定传入 `allowPayment=true`；其他任务仍需显式授权，注册或测试
+来源不会触发支付。
 
 研究生成不是抓取摘要拼接。Runtime 会先保存可追溯证据，再调用 GPT-5.6 Sol 执行事实与
 观点分离、跨来源对照、因果边界检查和产业影响推演。结构化时间序列会直接进入生成、
