@@ -340,7 +340,7 @@ main { grid-column: 2; min-width: 0; padding: 0 28px 34px; }
 .crawler-metrics div{text-align:center;border-left:1px solid #e8ecea}.crawler-metrics div:first-child{border-left:0}
 .crawler-metrics strong,.crawler-metrics span{display:block}.crawler-metrics strong{font-size:11px}.crawler-metrics span{margin-top:3px;color:#929c99;font-size:6px}
 .crawler-card-actions{display:flex;gap:7px;margin-top:13px}.crawler-card-actions button{flex:1;padding:0 7px;white-space:nowrap}
-.source-registry-summary { display: grid; grid-template-columns: repeat(4, 1fr); gap: 11px; margin-bottom: 14px; }
+.source-registry-summary { display: grid; grid-template-columns: repeat(5, 1fr); gap: 11px; margin-bottom: 14px; }
 .source-registry-summary > div { padding: 15px 17px; background: #fff; border: 1px solid var(--line); border-radius: 10px; }
 .source-registry-summary span, .source-registry-summary strong { display: block; }
 .source-registry-summary span { color: #83908c; font-size: 8px; }
@@ -374,6 +374,12 @@ main { grid-column: 2; min-width: 0; padding: 0 28px 34px; }
 .source-agent-fieldset span strong, .source-agent-fieldset span small { display: block; }
 .source-agent-fieldset span strong { color: #364641; font-size: 8px; }
 .source-agent-fieldset span small { margin-top: 2px; color: #8b9692; font-size: 7px; }
+.source-auth-fieldset > .source-auth-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.source-auth-fieldset > .source-auth-grid[hidden] { display: none; }
+.source-auth-fieldset .source-auth-grid label { display: grid; grid-template-columns: 1fr; align-items: initial; gap: 6px; padding: 0; background: transparent; }
+.source-auth-fieldset .source-auth-grid input, .source-auth-fieldset .source-auth-grid select { width: 100%; }
+.source-auth-fieldset > label.source-checkbox { margin-top: 10px; padding: 0; background: transparent; }
+.source-auth-note { margin: 9px 0 0; color: #7c8a86; font-size: 7px; line-height: 1.6; }
 .modal label.source-checkbox { display: flex; grid-template-columns: none; align-items: center; justify-content: flex-start; gap: 8px; }
 .job-timeline { margin-top: 15px; }
 .job-row { display:grid;grid-template-columns:14px 170px 1fr 90px 80px;align-items:center;gap:12px;min-height:56px;border-top:1px solid #e8ecea; }

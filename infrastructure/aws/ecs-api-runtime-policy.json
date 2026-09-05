@@ -20,6 +20,18 @@
       "Resource": "arn:aws:secretsmanager:us-east-1:632930644527:secret:rds!cluster-5781692e-74a2-45db-a7a0-5c97200f9e7f-agmIEg"
     },
     {
+      "Sid": "ManageDataSourceCredentials",
+      "Effect": "Allow",
+      "Action": [
+        "secretsmanager:CreateSecret",
+        "secretsmanager:PutSecretValue",
+        "secretsmanager:GetSecretValue",
+        "secretsmanager:DescribeSecret",
+        "secretsmanager:TagResource"
+      ],
+      "Resource": "arn:aws:secretsmanager:us-east-1:632930644527:secret:geo-intelligence/data-sources/*"
+    },
+    {
       "Sid": "InvokeCrawlerBridge",
       "Effect": "Allow",
       "Action": "lambda:InvokeFunction",

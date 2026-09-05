@@ -903,12 +903,12 @@ ARTICLES = [
 
 
 AGENTS = [
-    ("Research Coder", "research-coder", "Code Interpreter", ["AI", "云计算"], "running", "*/20 * * * *"),
-    ("Render Scout", "render-scout", "Browser Tool", ["电商", "媒体"], "running", "*/15 * * * *"),
-    ("Market Signal", "market-signal", "Code Interpreter", ["金融", "证券"], "running", "0 */1 * * *"),
-    ("Evidence Verifier", "evidence-verifier", "Codex SDK", ["全部行业"], "running", "*/10 * * * *"),
+    ("Research Coder", "research-coder", "Code Interpreter", ["AI", "云计算", "中国大模型", "学术论文"], "running", "*/20 * * * *"),
+    ("Render Scout", "render-scout", "Browser Tool", ["全球电商", "媒体", "支付"], "running", "*/15 * * * *"),
+    ("Market Signal", "market-signal", "Code Interpreter", ["金融", "A股", "证券", "加密货币"], "running", "0 */1 * * *"),
+    ("Evidence Verifier", "evidence-verifier", "Codex SDK", ["Agent", "GitHub", "学术论文", "全部行业"], "running", "*/10 * * * *"),
     ("Cloud Release Watch", "cloud-release-watch", "Browser Tool", ["云计算"], "idle", "0 */2 * * *"),
-    ("Commerce Feed Miner", "commerce-feed-miner", "Code Interpreter", ["电商"], "paused", "0 */3 * * *"),
+    ("Commerce Feed Miner", "commerce-feed-miner", "Code Interpreter", ["全球电商", "支付", "媒体"], "paused", "0 */3 * * *"),
 ]
 
 DATA_SOURCES = [
@@ -1078,6 +1078,62 @@ SEC_REQUEST_POLICY = {
     }
 }
 
+GITHUB_REQUEST_POLICY = {
+    "requestPolicy": {
+        "userAgent": (
+            "ApertureGEOResearchBot/2.0 "
+            "(Aperture GEO; +{contactUrl})"
+        ),
+        "requestsPerSecond": 1,
+        "cacheTtlSeconds": 3600,
+        "maxRetries": 2,
+        "retryStatusCodes": [403, 429, 503],
+        "maxRetryAfterSeconds": 120,
+    }
+}
+
+ARXIV_REQUEST_POLICY = {
+    "requestPolicy": {
+        "userAgent": (
+            "ApertureGEOResearchBot/2.0 "
+            "(Aperture GEO; +{contactUrl})"
+        ),
+        "requestsPerSecond": 0.33,
+        "cacheTtlSeconds": 3600,
+        "maxRetries": 2,
+        "retryStatusCodes": [429, 503],
+        "maxRetryAfterSeconds": 120,
+    }
+}
+
+PUBLIC_API_REQUEST_POLICY = {
+    "requestPolicy": {
+        "userAgent": (
+            "ApertureGEOResearchBot/2.0 "
+            "(Aperture GEO; +{contactUrl})"
+        ),
+        "requestsPerSecond": 0.5,
+        "cacheTtlSeconds": 900,
+        "maxRetries": 2,
+        "retryStatusCodes": [429, 503],
+        "maxRetryAfterSeconds": 120,
+    }
+}
+
+PUBLIC_WEB_REQUEST_POLICY = {
+    "requestPolicy": {
+        "userAgent": (
+            "ApertureGEOResearchBot/2.0 "
+            "(Aperture GEO; +{contactUrl})"
+        ),
+        "requestsPerSecond": 0.5,
+        "cacheTtlSeconds": 1800,
+        "maxRetries": 1,
+        "retryStatusCodes": [429, 503],
+        "maxRetryAfterSeconds": 120,
+    }
+}
+
 
 DATA_SOURCES += [
     # AI vendors, research institutions, and specialist media.
@@ -1163,6 +1219,76 @@ DATA_SOURCES += [
     catalog_source("Federal Reserve Bank of New York", "New York Fed Markets", "https://www.newyorkfed.org/markets", "finance", "央行市场操作资料", "web", ["market-signal"]),
     catalog_source("U.S. SEC", "SEC Press Releases RSS", "https://www.sec.gov/news/pressreleases.rss", "finance", "监管机构官方发布", "feed", ["market-signal"], config=SEC_REQUEST_POLICY),
     catalog_source("Reuters", "Reuters Markets", "https://www.reuters.com/markets/", "finance", "国际通讯社", "web", ["market-signal"], status="paused", access_model="authenticated", trust_tier=2, notes="返回 401；需内容许可或 Web Bot Auth"),
+]
+
+DATA_SOURCES += [
+    # GitHub product changes and major AI/Agent SDK releases.
+    catalog_source("GitHub", "GitHub Changelog RSS", "https://github.blog/changelog/feed/", "agent", "开发者平台官方变更", "feed", ["evidence-verifier"], max_items=8, config=GITHUB_REQUEST_POLICY),
+    catalog_source("OpenAI", "OpenAI Python SDK Releases", "https://api.github.com/repos/openai/openai-python/releases?per_page=20", "agent", "官方 SDK GitHub Releases", "api", ["evidence-verifier"], max_items=8, config=GITHUB_REQUEST_POLICY),
+    catalog_source("Anthropic", "Anthropic Python SDK Releases", "https://api.github.com/repos/anthropics/anthropic-sdk-python/releases?per_page=20", "agent", "官方 SDK GitHub Releases", "api", ["evidence-verifier"], max_items=8, config=GITHUB_REQUEST_POLICY),
+    catalog_source("Google", "Gemini CLI Releases", "https://api.github.com/repos/google-gemini/gemini-cli/releases?per_page=20", "agent", "官方 Agent 工具 GitHub Releases", "api", ["evidence-verifier"], max_items=8, config=GITHUB_REQUEST_POLICY),
+    catalog_source("AWS", "Bedrock AgentCore Starter Toolkit Releases", "https://api.github.com/repos/aws/bedrock-agentcore-starter-toolkit/releases?per_page=20", "agent", "官方 Agent 工具 GitHub Releases", "api", ["evidence-verifier"], max_items=8, config=GITHUB_REQUEST_POLICY),
+
+    # Academic papers and daily research discovery.
+    catalog_source("arXiv", "arXiv Machine Learning Latest", "https://export.arxiv.org/api/query?search_query=cat%3Acs.LG&sortBy=submittedDate&sortOrder=descending&max_results=20", "ai", "机器学习预印本 API", "api", ["research-coder"], max_items=8, config=ARXIV_REQUEST_POLICY),
+    catalog_source("arXiv", "arXiv Computation and Language Latest", "https://export.arxiv.org/api/query?search_query=cat%3Acs.CL&sortBy=submittedDate&sortOrder=descending&max_results=20", "ai", "自然语言处理预印本 API", "api", ["research-coder"], max_items=8, config=ARXIV_REQUEST_POLICY),
+    catalog_source("arXiv", "arXiv Multiagent Systems Latest", "https://export.arxiv.org/api/query?search_query=cat%3Acs.MA&sortBy=submittedDate&sortOrder=descending&max_results=20", "agent", "多 Agent 系统预印本 API", "api", ["evidence-verifier"], max_items=8, config=ARXIV_REQUEST_POLICY),
+    catalog_source("Hugging Face", "Hugging Face Daily Papers API", "https://huggingface.co/api/daily_papers?limit=20", "ai", "社区论文精选 API", "api", ["research-coder"], trust_tier=2, max_items=8, config=PUBLIC_API_REQUEST_POLICY),
+
+    # Chinese foundation-model vendors: official news, changelogs, and product documentation.
+    catalog_source("Alibaba Qwen", "Qwen Official Blog", "https://qwenlm.github.io/blog/", "ai", "中国大模型厂商官方博客", "browser", ["research-coder"], max_items=6, config=PUBLIC_WEB_REQUEST_POLICY),
+    catalog_source("DeepSeek", "DeepSeek Official News", "https://api-docs.deepseek.com/news/", "ai", "中国大模型厂商官方发布", "browser", ["research-coder"], max_items=6, config=PUBLIC_WEB_REQUEST_POLICY),
+    catalog_source("Zhipu AI", "Zhipu AI News", "https://www.zhipuai.cn/news", "ai", "中国大模型厂商官方新闻", "browser", ["research-coder"], max_items=6, config=PUBLIC_WEB_REQUEST_POLICY),
+    catalog_source("Moonshot AI", "Kimi Platform Changelog", "https://platform.moonshot.cn/docs/changelog", "ai", "中国大模型平台官方变更", "browser", ["research-coder"], max_items=6, config=PUBLIC_WEB_REQUEST_POLICY),
+    catalog_source("MiniMax", "MiniMax News", "https://www.minimaxi.com/news", "ai", "中国大模型厂商官方新闻", "browser", ["research-coder"], max_items=6, config=PUBLIC_WEB_REQUEST_POLICY),
+    catalog_source("Tencent Hunyuan", "Tencent Hunyuan Official Site", "https://hunyuan.tencent.com/", "ai", "中国大模型厂商动态页面", "browser", ["research-coder"], max_items=5, config=PUBLIC_WEB_REQUEST_POLICY),
+    catalog_source("Baidu AI Cloud", "Baidu Qianfan Documentation", "https://cloud.baidu.com/doc/qianfan/index.html", "ai", "中国大模型平台官方文档", "browser", ["research-coder"], max_items=5, config=PUBLIC_WEB_REQUEST_POLICY),
+    catalog_source("Baichuan AI", "Baichuan Platform Changelog", "https://platform.baichuan-ai.com/docs/changelog", "ai", "中国大模型平台官方变更", "browser", ["research-coder"], max_items=6, config=PUBLIC_WEB_REQUEST_POLICY),
+
+    # X/Twitter official accounts require X API access or publisher-approved Web Bot Auth.
+    catalog_source("OpenAI", "X Official Account: OpenAI", "https://x.com/OpenAI", "ai", "AI 厂商 X/Twitter 官方账号", "browser", ["research-coder"], status="paused", access_model="authenticated", notes="需配置 X API v2 商业访问或获准的 Web Bot Auth；禁止绕过登录和平台限制"),
+    catalog_source("Anthropic", "X Official Account: Anthropic", "https://x.com/AnthropicAI", "ai", "AI 厂商 X/Twitter 官方账号", "browser", ["research-coder"], status="paused", access_model="authenticated", notes="需配置 X API v2 商业访问或获准的 Web Bot Auth；禁止绕过登录和平台限制"),
+    catalog_source("Google DeepMind", "X Official Account: Google DeepMind", "https://x.com/GoogleDeepMind", "ai", "AI 厂商 X/Twitter 官方账号", "browser", ["research-coder"], status="paused", access_model="authenticated", notes="需配置 X API v2 商业访问或获准的 Web Bot Auth；禁止绕过登录和平台限制"),
+    catalog_source("Google AI", "X Official Account: Google AI", "https://x.com/GoogleAI", "ai", "AI 厂商 X/Twitter 官方账号", "browser", ["research-coder"], status="paused", access_model="authenticated", notes="需配置 X API v2 商业访问或获准的 Web Bot Auth；禁止绕过登录和平台限制"),
+    catalog_source("Meta AI", "X Official Account: AI at Meta", "https://x.com/AIatMeta", "ai", "AI 厂商 X/Twitter 官方账号", "browser", ["research-coder"], status="paused", access_model="authenticated", notes="需配置 X API v2 商业访问或获准的 Web Bot Auth；禁止绕过登录和平台限制"),
+    catalog_source("Microsoft AI", "X Official Account: Microsoft AI", "https://x.com/MicrosoftAI", "ai", "AI 厂商 X/Twitter 官方账号", "browser", ["research-coder"], status="paused", access_model="authenticated", notes="需配置 X API v2 商业访问或获准的 Web Bot Auth；禁止绕过登录和平台限制"),
+    catalog_source("Mistral AI", "X Official Account: Mistral AI", "https://x.com/MistralAI", "ai", "AI 厂商 X/Twitter 官方账号", "browser", ["research-coder"], status="paused", access_model="authenticated", notes="需配置 X API v2 商业访问或获准的 Web Bot Auth；禁止绕过登录和平台限制"),
+    catalog_source("NVIDIA AI", "X Official Account: NVIDIA AI", "https://x.com/NVIDIAAI", "ai", "AI 厂商 X/Twitter 官方账号", "browser", ["research-coder"], status="paused", access_model="authenticated", notes="需配置 X API v2 商业访问或获准的 Web Bot Auth；禁止绕过登录和平台限制"),
+    catalog_source("Hugging Face", "X Official Account: Hugging Face", "https://x.com/huggingface", "ai", "AI 平台 X/Twitter 官方账号", "browser", ["research-coder"], status="paused", access_model="authenticated", notes="需配置 X API v2 商业访问或获准的 Web Bot Auth；禁止绕过登录和平台限制"),
+    catalog_source("xAI", "X Official Account: xAI", "https://x.com/xai", "ai", "AI 厂商 X/Twitter 官方账号", "browser", ["research-coder"], status="paused", access_model="authenticated", notes="需配置 X API v2 商业访问或获准的 Web Bot Auth；禁止绕过登录和平台限制"),
+    catalog_source("Alibaba Qwen", "X Official Account: Qwen", "https://x.com/Alibaba_Qwen", "ai", "中国大模型厂商 X/Twitter 官方账号", "browser", ["research-coder"], status="paused", access_model="authenticated", notes="需配置 X API v2 商业访问或获准的 Web Bot Auth；禁止绕过登录和平台限制"),
+    catalog_source("DeepSeek", "X Official Account: DeepSeek", "https://x.com/deepseek_ai", "ai", "中国大模型厂商 X/Twitter 官方账号", "browser", ["research-coder"], status="paused", access_model="authenticated", notes="需配置 X API v2 商业访问或获准的 Web Bot Auth；禁止绕过登录和平台限制"),
+
+    # Crypto market, protocol, engineering, and specialist media.
+    catalog_source("CoinGecko", "CoinGecko Top Crypto Markets API", "https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=20&page=1", "finance", "数字资产市场数据 API", "api", ["market-signal"], trust_tier=2, max_items=20, config=PUBLIC_API_REQUEST_POLICY),
+    catalog_source("Coin Metrics", "Coin Metrics BTC ETH Community Metrics", "https://community-api.coinmetrics.io/v4/timeseries/asset-metrics?assets=btc,eth&metrics=PriceUSD,CapMrktCurUSD&frequency=1d&page_size=10", "finance", "数字资产专业市场数据 API", "timeseries", ["market-signal"], trust_tier=2, max_items=10, config=PUBLIC_API_REQUEST_POLICY),
+    catalog_source("DefiLlama", "DefiLlama Chains TVL API", "https://api.llama.fi/v2/chains", "finance", "DeFi 链上 TVL 数据 API", "api", ["market-signal"], trust_tier=2, max_items=20, config=PUBLIC_API_REQUEST_POLICY),
+    catalog_source("Ethereum Foundation", "Ethereum Blog RSS", "https://blog.ethereum.org/feed.xml", "finance", "区块链基金会官方发布", "feed", ["market-signal"], max_items=8, config=PUBLIC_WEB_REQUEST_POLICY),
+    catalog_source("Bitcoin Core", "Bitcoin Core Releases", "https://api.github.com/repos/bitcoin/bitcoin/releases?per_page=20", "finance", "核心协议 GitHub Releases", "api", ["market-signal"], max_items=8, config=GITHUB_REQUEST_POLICY),
+    catalog_source("CoinDesk", "CoinDesk RSS", "https://www.coindesk.com/arc/outboundfeeds/rss/", "finance", "加密货币专业媒体", "feed", ["market-signal"], trust_tier=3, max_items=8, config=PUBLIC_WEB_REQUEST_POLICY),
+    catalog_source("Coinbase", "Coinbase Blog RSS", "https://www.coinbase.com/blog/rss", "finance", "加密交易平台官方发布", "feed", ["market-signal"], status="paused", access_model="authenticated", notes="当前生产出口返回 403；获得发布方许可或稳定授权方式后启用"),
+    catalog_source("Glassnode", "Glassnode API", "https://api.glassnode.com/v1/metrics/market/marketcap_usd", "finance", "数字资产专业链上数据 API", "api", ["market-signal"], status="paused", access_model="authenticated", trust_tier=2, notes="需要 Glassnode 商业 API Key，并确认缓存、再分发和展示许可"),
+    catalog_source("CryptoQuant", "CryptoQuant API", "https://api.cryptoquant.com/v1/btc/market-data/price-usd", "finance", "数字资产专业链上数据 API", "api", ["market-signal"], status="paused", access_model="authenticated", trust_tier=2, notes="需要 CryptoQuant API Key 和相应数据使用许可"),
+
+    # China A-share public disclosures and licensed professional data interfaces.
+    catalog_source("China Securities Regulatory Commission", "CSRC Latest News", "https://www.csrc.gov.cn/csrc/c100028/common_list.shtml", "finance", "中国证券监管机构官方发布", "web", ["market-signal"], max_items=8, config=PUBLIC_WEB_REQUEST_POLICY),
+    catalog_source("Shanghai Stock Exchange", "SSE Listed Company Announcements", "https://www.sse.com.cn/disclosure/listedinfo/announcement/", "finance", "A股交易所法定披露", "browser", ["market-signal"], max_items=8, config=PUBLIC_WEB_REQUEST_POLICY),
+    catalog_source("Beijing Stock Exchange", "BSE Announcements", "https://www.bse.cn/disclosure/announcement.html", "finance", "A股交易所法定披露", "browser", ["market-signal"], max_items=8, config=PUBLIC_WEB_REQUEST_POLICY),
+    catalog_source("CNINFO", "CNINFO Listed Company Disclosures", "https://www.cninfo.com.cn/new/index", "finance", "A股法定信息披露平台", "browser", ["market-signal"], max_items=8, config=PUBLIC_WEB_REQUEST_POLICY),
+    catalog_source("Shenzhen Stock Exchange", "SZSE Listed Company Announcements", "https://www.szse.cn/disclosure/listed/notice/index.html", "finance", "A股交易所法定披露", "browser", ["market-signal"], status="paused", notes="当前 AWS 生产出口连接被重置；恢复稳定访问后启用"),
+    catalog_source("Tushare Pro", "Tushare Pro API", "https://api.tushare.pro", "finance", "A股专业量化数据 API", "api", ["market-signal"], status="paused", access_model="authenticated", trust_tier=2, notes="需要 Tushare Pro Token、POST 适配器和对应积分/数据许可"),
+    catalog_source("Wind", "Wind Data Service", "https://www.wind.com.cn/portal/en/WDS.html", "finance", "A股专业金融数据接口", "api", ["market-signal"], status="paused", access_model="authenticated", trust_tier=2, notes="需要 Wind 商业合同、终端或 WDS/Quant API 凭证及再分发授权"),
+    catalog_source("iFinD", "iFinD Quant API", "https://quantapi.51ifind.com/", "finance", "A股专业金融数据接口", "api", ["market-signal"], status="paused", access_model="authenticated", trust_tier=2, notes="需要同花顺 iFinD 商业账号、Quant API 凭证及数据展示许可"),
+    catalog_source("Choice Data", "Eastmoney Choice Data", "https://choice.eastmoney.com/", "finance", "A股专业金融数据接口", "api", ["market-signal"], status="paused", access_model="authenticated", trust_tier=2, notes="需要东方财富 Choice 商业授权和 API/终端接入"),
+    catalog_source("CSMAR", "CSMAR Data Service", "https://data.csmar.com/", "finance", "中国证券学术与专业数据库", "api", ["market-signal"], status="paused", access_model="authenticated", trust_tier=2, notes="需要 CSMAR 机构订阅、API 权限和结果展示授权"),
+
+    # Global and Chinese cross-border commerce platforms.
+    catalog_source("SHEIN", "SHEIN Group Newsroom", "https://www.sheingroup.com/newsroom/", "commerce", "跨境电商平台官方新闻", "browser", ["render-scout"], max_items=6, config=PUBLIC_WEB_REQUEST_POLICY),
+    catalog_source("Temu", "Temu Press", "https://www.temu.com/press.html", "commerce", "跨境电商平台官方新闻", "browser", ["render-scout"], max_items=6, config=PUBLIC_WEB_REQUEST_POLICY),
+    catalog_source("Alibaba Group", "Alibaba Group News", "https://www.alibabagroup.com/en-US/news", "commerce", "电商平台官方新闻", "browser", ["render-scout"], max_items=6, config=PUBLIC_WEB_REQUEST_POLICY),
+    catalog_source("Alizila", "Alibaba Alizila RSS", "https://www.alizila.com/feed/", "commerce", "阿里巴巴官方商业资讯", "feed", ["commerce-feed-miner"], max_items=8, config=PUBLIC_WEB_REQUEST_POLICY),
+    catalog_source("JD.com", "JD Corporate Blog", "https://jdcorporateblog.com/", "commerce", "电商平台官方新闻", "browser", ["render-scout"], max_items=6, config=PUBLIC_WEB_REQUEST_POLICY),
+    catalog_source("PDD Holdings", "PDD Holdings News Releases", "https://investor.pddholdings.com/news-events/news-releases", "commerce", "电商平台投资者关系发布", "web", ["render-scout"], status="paused", notes="当前生产出口请求超时；恢复稳定访问后启用"),
 ]
 
 

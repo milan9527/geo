@@ -195,19 +195,19 @@ SOURCE_PROFILES = {
     "research-coder": {
         "category": "ai",
         "crawlStyle": "research",
-        "topic": "AI 基础模型、Agent 与云端 AI 基础设施的最新产业进展",
+        "topic": "全球与中国 AI 基础模型、Agent、开源生态及云端 AI 基础设施的最新产业进展",
         "writingStyles": ["mechanism", "comparative", "critical_review"],
     },
     "render-scout": {
         "category": "commerce",
         "crawlStyle": "browser-rendered",
-        "topic": "电商、支付与媒体平台采用 AI 和 Agent Commerce 的最新变化",
+        "topic": "Amazon、SHEIN、Temu、Alibaba 等电商平台及支付、媒体行业采用 AI 和 Agent Commerce 的最新变化",
         "writingStyles": ["field_note", "comparative", "mechanism"],
     },
     "market-signal": {
         "category": "finance",
         "crawlStyle": "financial-timeseries",
-        "topic": "科技股、利率与 AI 资本开支周期的最新市场研判",
+        "topic": "全球科技股、中国 A 股、利率、数字资产与 AI 资本开支周期的最新市场研判",
         "writingStyles": ["data_note", "mechanism", "comparative"],
     },
     "evidence-verifier": {
@@ -225,7 +225,7 @@ SOURCE_PROFILES = {
     "commerce-feed-miner": {
         "category": "commerce",
         "crawlStyle": "research",
-        "topic": "电商平台、支付基础设施与 AI 购物 Agent 的商业模式变化",
+        "topic": "全球与中国电商平台、支付基础设施及 AI 购物 Agent 的商业模式变化",
         "writingStyles": ["field_note", "mechanism", "comparative"],
     },
 }
@@ -320,7 +320,7 @@ def load_source_profile(
             """
             SELECT ds.id, ds.publisher, ds.name, ds.url, ds.source_type,
                    ds.ingestion_method, ds.max_items, ds.respect_robots,
-                   ds.access_model, ds.config_json, ds.trust_tier,
+                   ds.access_model, ds.secret_arn, ds.config_json, ds.trust_tier,
                    asa.priority, asa.last_selected_at, asa.selection_count
             FROM agent_source_assignments asa
             JOIN data_sources ds ON ds.id = asa.source_id
@@ -430,9 +430,11 @@ def load_source_profile(
             "url": item["url"],
             "sourceType": item["source_type"],
             "ingestionMethod": item["ingestion_method"],
+            "accessModel": item["access_model"],
             "maxItems": int(item["max_items"]),
             "respectRobots": bool(item["respect_robots"]),
             "trustTier": int(item["trust_tier"]),
+            "secretArn": str(item.get("secret_arn") or ""),
             "config": source_config if isinstance(source_config, dict) else {},
         }
         if item["access_model"] == "x402" or item["ingestion_method"] == "x402":
@@ -808,18 +810,56 @@ def compact_evidence_data(data: dict[str, Any]) -> dict[str, Any]:
 
 def normalize_evidence(evidence: list[dict[str, Any]]) -> list[dict[str, Any]]:
     normalized: list[dict[str, Any]] = []
-    prioritized = sorted(
-        evidence,
-        key=lambda item: bool(
-            isinstance(item, dict)
-            and isinstance(item.get("data"), dict)
-            and item["data"].get("paid")
-        ),
-        reverse=True,
-    )
-    for item in prioritized[:10]:
+    candidates: list[dict[str, Any]] = []
+    seen_documents: set[str] = set()
+    for item in evidence:
         if not isinstance(item, dict) or not item.get("url"):
             continue
+        document_key = "|".join(
+            (
+                canonical_source_url(str(item["url"])),
+                str(item.get("title") or "").strip().casefold(),
+            )
+        )
+        if document_key in seen_documents:
+            continue
+        seen_documents.add(document_key)
+        candidates.append(item)
+
+    paid = [
+        item
+        for item in candidates
+        if isinstance(item.get("data"), dict) and item["data"].get("paid")
+    ]
+    open_candidates = [item for item in candidates if item not in paid]
+    selected = paid[:10]
+    selected_ids = {id(item) for item in selected}
+    seen_publishers = {
+        str(item.get("publisher") or "Unknown publisher").strip().casefold()
+        for item in selected
+    }
+
+    for item in open_candidates:
+        publisher = str(
+            item.get("publisher") or "Unknown publisher"
+        ).strip().casefold()
+        if publisher in seen_publishers:
+            continue
+        selected.append(item)
+        selected_ids.add(id(item))
+        seen_publishers.add(publisher)
+        if len(selected) == 10:
+            break
+
+    if len(selected) < 10:
+        for item in open_candidates:
+            if id(item) in selected_ids:
+                continue
+            selected.append(item)
+            if len(selected) == 10:
+                break
+
+    for item in selected:
         normalized.append(
             {
                 "publisher": str(item.get("publisher") or "Unknown publisher")[:300],
@@ -847,29 +887,90 @@ def collect_evidence(
     profile = load_source_profile(crawler, mark_selected=True)
     errors: list[str] = []
     session_name = f"{slug}-{datetime.now(timezone.utc).strftime('%Y%m%d-%H%M%S')}"
+    evidence: list[dict[str, Any]] = []
+    tool_traces: list[dict[str, Any]] = []
 
     if crawler["kind"] == "Browser Tool":
-        evidence, trace = run_browser_crawler(
-            profile,
-            session_name=session_name,
-        )
+        try:
+            browser_evidence, browser_trace = run_browser_crawler(
+                profile,
+                session_name=session_name,
+            )
+            evidence.extend(browser_evidence)
+            tool_traces.append(browser_trace)
+        except Exception as error:
+            errors.append(f"AgentCore Browser: {type(error).__name__}: {error}")
     else:
-        artifact = load_or_generate_artifact(crawler, profile)
-        evidence, trace, final_artifact = run_generated_crawler(
-            profile,
-            artifact,
-            session_name=session_name,
-        )
-        final_artifact["id"] = artifact["id"]
-        update_artifact(final_artifact)
-        trace.update(
-            {
-                "codexThreadId": final_artifact["threadId"],
-                "codexArtifactId": artifact["id"],
-                "codexArtifactCached": artifact.get("cached", False),
-                "codexUsage": final_artifact.get("usage") or {},
-            }
-        )
+        browser_sources = [
+            source
+            for source in profile.get("sources") or []
+            if source.get("ingestionMethod") == "browser"
+        ]
+        generated_sources = [
+            source
+            for source in profile.get("sources") or []
+            if source.get("ingestionMethod") != "browser"
+        ]
+
+        if generated_sources:
+            generated_profile = {**profile, "sources": generated_sources}
+            try:
+                artifact = load_or_generate_artifact(crawler, generated_profile)
+                generated_evidence, generated_trace, final_artifact = (
+                    run_generated_crawler(
+                        generated_profile,
+                        artifact,
+                        session_name=session_name,
+                    )
+                )
+                final_artifact["id"] = artifact["id"]
+                update_artifact(final_artifact)
+                generated_trace.update(
+                    {
+                        "codexThreadId": final_artifact["threadId"],
+                        "codexArtifactId": artifact["id"],
+                        "codexArtifactCached": artifact.get("cached", False),
+                        "codexUsage": final_artifact.get("usage") or {},
+                    }
+                )
+                evidence.extend(generated_evidence)
+                tool_traces.append(generated_trace)
+            except Exception as error:
+                errors.append(
+                    f"AgentCore Code Interpreter: {type(error).__name__}: {error}"
+                )
+
+        if browser_sources:
+            browser_profile = {**profile, "sources": browser_sources}
+            try:
+                browser_evidence, browser_trace = run_browser_crawler(
+                    browser_profile,
+                    session_name=f"{session_name}-browser",
+                )
+                evidence.extend(browser_evidence)
+                tool_traces.append(browser_trace)
+            except Exception as error:
+                errors.append(
+                    f"AgentCore Browser: {type(error).__name__}: {error}"
+                )
+
+    if len(tool_traces) == 1:
+        trace = tool_traces[0]
+    else:
+        trace = {
+            "provider": " + ".join(
+                str(item.get("provider") or "Unknown tool")
+                for item in tool_traces
+            )
+            or "No open-source tool completed",
+            "sessionId": ",".join(
+                str(item["sessionId"])
+                for item in tool_traces
+                if item.get("sessionId")
+            ),
+            "documents": len(evidence),
+            "tools": tool_traces,
+        }
 
     payment_traces: list[dict[str, Any]] = []
     if payload.get("allowPayment"):
@@ -2469,7 +2570,16 @@ def invoke(payload: dict[str, Any]) -> dict[str, Any]:
             "browserId": BROWSER_ID,
             "codeInterpreterId": CODE_INTERPRETER_ID,
             "browserSigning": True,
-            "crawlerIndustries": ["AI", "云计算", "电商", "媒体", "金融"],
+            "crawlerIndustries": [
+                "AI",
+                "Agent",
+                "云计算",
+                "全球电商",
+                "媒体",
+                "金融",
+                "A股",
+                "加密货币",
+            ],
         }
     if action == "source_registry":
         crawler_slug = str(payload.get("crawlerSlug") or "").strip()
@@ -2487,12 +2597,23 @@ def invoke(payload: dict[str, Any]) -> dict[str, Any]:
         if not crawler_matches:
             raise ValueError(f"Crawler not found: {crawler_slug}")
         profile = load_source_profile(crawler_matches[0])
+        def public_source(source: dict[str, Any]) -> dict[str, Any]:
+            return {
+                **{
+                    key: value
+                    for key, value in source.items()
+                    if key != "secretArn"
+                },
+                "credentialsConfigured": bool(source.get("secretArn")),
+            }
         return {
             "status": "ok",
             "crawler": crawler_slug,
             "registry": profile["sourceRegistry"],
-            "sources": profile["sources"],
-            "paidSources": profile["paidSources"],
+            "sources": [public_source(source) for source in profile["sources"]],
+            "paidSources": [
+                public_source(source) for source in profile["paidSources"]
+            ],
             "timestamp": now(),
         }
     if action == "x402_fetch":

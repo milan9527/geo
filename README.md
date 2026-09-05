@@ -361,8 +361,8 @@ FRED 时间序列和 x402 来源会在数据库初始化时迁移到 `data_sourc
 `agent_source_assignments` 分配给一个或多个 Agent。新增、暂停、删除或重新分配来源后，
 下一次任务直接从 Aurora 读取最新配置，无需修改 Runtime 代码或重新部署。
 
-内置目录包含 86 个来源：AI 18、Agent 9、云计算 11、电商与媒体 18、金融 30。其中
-75 个公开来源启用，Reuters、FT、Bloomberg、WSJ 等 11 个受授权、反爬或限流约束的来源
+内置目录包含 140 个来源：AI 41、Agent 15、云计算 11、电商与媒体 24、金融 49。其中
+107 个公开或 x402 来源启用，33 个受授权、商业许可、反爬或当前网络连通性约束的来源
 保留为暂停状态。每个 Agent 每次最多选择 8 个公开来源，并按最久未选时间轮换；因此扩展
 来源池不会让单次任务无上限增长。x402 付费来源不占公开来源配额。
 
@@ -375,6 +375,28 @@ FINRA、CFTC、CFPB、PCAOB、FTC、ECB、IMF 和 World Bank。SEC 请求使用�
 连通性测试只接受公开 HTTPS 443 地址，并拒绝解析到内网、环回或保留地址。Commerce
 Feed Miner 的定时输入固定传入 `allowPayment=true`；其他任务仍需显式授权，注册或测试
 来源不会触发支付。
+
+扩展目录还包括 GitHub Changelog 与主要 AI/Agent SDK Releases、arXiv AI/ML/NLP/
+Multi-Agent 分类、Hugging Face Daily Papers、中国大模型厂商官网、加密货币市场与链上
+数据、A 股法定披露，以及 Amazon、SHEIN、Temu、Alibaba、JD 等电商平台。Twitter/X
+官方账号和 Wind、iFinD、Choice、Tushare Pro、CSMAR、Glassnode、CryptoQuant 等商业
+接口先以 `authenticated + paused` 注册；只有配置合法凭证和数据许可后才会启用。
+Code Interpreter Agent 遇到 `browser` 来源时会单独调用 AgentCore Browser，再与 API、
+Feed 和时间序列证据合并，避免把前端渲染页面当作静态 HTML。最终证据先按规范 URL
+去重，再优先保留不同发布方，最后补足单篇研究最多 10 条，避免高频论文 Feed 或单一媒体
+占满证据窗口。
+
+认证来源在后台数据源编辑框中支持 Bearer Token、API Key Header、HTTP Basic Auth 和
+已授权会话 Cookie。可以引用已有 Secrets Manager ARN，也可以一次性输入新凭据；API
+会创建或更新 `geo-intelligence/data-sources/{sourceId}` Secret，Aurora 只保存 ARN，
+读取接口和页面均不会返回 Secret 内容。认证头只发送到注册来源的原始主机，重定向或第三方
+子资源不会继承。启用 `authenticated` 来源前必须同时配置认证类型与 Secret。需要填写
+登录表单、OAuth 授权码交换或 POST 请求体签名的厂商仍应增加专用来源适配器，不能用通用
+请求头认证冒充支持。
+
+管理界面的“测试全部来源”会在 ECS API 后台以每域名限速和最多 8 个并发执行测试，并持续
+回写 `last_tested_at`、成功/失败状态和错误原因。认证来源使用绑定 Secret 测试；未配置凭据
+会明确标记失败。x402 来源以有效 HTTP 402 challenge 作为连通性成功。
 
 研究生成不是抓取摘要拼接。Runtime 会先保存可追溯证据，再调用 GPT-5.6 Sol 执行事实与
 观点分离、跨来源对照、因果边界检查和产业影响推演。结构化时间序列会直接进入生成、
@@ -432,6 +454,8 @@ PYTHONPATH=. .venv/bin/python scripts/create_admin_user.py \
 | `GET` / `POST` | `/api/admin/data-sources` | 查询或注册数据源 |
 | `PATCH` / `DELETE` | `/api/admin/data-sources/{id}` | 修改、分配或删除数据源 |
 | `POST` | `/api/admin/data-sources/{id}/test` | 从 API 服务执行 HTTPS 连通性测试 |
+| `POST` | `/api/admin/data-sources/test-all` | 后台批量测试全部或指定来源 |
+| `GET` | `/api/admin/data-sources/test-batch` | 查询批量测试进度 |
 | `GET` | `/api/admin/research` | 深度研究输出列表 |
 | `GET` | `/api/admin/research/{id}` | 研究过程、正文与来源详情 |
 

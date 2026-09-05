@@ -6,6 +6,7 @@ import json
 import os
 import re
 import subprocess
+import time
 import uuid
 from datetime import datetime, timezone
 from typing import Any
@@ -36,6 +37,8 @@ PAYMENT_MAX_SPEND_USD = os.environ.get("X402_MAX_SESSION_SPEND_USD", "0.01")
 PAYMENT_MAX_BASE_UNITS = int(os.environ.get("X402_MAX_CHALLENGE_BASE_UNITS", "2000"))
 
 agentcore = boto3.client("bedrock-agentcore", region_name=REGION)
+secrets_manager = boto3.client("secretsmanager", region_name=REGION)
+_SECRET_CACHE: dict[str, tuple[float, dict[str, str]]] = {}
 
 
 class CrawlerToolError(RuntimeError):
@@ -44,6 +47,80 @@ class CrawlerToolError(RuntimeError):
 
 def now() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+
+
+def source_auth_material(
+    source: dict[str, Any],
+) -> tuple[dict[str, str], list[str]]:
+    config = source.get("config")
+    auth = config.get("auth") if isinstance(config, dict) else {}
+    if not isinstance(auth, dict):
+        raise CrawlerToolError("Source auth configuration must be an object")
+    auth_type = str(auth.get("type") or "none")
+    if auth_type == "none":
+        if source.get("accessModel") == "authenticated":
+            raise CrawlerToolError(
+                f"{source.get('publisher')}: authenticated source has no auth type"
+            )
+        return {}, []
+    secret_arn = str(source.get("secretArn") or "")
+    if not secret_arn:
+        raise CrawlerToolError(
+            f"{source.get('publisher')}: authenticated source has no secret ARN"
+        )
+    cached = _SECRET_CACHE.get(secret_arn)
+    if cached and cached[0] > time.monotonic():
+        secret = cached[1]
+    else:
+        try:
+            response = secrets_manager.get_secret_value(SecretId=secret_arn)
+        except Exception as error:
+            raise CrawlerToolError(
+                f"{source.get('publisher')}: unable to read source credentials"
+            ) from error
+        raw = response.get("SecretString")
+        if not raw:
+            raise CrawlerToolError("Source credentials must use SecretString JSON")
+        try:
+            parsed = json.loads(raw)
+        except json.JSONDecodeError as error:
+            raise CrawlerToolError("Source credentials are not valid JSON") from error
+        if not isinstance(parsed, dict):
+            raise CrawlerToolError("Source credentials must be a JSON object")
+        secret = {str(key): str(value) for key, value in parsed.items()}
+        _SECRET_CACHE[secret_arn] = (time.monotonic() + 300, secret)
+
+    headers: dict[str, str]
+    if auth_type == "bearer":
+        token = secret.get(str(auth.get("tokenKey") or "token"), "")
+        if not token:
+            raise CrawlerToolError("Bearer token is missing from source secret")
+        headers = {"Authorization": f"Bearer {token}"}
+    elif auth_type == "apiKeyHeader":
+        api_key = secret.get(str(auth.get("secretKey") or "apiKey"), "")
+        if not api_key:
+            raise CrawlerToolError("API key is missing from source secret")
+        headers = {str(auth.get("headerName") or "X-API-Key"): api_key}
+    elif auth_type == "basic":
+        username = secret.get(str(auth.get("usernameKey") or "username"), "")
+        password = secret.get(str(auth.get("passwordKey") or "password"), "")
+        if not username or not password:
+            raise CrawlerToolError("Basic auth credentials are incomplete")
+        encoded = base64.b64encode(f"{username}:{password}".encode()).decode()
+        headers = {"Authorization": f"Basic {encoded}"}
+    elif auth_type == "cookie":
+        cookie = secret.get(str(auth.get("cookieKey") or "cookie"), "")
+        if not cookie or "\r" in cookie or "\n" in cookie:
+            raise CrawlerToolError("Cookie is missing or invalid")
+        headers = {"Cookie": cookie}
+    else:
+        raise CrawlerToolError(f"Unsupported source auth type: {auth_type}")
+    sensitive = [
+        value
+        for value in [*secret.values(), *headers.values()]
+        if len(value) >= 4
+    ]
+    return headers, sensitive
 
 
 def codex_request(
@@ -313,9 +390,12 @@ def _code_interpreter_output(response: dict[str, Any]) -> tuple[str, dict[str, A
     return output, trace
 
 
-def request_policy_bootstrap(profile: dict[str, Any]) -> str:
+def request_policy_bootstrap(
+    profile: dict[str, Any],
+) -> tuple[str, list[str]]:
     """Inject an urllib policy layer before the generated crawler imports it."""
     policies: dict[str, dict[str, Any]] = {}
+    sensitive_values: list[str] = []
     for source in profile.get("sources") or []:
         config = source.get("config")
         raw_policy = (
@@ -333,6 +413,9 @@ def request_policy_bootstrap(profile: dict[str, Any]) -> str:
         policy.setdefault("maxRetries", 1)
         policy.setdefault("retryStatusCodes", [429, 503])
         policy.setdefault("maxRetryAfterSeconds", 60)
+        auth_headers, source_sensitive = source_auth_material(source)
+        policy["_authHeaders"] = auth_headers
+        sensitive_values.extend(source_sensitive)
         policies[str(source["url"])] = policy
     encoded = repr(
         json.dumps(policies, ensure_ascii=False, separators=(",", ":"))
@@ -373,6 +456,9 @@ def _ag_policy_urlopen(target, *args, **kwargs):
         raise ValueError("Network URL is not present in the source registry")
     request.remove_header("User-agent")
     request.add_unredirected_header("User-Agent", str(policy["userAgent"]))
+    for header_name, header_value in policy.get("_authHeaders", {{}}).items():
+        request.remove_header(str(header_name))
+        request.add_unredirected_header(str(header_name), str(header_value))
     retries = max(0, min(int(policy.get("maxRetries", 1)), 5))
     retry_statuses = {{int(value) for value in policy.get("retryStatusCodes", [429, 503])}}
     max_retry_after = max(1, min(int(policy.get("maxRetryAfterSeconds", 60)), 900))
@@ -390,7 +476,7 @@ def _ag_policy_urlopen(target, *args, **kwargs):
     raise RuntimeError("Request retry loop exhausted")
 
 _ag_urlrequest.urlopen = _ag_policy_urlopen
-"""
+""", sensitive_values
 
 
 def execute_code_interpreter(
@@ -408,10 +494,11 @@ def execute_code_interpreter(
     )
     session_id = session["sessionId"]
     try:
+        policy_bootstrap, sensitive_values = request_policy_bootstrap(profile)
         executable_source = (
             "import sys\n"
             "sys.argv = ['agentcore_crawler.py']\n"
-            + request_policy_bootstrap(profile)
+            + policy_bootstrap
             + source_code
         )
         response = agentcore.invoke_code_interpreter(
@@ -436,6 +523,11 @@ def execute_code_interpreter(
             raise CrawlerToolError(
                 f"{execution_error}\nSandbox traceback:\n{traceback_output[-6000:]}"
             ) from execution_error
+        combined_output = output + "\n" + str(trace.get("stderr") or "")
+        if any(value in combined_output for value in sensitive_values):
+            raise CrawlerToolError(
+                "Generated crawler attempted to emit source credentials"
+            )
         try:
             parsed = json.loads(output)
         except json.JSONDecodeError as error:
@@ -519,6 +611,25 @@ def run_browser_crawler(
 ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
     if not BROWSER_ID:
         raise CrawlerToolError("AGENTCORE_BROWSER_ID is not configured")
+    browser_sources: list[dict[str, Any]] = []
+    sensitive_values: list[str] = []
+    for source in profile.get("sources") or []:
+        auth_headers, source_sensitive = source_auth_material(source)
+        browser_sources.append(
+            {
+                "publisher": source["publisher"],
+                "url": source["url"],
+                "sourceType": source["sourceType"],
+                "maxItems": source.get("maxItems"),
+                "renderWaitMs": (
+                    source.get("config", {}).get("renderWaitMs")
+                    if isinstance(source.get("config"), dict)
+                    else None
+                ),
+                "authHeaders": auth_headers,
+            }
+        )
+        sensitive_values.extend(source_sensitive)
     with browser_session(
         REGION,
         identifier=BROWSER_ID,
@@ -532,7 +643,7 @@ def run_browser_crawler(
                 {
                     "wsUrl": ws_url,
                     "headers": headers,
-                    "sources": profile.get("sources") or [],
+                    "sources": browser_sources,
                 },
                 ensure_ascii=False,
             ),
@@ -541,6 +652,11 @@ def run_browser_crawler(
             timeout=300,
             check=False,
         )
+        combined_output = completed.stdout + "\n" + completed.stderr
+        if any(value in combined_output for value in sensitive_values):
+            raise CrawlerToolError(
+                "Browser worker attempted to emit source credentials"
+            )
         if completed.returncode:
             raise CrawlerToolError(
                 f"AgentCore Browser worker failed ({completed.returncode}): "

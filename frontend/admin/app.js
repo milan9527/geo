@@ -14,6 +14,13 @@ const state = {
   categories: [],
   crawlers: [],
   dataSources: [],
+  sourceTestBatch: {
+    running: false,
+    total: 0,
+    completed: 0,
+    success: 0,
+    failed: 0,
+  },
   sourceQuery: "",
   sourceCategory: "all",
   sourceStatus: "all",
@@ -504,20 +511,29 @@ function sourceStatusLabel(source) {
 function renderSources() {
   const rows = filteredDataSources();
   const activeCount = state.dataSources.filter((source) => source.status === "active").length;
-  const paidCount = state.dataSources.filter((source) => source.access_model === "x402").length;
-  const unassignedCount = state.dataSources.filter((source) => !source.agentIds.length).length;
+  const testedCount = state.dataSources.filter((source) => source.last_test_status).length;
+  const passedCount = state.dataSources.filter((source) => source.last_test_status === "success").length;
+  const failedCount = state.dataSources.filter((source) => source.last_test_status === "failed").length;
+  const batch = state.sourceTestBatch;
+  const batchLabel = batch.running
+    ? `测试中 ${batch.completed}/${batch.total}`
+    : "测试全部来源";
   $("#pageTitle").textContent = "数据源注册中心";
   $("#adminApp").innerHTML = `
     <section class="view-page">
       <div class="view-header">
         <div><h2>数据源与 Agent 动态分配</h2><p>注册、验证并控制生产 Runtime 下一次任务实际读取的来源。</p></div>
-        <div class="view-actions"><button class="primary-button" data-create-source>＋ 新增数据源</button></div>
+        <div class="view-actions">
+          <button class="ghost-button" data-test-all-sources ${batch.running ? "disabled" : ""}>${batchLabel}</button>
+          <button class="primary-button" data-create-source>＋ 新增数据源</button>
+        </div>
       </div>
       <section class="source-registry-summary">
         <div><span>注册来源</span><strong>${fmt(state.dataSources.length)}</strong></div>
         <div><span>启用来源</span><strong>${fmt(activeCount)}</strong></div>
-        <div><span>x402 来源</span><strong>${fmt(paidCount)}</strong></div>
-        <div><span>未分配来源</span><strong>${fmt(unassignedCount)}</strong></div>
+        <div><span>已测试</span><strong>${fmt(testedCount)}</strong></div>
+        <div><span>测试通过</span><strong>${fmt(passedCount)}</strong></div>
+        <div><span>测试失败</span><strong>${fmt(failedCount)}</strong></div>
       </section>
       <article class="table-panel source-registry-panel">
         <div class="table-toolbar">
@@ -547,7 +563,7 @@ function renderSources() {
                   : "<span class=\"test-pending\">尚未测试</span>";
                 return `<tr>
                   <td class="source-identity"><strong>${escapeHtml(source.name)}</strong><span>${escapeHtml(source.publisher)} · ${escapeHtml(source.source_type)}</span>${externalUrl ? `<a href="${escapeHtml(externalUrl)}" target="_blank" rel="noreferrer">${escapeHtml(source.url)}</a>` : ""}</td>
-                  <td><span class="access-pill">${escapeHtml(source.category_name)}</span><small class="source-method">${escapeHtml(sourceMethodLabels[source.ingestion_method] || source.ingestion_method)} · ${escapeHtml(source.access_model)}</small></td>
+                  <td><span class="access-pill">${escapeHtml(source.category_name)}</span><small class="source-method">${escapeHtml(sourceMethodLabels[source.ingestion_method] || source.ingestion_method)} · ${escapeHtml(source.access_model)}${source.credentialsConfigured ? " · 已绑定凭据" : ""}</small></td>
                   <td><b class="trust-tier t${source.trust_tier}">T${source.trust_tier}</b><small class="source-method">最多 ${source.max_items} 条</small></td>
                   <td><div class="assigned-agent-list">${source.assignments.length ? source.assignments.map((assignment) => `<span>${escapeHtml(assignment.agent_name)}</span>`).join("") : "<em>未分配</em>"}</div></td>
                   <td class="source-test-state">${testStatus}</td>
@@ -568,6 +584,20 @@ function renderSources() {
   `;
 }
 
+function updateSourceAuthFields() {
+  const form = $("#dataSourceForm");
+  const authType = form.elements.authType.value;
+  $("#sourceApiKeyOptions").hidden = authType !== "apiKeyHeader";
+  $("#sourceTokenCredential").hidden = !["bearer", "apiKeyHeader", "cookie"].includes(authType);
+  $("#sourceBasicCredential").hidden = authType !== "basic";
+  const tokenInput = form.elements.credentialToken;
+  tokenInput.placeholder = authType === "cookie"
+    ? "Cookie 请求头内容；留空则保留现有 Secret"
+    : authType === "apiKeyHeader"
+      ? "新 API Key；留空则保留现有 Secret"
+      : "新 Bearer Token；留空则保留现有 Secret";
+}
+
 function openDataSourceModal(sourceId = null) {
   const form = $("#dataSourceForm");
   form.reset();
@@ -582,6 +612,13 @@ function openDataSourceModal(sourceId = null) {
   form.elements.accessModel.value = "open";
   form.elements.ingestionMethod.value = "feed";
   form.elements.respectRobots.checked = true;
+  form.elements.authType.value = "none";
+  form.elements.apiKeyHeader.value = "X-API-Key";
+  form.elements.secretArn.value = "";
+  form.elements.credentialToken.value = "";
+  form.elements.credentialUsername.value = "";
+  form.elements.credentialPassword.value = "";
+  form.elements.removeCredential.checked = false;
   $("#dataSourceCategory").innerHTML = state.categories.map((category) => `<option value="${category.slug}">${escapeHtml(category.name)}</option>`).join("");
   const source = sourceId ? state.dataSources.find((item) => item.id === Number(sourceId)) : null;
   const assigned = new Set(source?.agentIds || []);
@@ -606,7 +643,12 @@ function openDataSourceModal(sourceId = null) {
     form.elements.cacheTtlSeconds.value = String(requestPolicy.cacheTtlSeconds ?? 0);
     form.elements.maxRetries.value = String(requestPolicy.maxRetries ?? 1);
     form.elements.requestUserAgent.value = requestPolicy.userAgent || "";
+    const auth = source.config?.auth || {};
+    form.elements.authType.value = auth.type || "none";
+    form.elements.apiKeyHeader.value = auth.headerName || "X-API-Key";
+    form.elements.secretArn.value = source.secret_arn || "";
   }
+  updateSourceAuthFields();
   $("#dataSourceModalTitle").textContent = source ? "编辑数据源" : "新增数据源";
   $("#dataSourceModal").classList.add("open");
   $("#dataSourceModal").setAttribute("aria-hidden", "false");
@@ -636,6 +678,19 @@ async function saveDataSource(event) {
   const requestUserAgent = form.elements.requestUserAgent.value.trim();
   if (requestUserAgent) requestPolicy.userAgent = requestUserAgent;
   else delete requestPolicy.userAgent;
+  const authType = form.elements.authType.value;
+  const auth = { type: authType };
+  if (authType === "apiKeyHeader") {
+    auth.headerName = form.elements.apiKeyHeader.value.trim() || "X-API-Key";
+    auth.secretKey = "apiKey";
+  } else if (authType === "bearer") {
+    auth.tokenKey = "token";
+  } else if (authType === "basic") {
+    auth.usernameKey = "username";
+    auth.passwordKey = "password";
+  } else if (authType === "cookie") {
+    auth.cookieKey = "cookie";
+  }
   const payload = {
     publisher: form.elements.publisher.value,
     name: form.elements.name.value,
@@ -649,12 +704,28 @@ async function saveDataSource(event) {
     maxItems: Number(form.elements.maxItems.value),
     respectRobots: form.elements.respectRobots.checked,
     notes: form.elements.notes.value,
+    secretArn: form.elements.secretArn.value.trim(),
+    removeCredential: form.elements.removeCredential.checked,
     config: {
       ...(existing?.config || {}),
       requestPolicy,
+      auth,
     },
     agentIds: $$('input[name="agentIds"]:checked', form).map((input) => Number(input.value)),
   };
+  const token = form.elements.credentialToken.value.trim();
+  const username = form.elements.credentialUsername.value.trim();
+  const password = form.elements.credentialPassword.value;
+  if (authType === "bearer" && token) payload.credential = { token };
+  if (authType === "apiKeyHeader" && token) payload.credential = { apiKey: token };
+  if (authType === "cookie" && token) payload.credential = { cookie: token };
+  if (authType === "basic" && (username || password)) {
+    if (!username || !password) {
+      showToast("认证信息不完整", "Basic Auth 必须同时提供用户名和密码");
+      return;
+    }
+    payload.credential = { username, password };
+  }
   await api(sourceId ? `/api/admin/data-sources/${sourceId}` : "/api/admin/data-sources", {
     method: sourceId ? "PATCH" : "POST",
     body: JSON.stringify(payload),
@@ -665,6 +736,33 @@ async function saveDataSource(event) {
   $("#sourceRegistryCount").textContent = state.dataSources.length;
   renderSources();
   showToast(sourceId ? "数据源已更新" : "数据源已注册", "下一次 Agent 任务将读取最新分配");
+}
+
+async function pollSourceTestBatch() {
+  state.sourceTestBatch = await api("/api/admin/data-sources/test-batch");
+  if (state.view === "sources") renderSources();
+  if (state.sourceTestBatch.running) {
+    clearTimeout(pollSourceTestBatch.timer);
+    pollSourceTestBatch.timer = setTimeout(pollSourceTestBatch, 2500);
+    return;
+  }
+  state.dataSources = await api("/api/admin/data-sources");
+  if (state.view === "sources") renderSources();
+  showToast(
+    "批量连通性测试完成",
+    `${state.sourceTestBatch.success} 个通过 · ${state.sourceTestBatch.failed} 个失败`,
+  );
+}
+
+async function testAllDataSources() {
+  state.sourceTestBatch = await api("/api/admin/data-sources/test-all", {
+    method: "POST",
+    body: "{}",
+  });
+  renderSources();
+  showToast("批量测试已启动", `${state.sourceTestBatch.total} 个来源在后台测试`);
+  clearTimeout(pollSourceTestBatch.timer);
+  pollSourceTestBatch.timer = setTimeout(pollSourceTestBatch, 1200);
 }
 
 function updateCrawlerScheduleFields() {
@@ -803,13 +901,14 @@ async function switchView(view) {
 }
 
 async function loadAll() {
-  [state.metrics, state.articles, state.research, state.categories, state.crawlers, state.dataSources, state.jobs, state.events, state.settings] = await Promise.all([
+  [state.metrics, state.articles, state.research, state.categories, state.crawlers, state.dataSources, state.sourceTestBatch, state.jobs, state.events, state.settings] = await Promise.all([
     api(metricsPath()),
     api("/api/admin/articles"),
     api("/api/admin/research"),
     api("/api/v1/categories"),
     api("/api/admin/crawlers"),
     api("/api/admin/data-sources"),
+    api("/api/admin/data-sources/test-batch"),
     api("/api/admin/jobs"),
     api("/api/admin/events"),
     api("/api/admin/settings"),
@@ -896,6 +995,7 @@ function bindEvents() {
       showToast(status === "paused" ? "Agent 已暂停" : "Agent 已恢复");
     }
     if (event.target.closest("[data-create-source]")) openDataSourceModal();
+    if (event.target.closest("[data-test-all-sources]")) await testAllDataSources();
     const editSource = event.target.closest("[data-edit-source]");
     if (editSource) openDataSourceModal(Number(editSource.dataset.editSource));
     const testSource = event.target.closest("[data-test-source]");
@@ -1016,6 +1116,13 @@ function bindEvents() {
     if (event.target === $("#dataSourceModal")) closeDataSourceModal();
   });
   $("#dataSourceForm").addEventListener("submit", saveDataSource);
+  $("#sourceAuthType").addEventListener("change", () => {
+    const form = $("#dataSourceForm");
+    if (form.elements.authType.value !== "none") {
+      form.elements.accessModel.value = "authenticated";
+    }
+    updateSourceAuthFields();
+  });
   $("#createArticleForm").addEventListener("submit", createArticle);
 }
 

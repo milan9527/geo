@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import html
 import hashlib
 import json
@@ -8,7 +9,9 @@ import os
 import re
 import secrets
 import socket
+import threading
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from http.cookies import SimpleCookie
 from datetime import date, datetime, timedelta, timezone
 from http import HTTPStatus
@@ -108,6 +111,27 @@ END
 SOURCE_METHODS = {"feed", "web", "browser", "api", "timeseries", "x402"}
 SOURCE_STATUSES = {"active", "paused", "error"}
 SOURCE_ACCESS_MODELS = {"open", "authenticated", "x402"}
+SOURCE_AUTH_TYPES = {
+    "none",
+    "bearer",
+    "apiKeyHeader",
+    "basic",
+    "cookie",
+}
+SOURCE_SECRET_NAME_PREFIX = "geo-intelligence/data-sources"
+SOURCE_TEST_BATCH_LOCK = threading.Lock()
+SOURCE_HOST_LOCKS_GUARD = threading.Lock()
+SOURCE_HOST_LOCKS: dict[str, threading.Lock] = {}
+SOURCE_HOST_LAST_REQUEST: dict[str, float] = {}
+SOURCE_TEST_BATCH_STATE: dict[str, object] = {
+    "running": False,
+    "total": 0,
+    "completed": 0,
+    "success": 0,
+    "failed": 0,
+    "startedAt": None,
+    "finishedAt": None,
+}
 CRAWLER_CONTACT_URL = os.environ.get(
     "CRAWLER_CONTACT_URL",
     os.environ.get(
@@ -162,46 +186,208 @@ def normalized_source_config(value: object) -> dict:
         raise ValueError("config 必须是 JSON 对象")
     config = dict(value)
     raw_policy = config.get("requestPolicy")
-    if raw_policy is None:
-        return config
-    if not isinstance(raw_policy, dict):
-        raise ValueError("requestPolicy 必须是 JSON 对象")
-    policy = dict(raw_policy)
-    if "userAgent" in policy:
-        user_agent = str(policy["userAgent"] or "").strip()
-        if not user_agent or len(user_agent) > 500 or "\r" in user_agent or "\n" in user_agent:
-            raise ValueError("requestPolicy.userAgent 无效")
-        policy["userAgent"] = user_agent
-    if "requestsPerSecond" in policy:
-        requests_per_second = float(policy["requestsPerSecond"])
-        if not 0.1 <= requests_per_second <= 10:
-            raise ValueError("requestsPerSecond 必须在 0.1 到 10 之间")
-        policy["requestsPerSecond"] = requests_per_second
-    if "cacheTtlSeconds" in policy:
-        cache_ttl = int(policy["cacheTtlSeconds"])
-        if not 0 <= cache_ttl <= 604800:
-            raise ValueError("cacheTtlSeconds 必须在 0 到 604800 之间")
-        policy["cacheTtlSeconds"] = cache_ttl
-    if "maxRetries" in policy:
-        max_retries = int(policy["maxRetries"])
-        if not 0 <= max_retries <= 5:
-            raise ValueError("maxRetries 必须在 0 到 5 之间")
-        policy["maxRetries"] = max_retries
-    if "retryStatusCodes" in policy:
-        statuses = policy["retryStatusCodes"]
-        if not isinstance(statuses, list) or any(
-            int(status) not in {408, 425, 429, 500, 502, 503, 504}
-            for status in statuses
-        ):
-            raise ValueError("retryStatusCodes 包含不安全的状态码")
-        policy["retryStatusCodes"] = list(dict.fromkeys(int(status) for status in statuses))
-    if "maxRetryAfterSeconds" in policy:
-        max_retry_after = int(policy["maxRetryAfterSeconds"])
-        if not 1 <= max_retry_after <= 900:
-            raise ValueError("maxRetryAfterSeconds 必须在 1 到 900 之间")
-        policy["maxRetryAfterSeconds"] = max_retry_after
-    config["requestPolicy"] = policy
+    if raw_policy is not None:
+        if not isinstance(raw_policy, dict):
+            raise ValueError("requestPolicy 必须是 JSON 对象")
+        policy = dict(raw_policy)
+        if "userAgent" in policy:
+            user_agent = str(policy["userAgent"] or "").strip()
+            if (
+                not user_agent
+                or len(user_agent) > 500
+                or "\r" in user_agent
+                or "\n" in user_agent
+            ):
+                raise ValueError("requestPolicy.userAgent 无效")
+            policy["userAgent"] = user_agent
+        if "requestsPerSecond" in policy:
+            requests_per_second = float(policy["requestsPerSecond"])
+            if not 0.1 <= requests_per_second <= 10:
+                raise ValueError("requestsPerSecond 必须在 0.1 到 10 之间")
+            policy["requestsPerSecond"] = requests_per_second
+        if "cacheTtlSeconds" in policy:
+            cache_ttl = int(policy["cacheTtlSeconds"])
+            if not 0 <= cache_ttl <= 604800:
+                raise ValueError("cacheTtlSeconds 必须在 0 到 604800 之间")
+            policy["cacheTtlSeconds"] = cache_ttl
+        if "maxRetries" in policy:
+            max_retries = int(policy["maxRetries"])
+            if not 0 <= max_retries <= 5:
+                raise ValueError("maxRetries 必须在 0 到 5 之间")
+            policy["maxRetries"] = max_retries
+        if "retryStatusCodes" in policy:
+            statuses = policy["retryStatusCodes"]
+            if not isinstance(statuses, list) or any(
+                int(status) not in {403, 408, 425, 429, 500, 502, 503, 504}
+                for status in statuses
+            ):
+                raise ValueError("retryStatusCodes 包含不安全的状态码")
+            policy["retryStatusCodes"] = list(
+                dict.fromkeys(int(status) for status in statuses)
+            )
+        if "maxRetryAfterSeconds" in policy:
+            max_retry_after = int(policy["maxRetryAfterSeconds"])
+            if not 1 <= max_retry_after <= 900:
+                raise ValueError("maxRetryAfterSeconds 必须在 1 到 900 之间")
+            policy["maxRetryAfterSeconds"] = max_retry_after
+        config["requestPolicy"] = policy
+
+    raw_auth = config.get("auth")
+    if raw_auth is not None:
+        if not isinstance(raw_auth, dict):
+            raise ValueError("auth 必须是 JSON 对象")
+        auth = dict(raw_auth)
+        auth_type = str(auth.get("type") or "none")
+        if auth_type not in SOURCE_AUTH_TYPES:
+            raise ValueError("不支持的数据源认证方式")
+        auth["type"] = auth_type
+        key_fields = {
+            "bearer": ("tokenKey", "token"),
+            "apiKeyHeader": ("secretKey", "apiKey"),
+            "basic": ("usernameKey", "username"),
+            "cookie": ("cookieKey", "cookie"),
+        }
+        if auth_type in key_fields:
+            field, default = key_fields[auth_type]
+            key = str(auth.get(field) or default).strip()
+            if not re.fullmatch(r"[A-Za-z0-9_.-]{1,100}", key):
+                raise ValueError(f"auth.{field} 无效")
+            auth[field] = key
+        if auth_type == "basic":
+            password_key = str(auth.get("passwordKey") or "password").strip()
+            if not re.fullmatch(r"[A-Za-z0-9_.-]{1,100}", password_key):
+                raise ValueError("auth.passwordKey 无效")
+            auth["passwordKey"] = password_key
+        if auth_type == "apiKeyHeader":
+            header_name = str(auth.get("headerName") or "X-API-Key").strip()
+            if (
+                not re.fullmatch(r"[A-Za-z0-9-]{1,100}", header_name)
+                or header_name.lower()
+                in {"host", "content-length", "connection", "proxy-authorization"}
+            ):
+                raise ValueError("auth.headerName 无效")
+            auth["headerName"] = header_name
+        config["auth"] = auth
     return config
+
+
+def source_secret_json(secret_arn: str) -> dict[str, str]:
+    if not secret_arn:
+        raise ValueError("尚未配置 AWS Secrets Manager 凭据")
+    try:
+        response = boto3.client(
+            "secretsmanager",
+            region_name=AWS_REGION,
+        ).get_secret_value(SecretId=secret_arn)
+    except Exception as error:
+        raise ValueError(f"读取认证凭据失败：{type(error).__name__}") from error
+    raw = response.get("SecretString")
+    if not raw:
+        raise ValueError("认证凭据必须使用 SecretString JSON")
+    try:
+        value = json.loads(raw)
+    except json.JSONDecodeError as error:
+        raise ValueError("认证凭据不是合法 JSON") from error
+    if not isinstance(value, dict):
+        raise ValueError("认证凭据必须是 JSON 对象")
+    return {str(key): str(item) for key, item in value.items()}
+
+
+def source_auth_headers(config: dict, secret_arn: str) -> dict[str, str]:
+    auth = config.get("auth") or {}
+    auth_type = str(auth.get("type") or "none")
+    if auth_type == "none":
+        return {}
+    secret = source_secret_json(secret_arn)
+    if auth_type == "bearer":
+        token = secret.get(str(auth.get("tokenKey") or "token"), "")
+        if not token:
+            raise ValueError("Secret 中缺少 Bearer token")
+        return {"Authorization": f"Bearer {token}"}
+    if auth_type == "apiKeyHeader":
+        api_key = secret.get(str(auth.get("secretKey") or "apiKey"), "")
+        if not api_key:
+            raise ValueError("Secret 中缺少 API Key")
+        return {str(auth.get("headerName") or "X-API-Key"): api_key}
+    if auth_type == "basic":
+        username = secret.get(str(auth.get("usernameKey") or "username"), "")
+        password = secret.get(str(auth.get("passwordKey") or "password"), "")
+        if not username or not password:
+            raise ValueError("Secret 中缺少 Basic Auth 用户名或密码")
+        encoded = base64.b64encode(f"{username}:{password}".encode()).decode()
+        return {"Authorization": f"Basic {encoded}"}
+    if auth_type == "cookie":
+        cookie = secret.get(str(auth.get("cookieKey") or "cookie"), "")
+        if not cookie or "\r" in cookie or "\n" in cookie:
+            raise ValueError("Secret 中缺少有效 Cookie")
+        return {"Cookie": cookie}
+    raise ValueError("不支持的数据源认证方式")
+
+
+def source_credential_payload(payload: dict, config: dict) -> dict[str, str] | None:
+    if "credential" not in payload:
+        return None
+    credential = payload["credential"]
+    if not isinstance(credential, dict):
+        raise ValueError("credential 必须是 JSON 对象")
+    auth = config.get("auth") or {}
+    auth_type = str(auth.get("type") or "none")
+    if auth_type == "bearer":
+        token = str(credential.get("token") or "").strip()
+        if not token:
+            raise ValueError("Bearer Token 不能为空")
+        return {str(auth.get("tokenKey") or "token"): token}
+    if auth_type == "apiKeyHeader":
+        api_key = str(credential.get("apiKey") or "").strip()
+        if not api_key:
+            raise ValueError("API Key 不能为空")
+        return {str(auth.get("secretKey") or "apiKey"): api_key}
+    if auth_type == "basic":
+        username = str(credential.get("username") or "").strip()
+        password = str(credential.get("password") or "")
+        if not username or not password:
+            raise ValueError("Basic Auth 用户名和密码不能为空")
+        return {
+            str(auth.get("usernameKey") or "username"): username,
+            str(auth.get("passwordKey") or "password"): password,
+        }
+    if auth_type == "cookie":
+        cookie = str(credential.get("cookie") or "").strip()
+        if not cookie:
+            raise ValueError("Cookie 不能为空")
+        return {str(auth.get("cookieKey") or "cookie"): cookie}
+    raise ValueError("保存凭据前必须选择认证方式")
+
+
+def put_source_secret(
+    source_id: int,
+    current_arn: str,
+    credential: dict[str, str],
+) -> str:
+    client = boto3.client("secretsmanager", region_name=AWS_REGION)
+    secret_string = json.dumps(credential, ensure_ascii=False)
+    managed_marker = f":secret:{SOURCE_SECRET_NAME_PREFIX}/"
+    if current_arn:
+        if managed_marker not in current_arn:
+            raise ValueError("外部 Secret 只能引用，不能在本界面覆盖")
+        client.put_secret_value(SecretId=current_arn, SecretString=secret_string)
+        return current_arn
+    name = f"{SOURCE_SECRET_NAME_PREFIX}/{source_id}"
+    try:
+        response = client.create_secret(
+            Name=name,
+            Description=f"Aperture GEO data source {source_id} credentials",
+            SecretString=secret_string,
+            Tags=[
+                {"Key": "Application", "Value": "ApertureGEO"},
+                {"Key": "DataSourceId", "Value": str(source_id)},
+            ],
+        )
+        return str(response["ARN"])
+    except client.exceptions.ResourceExistsException:
+        client.put_secret_value(SecretId=name, SecretString=secret_string)
+        response = client.describe_secret(SecretId=name)
+        return str(response["ARN"])
 
 
 def source_request_policy(config: dict) -> dict:
@@ -217,26 +403,52 @@ def source_request_policy(config: dict) -> dict:
     return policy
 
 
+def wait_for_source_rate_limit(hostname: str, requests_per_second: object) -> None:
+    with SOURCE_HOST_LOCKS_GUARD:
+        host_lock = SOURCE_HOST_LOCKS.setdefault(hostname, threading.Lock())
+    interval = 1.0 / max(0.1, min(float(requests_per_second or 2), 10.0))
+    with host_lock:
+        elapsed = time.monotonic() - SOURCE_HOST_LAST_REQUEST.get(hostname, 0.0)
+        if elapsed < interval:
+            time.sleep(interval - elapsed)
+        SOURCE_HOST_LAST_REQUEST[hostname] = time.monotonic()
+
+
 def test_data_source_url(
     url: str,
     *,
     config: dict | None = None,
     access_model: str = "open",
+    secret_arn: str = "",
 ) -> dict[str, object]:
     current_url = validated_public_https_url(url)
+    initial_hostname = urlparse(current_url).hostname
     opener = build_opener(_NoRedirect())
     policy = source_request_policy(config or {})
+    auth_headers = source_auth_headers(config or {}, secret_arn)
+    if access_model == "authenticated" and not auth_headers:
+        raise ValueError("认证来源尚未选择认证方式或配置凭据")
     retries_remaining = int(policy["maxRetries"])
     redirects_remaining = 5
     while True:
         assert_public_hostname(current_url)
+        headers = {
+            "User-Agent": str(policy["userAgent"]),
+            "Accept": (
+                "application/rss+xml, application/xml, text/csv, "
+                "text/html, application/json"
+            ),
+            "Range": "bytes=0-4095",
+        }
+        if urlparse(current_url).hostname == initial_hostname:
+            headers.update(auth_headers)
         request = Request(
             current_url,
-            headers={
-                "User-Agent": str(policy["userAgent"]),
-                "Accept": "application/rss+xml, application/xml, text/csv, text/html, application/json",
-                "Range": "bytes=0-4095",
-            },
+            headers=headers,
+        )
+        wait_for_source_rate_limit(
+            urlparse(current_url).hostname or "",
+            policy.get("requestsPerSecond", 2),
         )
         try:
             with opener.open(request, timeout=15) as response:
@@ -286,6 +498,118 @@ def parse_json(value: str | None, fallback):
         return json.loads(value)
     except json.JSONDecodeError:
         return fallback
+
+
+def run_registered_source_test(source_id: int) -> dict[str, object]:
+    with connection() as conn:
+        source = conn.execute(
+            """
+            SELECT url, access_model, secret_arn, config_json
+            FROM data_sources
+            WHERE id = %s
+            """,
+            (source_id,),
+        ).fetchone()
+    if not source:
+        raise ValueError("数据源不存在")
+    timestamp = utc_now()
+    try:
+        result = test_data_source_url(
+            str(source["url"]),
+            config=normalized_source_config(
+                parse_json(source["config_json"], {})
+            ),
+            access_model=str(source["access_model"]),
+            secret_arn=str(source["secret_arn"] or ""),
+        )
+        test_status = "success"
+    except Exception as error:
+        result = {
+            "ok": False,
+            "statusCode": None,
+            "finalUrl": source["url"],
+            "message": str(error)[:1000],
+        }
+        test_status = "failed"
+    with connection() as conn:
+        conn.execute(
+            """
+            UPDATE data_sources
+            SET last_tested_at = %s, last_test_status = %s,
+                last_test_message = %s, updated_at = %s
+            WHERE id = %s
+            """,
+            (
+                timestamp,
+                test_status,
+                str(result["message"])[:1000],
+                timestamp,
+                source_id,
+            ),
+        )
+    return {
+        "sourceId": source_id,
+        "testedAt": timestamp,
+        **result,
+    }
+
+
+def source_test_batch_snapshot() -> dict[str, object]:
+    with SOURCE_TEST_BATCH_LOCK:
+        return dict(SOURCE_TEST_BATCH_STATE)
+
+
+def run_source_test_batch(source_ids: list[int]) -> None:
+    try:
+        with ThreadPoolExecutor(max_workers=min(8, max(1, len(source_ids)))) as pool:
+            futures = {
+                pool.submit(run_registered_source_test, source_id): source_id
+                for source_id in source_ids
+            }
+            for future in as_completed(futures):
+                try:
+                    result = future.result()
+                    succeeded = bool(result.get("ok"))
+                except Exception:
+                    succeeded = False
+                with SOURCE_TEST_BATCH_LOCK:
+                    SOURCE_TEST_BATCH_STATE["completed"] = (
+                        int(SOURCE_TEST_BATCH_STATE["completed"]) + 1
+                    )
+                    key = "success" if succeeded else "failed"
+                    SOURCE_TEST_BATCH_STATE[key] = (
+                        int(SOURCE_TEST_BATCH_STATE[key]) + 1
+                    )
+    finally:
+        with SOURCE_TEST_BATCH_LOCK:
+            SOURCE_TEST_BATCH_STATE["running"] = False
+            SOURCE_TEST_BATCH_STATE["finishedAt"] = utc_now()
+
+
+def start_source_test_batch(source_ids: list[int]) -> tuple[bool, dict[str, object]]:
+    with SOURCE_TEST_BATCH_LOCK:
+        if bool(SOURCE_TEST_BATCH_STATE["running"]):
+            return False, dict(SOURCE_TEST_BATCH_STATE)
+        SOURCE_TEST_BATCH_STATE.update(
+            {
+                "running": True,
+                "total": len(source_ids),
+                "completed": 0,
+                "success": 0,
+                "failed": 0,
+                "startedAt": utc_now(),
+                "finishedAt": None,
+            }
+        )
+        snapshot = dict(SOURCE_TEST_BATCH_STATE)
+    thread = threading.Thread(
+        target=run_source_test_batch,
+        args=(source_ids,),
+        name="data-source-connectivity-test",
+        daemon=True,
+    )
+    thread.start()
+    return True, snapshot
 
 
 def normalize_crawler_schedule(value: object) -> dict[str, str]:
@@ -610,6 +934,11 @@ class ApiHandler(BaseHTTPRequestHandler):
                 return
             self._admin_data_sources()
             return
+        if path == "/api/admin/data-sources/test-batch":
+            if not self._require_admin():
+                return
+            self._json(source_test_batch_snapshot())
+            return
         if path == "/api/admin/jobs":
             if not self._require_admin():
                 return
@@ -696,6 +1025,11 @@ class ApiHandler(BaseHTTPRequestHandler):
             if not self._require_admin():
                 return
             self._create_data_source(payload)
+            return
+        if path == "/api/admin/data-sources/test-all":
+            if not self._require_admin():
+                return
+            self._test_all_data_sources(payload)
             return
         source_test_match = re.fullmatch(
             r"/api/admin/data-sources/(\d+)/test", path
@@ -2586,6 +2920,7 @@ The open article and JSON-LD representation may be quoted with a link and clear 
             item = dict(row)
             item["respect_robots"] = bool(item["respect_robots"])
             item["config"] = parse_json(item.pop("config_json", "{}"), {})
+            item["credentialsConfigured"] = bool(item.get("secret_arn"))
             item["assignments"] = by_source.get(int(item["id"]), [])
             item["agentIds"] = [
                 assignment["agent_id"]
@@ -2721,6 +3056,10 @@ The open article and JSON-LD representation may be quoted with a link and clear 
     def _create_data_source(self, payload: dict) -> None:
         try:
             values, agent_ids = self._source_values(payload, partial=False)
+            credential = source_credential_payload(
+                payload,
+                normalized_source_config(payload.get("config") or {}),
+            )
         except (TypeError, ValueError) as error:
             self._json({"error": str(error)}, HTTPStatus.BAD_REQUEST)
             return
@@ -2733,6 +3072,20 @@ The open article and JSON-LD representation may be quoted with a link and clear 
         values.setdefault("secret_arn", "")
         values.setdefault("notes", "")
         values.setdefault("config_json", "{}")
+        config = normalized_source_config(payload.get("config") or {})
+        if (
+            values["status"] == "active"
+            and values["access_model"] == "authenticated"
+            and (
+                str((config.get("auth") or {}).get("type") or "none") == "none"
+                or not (credential or values["secret_arn"])
+            )
+        ):
+            self._json(
+                {"error": "启用认证来源前必须选择认证方式并配置 Secret"},
+                HTTPStatus.BAD_REQUEST,
+            )
+            return
         values["created_at"] = timestamp
         values["updated_at"] = timestamp
         columns = list(values)
@@ -2747,6 +3100,16 @@ The open article and JSON-LD representation may be quoted with a link and clear 
                     """,
                     [values[column] for column in columns],
                 ).fetchone()["id"]
+                if credential:
+                    secret_arn = put_source_secret(
+                        int(source_id),
+                        str(values.get("secret_arn") or ""),
+                        credential,
+                    )
+                    conn.execute(
+                        "UPDATE data_sources SET secret_arn = %s WHERE id = %s",
+                        (secret_arn, source_id),
+                    )
                 self._replace_source_assignments(
                     conn,
                     int(source_id),
@@ -2762,7 +3125,13 @@ The open article and JSON-LD representation may be quoted with a link and clear 
                 return
             raise
         self._json(
-            {"ok": True, "sourceId": source_id},
+            {
+                "ok": True,
+                "sourceId": source_id,
+                "credentialsConfigured": bool(
+                    credential or values.get("secret_arn")
+                ),
+            },
             HTTPStatus.CREATED,
         )
 
@@ -2772,19 +3141,66 @@ The open article and JSON-LD representation may be quoted with a link and clear 
         except (TypeError, ValueError) as error:
             self._json({"error": str(error)}, HTTPStatus.BAD_REQUEST)
             return
-        if not values and agent_ids is None:
+        if (
+            not values
+            and agent_ids is None
+            and "credential" not in payload
+            and not payload.get("removeCredential")
+        ):
             self._json({"error": "没有可更新字段"}, HTTPStatus.BAD_REQUEST)
             return
         timestamp = utc_now()
         try:
             with connection() as conn:
                 source = conn.execute(
-                    "SELECT id FROM data_sources WHERE id = %s",
+                    """
+                    SELECT id, status, access_model, secret_arn, config_json
+                    FROM data_sources WHERE id = %s
+                    """,
                     (source_id,),
                 ).fetchone()
                 if not source:
                     self._json({"error": "数据源不存在"}, HTTPStatus.NOT_FOUND)
                     return
+                config = normalized_source_config(
+                    payload.get("config")
+                    if "config" in payload
+                    else parse_json(source["config_json"], {})
+                )
+                credential = source_credential_payload(payload, config)
+                if payload.get("removeCredential"):
+                    values["secret_arn"] = ""
+                elif credential:
+                    values["secret_arn"] = put_source_secret(
+                        source_id,
+                        str(
+                            values.get("secret_arn")
+                            or source["secret_arn"]
+                            or ""
+                        ),
+                        credential,
+                    )
+                credentials_configured = bool(
+                    values["secret_arn"]
+                    if "secret_arn" in values
+                    else source["secret_arn"]
+                )
+                effective_status = str(values.get("status") or source["status"])
+                effective_access_model = str(
+                    values.get("access_model") or source["access_model"]
+                )
+                if (
+                    effective_status == "active"
+                    and effective_access_model == "authenticated"
+                    and (
+                        str((config.get("auth") or {}).get("type") or "none")
+                        == "none"
+                        or not credentials_configured
+                    )
+                ):
+                    raise ValueError(
+                        "启用认证来源前必须选择认证方式并配置 Secret"
+                    )
                 if values:
                     values["updated_at"] = timestamp
                     assignments = ", ".join(
@@ -2809,7 +3225,13 @@ The open article and JSON-LD representation may be quoted with a link and clear 
                 self._json({"error": "该 URL 已存在于数据源注册中心"}, HTTPStatus.CONFLICT)
                 return
             raise
-        self._json({"ok": True, "sourceId": source_id})
+        self._json(
+            {
+                "ok": True,
+                "sourceId": source_id,
+                "credentialsConfigured": credentials_configured,
+            }
+        )
 
     def _delete_data_source(self, source_id: int) -> None:
         with connection() as conn:
@@ -2823,57 +3245,66 @@ The open article and JSON-LD representation may be quoted with a link and clear 
         self._json({"ok": True, "sourceId": source_id})
 
     def _test_data_source(self, source_id: int) -> None:
-        with connection() as conn:
-            source = conn.execute(
-                """
-                SELECT url, access_model, config_json
-                FROM data_sources
-                WHERE id = %s
-                """,
-                (source_id,),
-            ).fetchone()
-        if not source:
-            self._json({"error": "数据源不存在"}, HTTPStatus.NOT_FOUND)
-            return
-        timestamp = utc_now()
         try:
-            result = test_data_source_url(
-                str(source["url"]),
-                config=normalized_source_config(
-                    parse_json(source["config_json"], {})
-                ),
-                access_model=str(source["access_model"]),
-            )
-            test_status = "success"
-            response_status = HTTPStatus.OK
-        except (TypeError, ValueError) as error:
-            result = {
-                "ok": False,
-                "statusCode": None,
-                "finalUrl": source["url"],
-                "message": str(error),
-            }
-            test_status = "failed"
-            response_status = HTTPStatus.BAD_GATEWAY
-        with connection() as conn:
-            conn.execute(
-                """
-                UPDATE data_sources
-                SET last_tested_at = %s, last_test_status = %s,
-                    last_test_message = %s, updated_at = %s
-                WHERE id = %s
-                """,
-                (
-                    timestamp,
-                    test_status,
-                    str(result["message"])[:1000],
-                    timestamp,
-                    source_id,
-                ),
-            )
+            result = run_registered_source_test(source_id)
+        except ValueError as error:
+            self._json({"error": str(error)}, HTTPStatus.NOT_FOUND)
+            return
         self._json(
-            {"sourceId": source_id, "testedAt": timestamp, **result},
-            response_status,
+            result,
+            HTTPStatus.OK if result["ok"] else HTTPStatus.BAD_GATEWAY,
+        )
+
+    def _test_all_data_sources(self, payload: dict) -> None:
+        raw_source_ids = payload.get("sourceIds")
+        if raw_source_ids is not None:
+            if not isinstance(raw_source_ids, list):
+                self._json(
+                    {"error": "sourceIds 必须是数组"},
+                    HTTPStatus.BAD_REQUEST,
+                )
+                return
+            try:
+                requested_ids = list(
+                    dict.fromkeys(int(item) for item in raw_source_ids)
+                )
+            except (TypeError, ValueError):
+                self._json(
+                    {"error": "sourceIds 包含无效 ID"},
+                    HTTPStatus.BAD_REQUEST,
+                )
+                return
+        else:
+            requested_ids = []
+        with connection() as conn:
+            if requested_ids:
+                placeholders = ", ".join("%s" for _ in requested_ids)
+                rows = conn.execute(
+                    f"""
+                    SELECT id FROM data_sources
+                    WHERE id IN ({placeholders})
+                    ORDER BY id
+                    """,
+                    requested_ids,
+                ).fetchall()
+            else:
+                rows = conn.execute(
+                    "SELECT id FROM data_sources ORDER BY id"
+                ).fetchall()
+        source_ids = [int(row["id"]) for row in rows]
+        if not source_ids:
+            self._json(
+                {"error": "没有可测试的数据源"},
+                HTTPStatus.BAD_REQUEST,
+            )
+            return
+        started, state = start_source_test_batch(source_ids)
+        self._json(
+            {
+                "accepted": started,
+                **state,
+            },
+            HTTPStatus.ACCEPTED,
         )
 
     def _admin_crawlers(self) -> None:

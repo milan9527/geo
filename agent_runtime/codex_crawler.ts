@@ -87,6 +87,9 @@ Requirements:
 - Do not attempt CAPTCHA bypass, credential discovery, or access-control bypass.
 - Use only Python standard-library modules available in the sandbox.
 - Fetch only the exact HTTPS sample URLs and allowed domains listed above.
+- Runtime may inject source-specific Authorization, API-key, Basic Auth, or
+  Cookie headers into urllib requests. Never inspect, print, copy, persist, or
+  include authentication headers or credential material in evidence.
 - Do not use subprocess, shell commands, sockets, eval, exec, local credentials,
   cloud metadata endpoints, or filesystem paths outside /tmp.
 - Emit exactly one JSON object on stdout with an "evidence" array.

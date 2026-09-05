@@ -241,6 +241,37 @@
           <label>请求 User-Agent（可选）
             <input name="requestUserAgent" maxlength="500" placeholder="留空使用 Aperture GEO 默认身份；支持 {contactUrl}" />
           </label>
+          <fieldset class="source-agent-fieldset source-auth-fieldset">
+            <legend>认证与 AWS Secrets Manager</legend>
+            <div class="source-auth-grid">
+              <label>认证方式
+                <select name="authType" id="sourceAuthType">
+                  <option value="none">无认证</option>
+                  <option value="bearer">Bearer Token</option>
+                  <option value="apiKeyHeader">API Key Header</option>
+                  <option value="basic">HTTP Basic Auth</option>
+                  <option value="cookie">授权会话 Cookie</option>
+                </select>
+              </label>
+              <label>已有 Secret ARN（可选）
+                <input name="secretArn" placeholder="arn:aws:secretsmanager:..." autocomplete="off" />
+              </label>
+            </div>
+            <div class="source-auth-grid" id="sourceApiKeyOptions" hidden>
+              <label>API Key Header 名称<input name="apiKeyHeader" value="X-API-Key" maxlength="100" /></label>
+            </div>
+            <div class="source-auth-grid" id="sourceTokenCredential" hidden>
+              <label>新 Token / API Key / Cookie
+                <input name="credentialToken" type="password" autocomplete="new-password" placeholder="留空则保留现有 Secret" />
+              </label>
+            </div>
+            <div class="source-auth-grid" id="sourceBasicCredential" hidden>
+              <label>新用户名<input name="credentialUsername" autocomplete="off" placeholder="留空则保留现有 Secret" /></label>
+              <label>新密码<input name="credentialPassword" type="password" autocomplete="new-password" /></label>
+            </div>
+            <label class="source-checkbox"><input name="removeCredential" type="checkbox" />解除当前 Secret 绑定（Secret 本身保留，便于恢复）</label>
+            <p class="source-auth-note">凭据明文只发送到 API 一次并写入 Secrets Manager；Aurora 仅保存 Secret ARN。表单不会读取或回显 Secret 内容。登录表单自动化需单独实现来源适配器；这里支持请求头和 Cookie 认证。</p>
+          </fieldset>
           <fieldset class="source-agent-fieldset">
             <legend>动态分配给 Agent</legend>
             <div id="dataSourceAgents"></div>
@@ -254,6 +285,6 @@
         </form>
       </div>
     </div>
-    <script src="/app.js?v=20260904-14"></script>
+    <script src="/app.js?v=20260905-15"></script>
   </body>
 </html>

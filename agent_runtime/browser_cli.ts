@@ -6,6 +6,7 @@ type BrowserSource = {
   sourceType: string;
   maxItems?: number;
   renderWaitMs?: number;
+  authHeaders?: Record<string, string>;
 };
 
 type BrowserRequest = {
@@ -95,57 +96,78 @@ async function main(): Promise<void> {
   const pageRecords: Array<Record<string, unknown>> = [];
   try {
     for (const source of input.sources) {
-      const response = await page.goto(source.url, {
-        waitUntil: "domcontentloaded",
-        timeout: 45_000,
-      });
-      await page.waitForTimeout(source.renderWaitMs ?? 1_800);
-      let links = await candidateLinks(page, source.url, source.maxItems ?? 3);
-      if (!links.length) links = [{ title: await page.title(), url: page.url() }];
-      for (const candidate of links) {
-        let detailResponse = response;
-        if (candidate.url !== page.url()) {
-          detailResponse = await page
-            .goto(candidate.url, {
-              waitUntil: "domcontentloaded",
-              timeout: 45_000,
-            })
-            .catch(() => null);
-          if (!detailResponse) continue;
-          await page.waitForTimeout(900);
+      const sourceHostname = new URL(source.url).hostname;
+      const authHeaders = source.authHeaders ?? {};
+      const routeHandler = async (route: import("playwright-core").Route) => {
+        const request = route.request();
+        const requestHostname = new URL(request.url()).hostname;
+        if (requestHostname !== sourceHostname || !Object.keys(authHeaders).length) {
+          await route.continue();
+          return;
         }
-        const body = await bodyText(page);
-        if (!body) continue;
-        const title = clean((await page.title()) || candidate.title);
-        const publishedAt =
-          (await metaContent(page, [
-            "meta[property='article:published_time']",
-            "meta[name='date']",
-            "meta[name='publish-date']",
-            "meta[itemprop='datePublished']",
-          ])) || now().slice(0, 10);
-        const item = {
-          publisher: source.publisher,
-          title: title.slice(0, 500),
-          url: page.url(),
-          publishedAt,
-          retrievedAt: now(),
-          sourceType: source.sourceType,
-          excerpt: body.slice(0, 3_000),
-          data: {
-            httpStatus: detailResponse?.status() ?? null,
-            rendered: true,
-            textLength: body.length,
+        await route.continue({
+          headers: {
+            ...request.headers(),
+            ...authHeaders,
           },
-        };
-        evidence.push(item);
-        pageRecords.push({
-          url: item.url,
-          status: item.data.httpStatus,
-          title: item.title.slice(0, 200),
-          textLength: item.data.textLength,
         });
-        if (evidence.length >= 10) break;
+      };
+      await page.route("**/*", routeHandler);
+      try {
+        const response = await page.goto(source.url, {
+          waitUntil: "domcontentloaded",
+          timeout: 45_000,
+        });
+        await page.waitForTimeout(source.renderWaitMs ?? 1_800);
+        let links = await candidateLinks(page, source.url, source.maxItems ?? 3);
+        if (!links.length) links = [{ title: await page.title(), url: page.url() }];
+        for (const candidate of links) {
+          let detailResponse = response;
+          if (candidate.url !== page.url()) {
+            detailResponse = await page
+              .goto(candidate.url, {
+                waitUntil: "domcontentloaded",
+                timeout: 45_000,
+              })
+              .catch(() => null);
+            if (!detailResponse) continue;
+            await page.waitForTimeout(900);
+          }
+          const body = await bodyText(page);
+          if (!body) continue;
+          const title = clean((await page.title()) || candidate.title);
+          const publishedAt =
+            (await metaContent(page, [
+              "meta[property='article:published_time']",
+              "meta[name='date']",
+              "meta[name='publish-date']",
+              "meta[itemprop='datePublished']",
+            ])) || now().slice(0, 10);
+          const item = {
+            publisher: source.publisher,
+            title: title.slice(0, 500),
+            url: page.url(),
+            publishedAt,
+            retrievedAt: now(),
+            sourceType: source.sourceType,
+            excerpt: body.slice(0, 3_000),
+            data: {
+              httpStatus: detailResponse?.status() ?? null,
+              rendered: true,
+              textLength: body.length,
+            },
+          };
+          evidence.push(item);
+          pageRecords.push({
+            url: item.url,
+            status: item.data.httpStatus,
+            title: item.title.slice(0, 200),
+            textLength: item.data.textLength,
+          });
+          if (evidence.length >= 10) break;
+        }
+      } finally {
+        await page.unroute("**/*", routeHandler);
       }
       if (evidence.length >= 10) break;
     }
