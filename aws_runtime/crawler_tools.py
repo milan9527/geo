@@ -53,8 +53,12 @@ def source_auth_material(
     source: dict[str, Any],
 ) -> tuple[dict[str, str], list[str]]:
     config = source.get("config")
-    auth = config.get("auth") if isinstance(config, dict) else {}
-    if not isinstance(auth, dict):
+    raw_auth = config.get("auth") if isinstance(config, dict) else None
+    if raw_auth is None:
+        auth: dict[str, Any] = {}
+    elif isinstance(raw_auth, dict):
+        auth = raw_auth
+    else:
         raise CrawlerToolError("Source auth configuration must be an object")
     auth_type = str(auth.get("type") or "none")
     if auth_type == "none":

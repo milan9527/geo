@@ -14,7 +14,8 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     CODEX_HOME=/tmp/codex
 
 WORKDIR /app
-RUN apk add --no-cache nodejs
+RUN apk upgrade --no-cache \
+    && apk add --no-cache nodejs
 COPY aws_runtime/requirements.txt ./requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt
 COPY aws_runtime/app.py .
