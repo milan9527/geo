@@ -313,7 +313,10 @@ CATEGORIES = [
         "slug": "ai",
         "name": "AI 行业动向",
         "eyebrow": "ARTIFICIAL INTELLIGENCE",
-        "description": "追踪基础模型、推理系统和产业格局的关键变化。",
+        "description": (
+            "持续追踪全球与中国基础模型、推理系统、算力基础设施和 AI 产业竞争格局，"
+            "结合厂商发布、学术论文与市场数据，分析技术变化、商业影响和关键风险。"
+        ),
         "accent": "#5D7CFF",
         "sort_order": 1,
     },
@@ -321,7 +324,10 @@ CATEGORIES = [
         "slug": "agent",
         "name": "Agent 技术",
         "eyebrow": "AGENT SYSTEMS",
-        "description": "深入运行时、工具、身份、记忆和机器支付基础设施。",
+        "description": (
+            "聚焦 AI Agent 运行时、工具调用、协议、身份、记忆、安全治理与机器支付，"
+            "基于官方文档和实测证据，分析 Agent 系统的工程进展、落地约束与商业机会。"
+        ),
         "accent": "#13A691",
         "sort_order": 2,
     },
@@ -329,7 +335,10 @@ CATEGORIES = [
         "slug": "cloud",
         "name": "云计算",
         "eyebrow": "CLOUD INFRASTRUCTURE",
-        "description": "解读云厂商新服务、平台战略与基础设施经济性。",
+        "description": (
+            "跟踪 AWS、Azure、Google Cloud 及中国云厂商的新服务与平台战略，"
+            "分析 AI 基础设施、数据平台和混合云架构的能力差异、成本结构与企业采用影响。"
+        ),
         "accent": "#3C8BCE",
         "sort_order": 3,
     },
@@ -337,7 +346,10 @@ CATEGORIES = [
         "slug": "commerce",
         "name": "电商与媒体",
         "eyebrow": "COMMERCE + MEDIA",
-        "description": "观察 AI 如何改变内容分发、购买决策和商业模式。",
+        "description": (
+            "跟踪 Amazon、Alibaba、Temu、SHEIN 等平台及主流媒体的 AI 应用，"
+            "分析智能购物、内容分发、广告、支付与 Agent 商业模式的真实进展和产业影响。"
+        ),
         "accent": "#C66A52",
         "sort_order": 4,
     },
@@ -345,11 +357,22 @@ CATEGORIES = [
         "slug": "finance",
         "name": "金融市场",
         "eyebrow": "MARKETS + CAPITAL",
-        "description": "提供数据驱动的科技产业与证券市场研究框架。",
+        "description": (
+            "结合监管披露、宏观指标和跨市场数据，研究全球科技股、中国 A 股、"
+            "证券市场与加密资产，区分事实、推断和观点，给出可验证的市场判断与风险边界。"
+        ),
         "accent": "#A6782A",
         "sort_order": 5,
     },
 ]
+
+CATEGORY_DESCRIPTION_UPGRADES = {
+    "ai": "追踪基础模型、推理系统和产业格局的关键变化。",
+    "agent": "深入运行时、工具、身份、记忆和机器支付基础设施。",
+    "cloud": "解读云厂商新服务、平台战略与基础设施经济性。",
+    "commerce": "观察 AI 如何改变内容分发、购买决策和商业模式。",
+    "finance": "提供数据驱动的科技产业与证券市场研究框架。",
+}
 
 
 def article(
@@ -1304,6 +1327,7 @@ def init_db() -> None:
             _seed_categories(conn)
             _seed_articles(conn)
             _seed_agents(conn)
+        _reconcile_managed_category_descriptions(conn)
         _seed_data_sources(conn)
         _reconcile_managed_source_defaults(conn)
         settings_count = conn.execute(
@@ -1321,6 +1345,22 @@ def _seed_categories(conn: Any) -> None:
         """,
         CATEGORIES,
     )
+
+
+def _reconcile_managed_category_descriptions(conn: Any) -> None:
+    descriptions = {
+        str(item["slug"]): str(item["description"])
+        for item in CATEGORIES
+    }
+    for slug, legacy_description in CATEGORY_DESCRIPTION_UPGRADES.items():
+        conn.execute(
+            """
+            UPDATE categories
+            SET description = %s
+            WHERE slug = %s AND description = %s
+            """,
+            (descriptions[slug], slug, legacy_description),
+        )
 
 
 def _seed_articles(conn: Any) -> None:
