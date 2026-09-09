@@ -89,10 +89,18 @@ function setMeta({ title, description, article }) {
       description: article.dek,
       datePublished: article.publishedAt,
       dateModified: article.updatedAt,
-      author: { "@type": "Person", name: article.author, jobTitle: article.authorRole },
+      author: {
+        "@type": "Organization",
+        name: "Aperture 研究编辑部",
+        url: `${location.origin}/authors/research-desk`,
+      },
       about: article.keywords,
       citation: article.sources.map((source) => source.url),
-      publisher: { "@type": "Organization", name: "Aperture Intelligence" },
+      publisher: {
+        "@type": "Organization",
+        name: "Aperture Intelligence",
+        url: `${location.origin}/`,
+      },
     });
     document.head.append(schema);
   }
@@ -298,7 +306,7 @@ async function renderArticle(slug) {
             <p class="article-dek">${article.dek}</p>
             <div class="article-byline">
               <span class="author-avatar">${initials}</span>
-              <span><b>${article.author}</b> · ${article.authorRole}</span>
+              <span><a href="/authors/research-desk"><b>${article.author}</b></a> · ${article.authorRole}</span>
               <i></i><span>${formatDate(article.publishedAt)}</span>
               <i></i><span>${article.readMinutes} 分钟阅读</span>
             </div>

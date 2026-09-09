@@ -926,12 +926,12 @@ ARTICLES = [
 
 
 AGENTS = [
-    ("Research Coder", "research-coder", "Code Interpreter", ["AI", "云计算", "中国大模型", "学术论文"], "running", "*/20 * * * *"),
-    ("Render Scout", "render-scout", "Browser Tool", ["全球电商", "媒体", "支付"], "running", "*/15 * * * *"),
-    ("Market Signal", "market-signal", "Code Interpreter", ["金融", "A股", "证券", "加密货币"], "running", "0 */1 * * *"),
-    ("Evidence Verifier", "evidence-verifier", "Codex SDK", ["Agent", "GitHub", "学术论文", "全部行业"], "running", "*/10 * * * *"),
-    ("Cloud Release Watch", "cloud-release-watch", "Browser Tool", ["云计算"], "idle", "0 */2 * * *"),
-    ("Commerce Feed Miner", "commerce-feed-miner", "Code Interpreter", ["全球电商", "支付", "媒体"], "paused", "0 */3 * * *"),
+    ("Research Coder", "research-coder", "Code Interpreter", ["AI", "云计算", "中国大模型", "学术论文"], "running", "10 0 * * *"),
+    ("Render Scout", "render-scout", "Browser Tool", ["全球电商", "媒体", "支付"], "running", "10 1 * * *"),
+    ("Market Signal", "market-signal", "Code Interpreter", ["金融", "A股", "证券", "加密货币"], "running", "10 2 * * *"),
+    ("Evidence Verifier", "evidence-verifier", "Codex SDK", ["Agent", "GitHub", "学术论文", "全部行业"], "running", "10 3 * * *"),
+    ("Cloud Release Watch", "cloud-release-watch", "Browser Tool", ["云计算"], "idle", "10 4 * * *"),
+    ("Commerce Feed Miner", "commerce-feed-miner", "Code Interpreter", ["全球电商", "支付", "媒体"], "paused", "10 5 * * *"),
 ]
 
 DATA_SOURCES = [

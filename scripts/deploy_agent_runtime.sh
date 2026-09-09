@@ -103,7 +103,14 @@ jq \
     description,
     protocolConfiguration,
     lifecycleConfiguration,
-    environmentVariables
+    environmentVariables: (
+      .environmentVariables
+      + {
+          RESEARCH_AUTO_PUBLISH: "false",
+          RESEARCH_ARTICLE_UPDATE_WINDOW_HOURS: "336",
+          RESEARCH_ARTICLE_SOURCE_OVERLAP_THRESHOLD: "0.35"
+        }
+    )
   }' \
   "$CURRENT_FILE" >"$UPDATE_FILE"
 

@@ -37,13 +37,13 @@ AURORA_DATABASE = os.environ.get("AURORA_DATABASE", "geo")
 BROWSER_ID = os.environ.get("AGENTCORE_BROWSER_ID", "")
 CODE_INTERPRETER_ID = os.environ.get("AGENTCORE_CODE_INTERPRETER_ID", "")
 AUTO_PUBLISH_RESEARCH = os.environ.get(
-    "RESEARCH_AUTO_PUBLISH", "true"
+    "RESEARCH_AUTO_PUBLISH", "false"
 ).lower() in {"1", "true", "yes"}
 ARTICLE_UPDATE_WINDOW_HOURS = int(
-    os.environ.get("RESEARCH_ARTICLE_UPDATE_WINDOW_HOURS", "24")
+    os.environ.get("RESEARCH_ARTICLE_UPDATE_WINDOW_HOURS", "336")
 )
 ARTICLE_SOURCE_OVERLAP_THRESHOLD = float(
-    os.environ.get("RESEARCH_ARTICLE_SOURCE_OVERLAP_THRESHOLD", "0.5")
+    os.environ.get("RESEARCH_ARTICLE_SOURCE_OVERLAP_THRESHOLD", "0.35")
 )
 MAX_OPEN_SOURCES_PER_RUN = max(
     1,
@@ -1133,66 +1133,163 @@ def canonical_source_url(value: str) -> str:
 
 
 def article_update_candidate(
-    crawler_id: int,
+    category_slug: str,
     evidence: list[dict[str, Any]],
 ) -> dict[str, Any] | None:
-    latest = rows(
+    candidates = rows(
         execute_sql(
             """
             SELECT r.id run_id, r.output_article_id, a.slug article_slug,
                    a.status article_status, a.published_at
             FROM research_runs r
             JOIN articles a ON a.id = r.output_article_id
-            WHERE r.agent_id = :agent_id
+            WHERE r.category_slug = :category_slug
               AND r.status = 'completed'
               AND r.output_article_id IS NOT NULL
             ORDER BY r.completed_at DESC, r.id DESC
-            LIMIT 1
+            LIMIT 40
             """,
-            {"agent_id": crawler_id},
+            {"category_slug": category_slug},
         )
     )
-    if not latest:
-        return None
-    candidate = latest[0]
-    published_at = datetime.fromisoformat(
-        str(candidate["published_at"]).replace("Z", "+00:00")
-    )
-    if published_at.tzinfo is None:
-        published_at = published_at.replace(tzinfo=timezone.utc)
-    age_hours = (
-        datetime.now(timezone.utc) - published_at.astimezone(timezone.utc)
-    ).total_seconds() / 3600
-    if age_hours > ARTICLE_UPDATE_WINDOW_HOURS:
+    if not candidates:
         return None
 
-    previous_urls = {
-        canonical_source_url(item["url"])
-        for item in rows(
-            execute_sql(
-                """
-                SELECT url FROM research_evidence
-                WHERE run_id = :run_id
-                """,
-                {"run_id": candidate["run_id"]},
-            )
-        )
-        if item.get("url")
-    }
     current_urls = {
         canonical_source_url(str(item.get("url") or ""))
         for item in evidence
         if item.get("url")
     }
-    union = previous_urls | current_urls
-    overlap = len(previous_urls & current_urls) / len(union) if union else 0.0
-    if overlap < ARTICLE_SOURCE_OVERLAP_THRESHOLD:
-        return None
-    return {
-        **candidate,
-        "sourceOverlap": round(overlap, 4),
-        "ageHours": round(age_hours, 2),
+    best: dict[str, Any] | None = None
+    for candidate in candidates:
+        published_at = datetime.fromisoformat(
+            str(candidate["published_at"]).replace("Z", "+00:00")
+        )
+        if published_at.tzinfo is None:
+            published_at = published_at.replace(tzinfo=timezone.utc)
+        age_hours = (
+            datetime.now(timezone.utc) - published_at.astimezone(timezone.utc)
+        ).total_seconds() / 3600
+        if age_hours > ARTICLE_UPDATE_WINDOW_HOURS:
+            continue
+        previous_urls = {
+            canonical_source_url(item["url"])
+            for item in rows(
+                execute_sql(
+                    """
+                    SELECT url FROM research_evidence
+                    WHERE run_id = :run_id
+                    """,
+                    {"run_id": candidate["run_id"]},
+                )
+            )
+            if item.get("url")
+        }
+        union = previous_urls | current_urls
+        overlap = len(previous_urls & current_urls) / len(union) if union else 0.0
+        if overlap < ARTICLE_SOURCE_OVERLAP_THRESHOLD:
+            continue
+        scored = {
+            **candidate,
+            "sourceOverlap": round(overlap, 4),
+            "ageHours": round(age_hours, 2),
+        }
+        if best is None or scored["sourceOverlap"] > best["sourceOverlap"]:
+            best = scored
+    return best
+
+
+def publication_gate(
+    output: dict[str, Any],
+    evidence: list[dict[str, Any]],
+    verification: dict[str, Any],
+) -> dict[str, Any]:
+    publishers = {
+        str(item.get("publisher") or "").strip().casefold()
+        for item in evidence
+        if str(item.get("publisher") or "").strip()
     }
+    article_characters = len(
+        json.dumps(output.get("sections") or [], ensure_ascii=False)
+    )
+    checks = {
+        "verified": verification.get("status") == "verified",
+        "verificationScore": int(verification.get("score") or 0) >= 90,
+        "sourceCount": len(evidence) >= 5,
+        "publisherDiversity": len(publishers) >= 3,
+        "substantiveLength": article_characters >= 3000,
+        "humanTitle": not needs_human_editorial_revision(output),
+    }
+    return {
+        "ready": all(checks.values()),
+        "checks": checks,
+        "sourceCount": len(evidence),
+        "distinctPublishers": len(publishers),
+        "articleCharacters": article_characters,
+        "policy": "human_review_required",
+    }
+
+
+def _title_terms(value: str) -> set[str]:
+    normalized = re.sub(r"[^0-9a-z\u4e00-\u9fff]+", "", value.casefold())
+    return {
+        normalized[index : index + 2]
+        for index in range(max(0, len(normalized) - 1))
+    }
+
+
+def article_title_candidate(
+    category_slug: str,
+    title: str,
+) -> dict[str, Any] | None:
+    current_terms = _title_terms(title)
+    if not current_terms:
+        return None
+    candidates = rows(
+        execute_sql(
+            """
+            SELECT a.id output_article_id, a.slug article_slug,
+                   a.status article_status, a.title, a.updated_at
+            FROM articles a
+            JOIN categories c ON c.id = a.category_id
+            WHERE c.slug = :category_slug
+              AND a.status IN ('draft', 'review')
+            ORDER BY a.updated_at DESC
+            LIMIT 60
+            """,
+            {"category_slug": category_slug},
+        )
+    )
+    best: dict[str, Any] | None = None
+    for candidate in candidates:
+        candidate_terms = _title_terms(str(candidate["title"]))
+        if not candidate_terms:
+            continue
+        similarity = (
+            2 * len(current_terms & candidate_terms)
+            / (len(current_terms) + len(candidate_terms))
+        )
+        if similarity < 0.52:
+            continue
+        updated_at = datetime.fromisoformat(
+            str(candidate["updated_at"]).replace("Z", "+00:00")
+        )
+        if updated_at.tzinfo is None:
+            updated_at = updated_at.replace(tzinfo=timezone.utc)
+        age_hours = (
+            datetime.now(timezone.utc) - updated_at.astimezone(timezone.utc)
+        ).total_seconds() / 3600
+        if age_hours > ARTICLE_UPDATE_WINDOW_HOURS:
+            continue
+        scored = {
+            **candidate,
+            "sourceOverlap": None,
+            "titleSimilarity": round(similarity, 4),
+            "ageHours": round(age_hours, 2),
+        }
+        if best is None or scored["titleSimilarity"] > best["titleSimilarity"]:
+            best = scored
+    return best
 
 
 def fallback_research(
@@ -1829,7 +1926,7 @@ def reverify_recent_research(exclude_run_id: int) -> list[dict[str, Any]]:
             """
             SELECT r.id, r.output_article_id, r.category_slug, r.topic,
                    a.title, a.dek, a.summary, a.authority_score,
-                   a.keywords, a.body_json
+                   a.keywords, a.body_json, a.status article_status
             FROM research_runs r
             JOIN articles a ON a.id = r.output_article_id
             WHERE r.status = 'completed' AND r.id != :exclude_run_id
@@ -1924,7 +2021,7 @@ def reverify_recent_research(exclude_run_id: int) -> list[dict[str, Any]]:
             }
         article_status = (
             "published"
-            if AUTO_PUBLISH_RESEARCH and verification["status"] == "verified"
+            if candidate["article_status"] == "published"
             else "review"
         )
         execute_sql(
@@ -2021,7 +2118,7 @@ def persist_research_output(
             {"agent_id": crawler["id"], "evidence_hash": evidence_hash},
         )
     )
-    update_candidate = article_update_candidate(int(crawler["id"]), evidence)
+    update_candidate = article_update_candidate(profile["category"], evidence)
     run_status = "running" if force_analysis or not previous else "skipped"
     run = rows(
         execute_sql(
@@ -2153,6 +2250,20 @@ def persist_research_output(
             "citationIssues": initial_verification.get("citationIssues", []),
             "causalityRisks": initial_verification.get("causalityRisks", []),
         }
+    verification["publicationGate"] = publication_gate(
+        output,
+        evidence,
+        verification,
+    )
+    title_candidate = article_title_candidate(
+        profile["category"],
+        str(output.get("title") or profile["topic"]),
+    )
+    if title_candidate and (
+        update_candidate is None
+        or update_candidate["article_status"] == "published"
+    ):
+        update_candidate = title_candidate
     category = rows(
         execute_sql(
             "SELECT id FROM categories WHERE slug = :slug",
@@ -2244,6 +2355,7 @@ def persist_research_output(
         verification["deduplication"] = {
             "action": "updated_existing_article",
             "sourceOverlap": update_candidate["sourceOverlap"],
+            "titleSimilarity": update_candidate.get("titleSimilarity"),
             "articleAgeHours": update_candidate["ageHours"],
         }
     else:

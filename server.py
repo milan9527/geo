@@ -64,6 +64,9 @@ def create_spa_handler(directory: Path, label: str):
         def do_PATCH(self) -> None:  # noqa: N802
             self._proxy_api()
 
+        def do_DELETE(self) -> None:  # noqa: N802
+            self._proxy_api()
+
         def do_OPTIONS(self) -> None:  # noqa: N802
             self._proxy_api()
 
@@ -77,6 +80,10 @@ def create_spa_handler(directory: Path, label: str):
                 or path
                 in {
                     "/methodology",
+                    "/about",
+                    "/authors/research-desk",
+                    "/editorial-policy",
+                    "/corrections",
                     "/robots.txt",
                     "/sitemap.xml",
                     "/sitemap-articles.xml",

@@ -849,6 +849,18 @@ class ApiHandler(BaseHTTPRequestHandler):
         if path == "/methodology":
             self._methodology_page()
             return
+        if path == "/about":
+            self._about_page()
+            return
+        if path == "/authors/research-desk":
+            self._author_page()
+            return
+        if path == "/editorial-policy":
+            self._editorial_policy_page()
+            return
+        if path == "/corrections":
+            self._corrections_page()
+            return
         if path == "/robots.txt":
             self._robots()
             return
@@ -1454,6 +1466,7 @@ class ApiHandler(BaseHTTPRequestHandler):
         <div class="footer-links">
           <div><strong>研究领域</strong><a href="/category/ai" data-link>AI 行业动向</a><a href="/category/agent" data-link>Agent 技术</a><a href="/category/cloud" data-link>云计算</a></div>
           <div><strong>行业观察</strong><a href="/category/commerce" data-link>电商与媒体</a><a href="/category/finance" data-link>金融市场</a><a href="/methodology" data-link>研究方法</a></div>
+          <div><strong>关于我们</strong><a href="/about">机构介绍</a><a href="/authors/research-desk">研究编辑部</a><a href="/editorial-policy">编辑政策</a><a href="/corrections">纠错政策</a></div>
           <div><strong>机器访问</strong><a href="/llms.txt">llms.txt</a><a href="/feed.xml">RSS Feed</a><a href="/sitemap.xml">Sitemap</a></div>
         </div>
       </div>
@@ -1560,7 +1573,7 @@ class ApiHandler(BaseHTTPRequestHandler):
     <p class="article-eyebrow">{html.escape(str(article["category"]["eyebrow"]))}</p>
     <h1>{html.escape(str(article["title"]))}</h1>
     <p class="article-dek">{html.escape(str(article["dek"]))}</p>
-    <div class="article-byline"><span><b>{html.escape(str(article["author"]))}</b> · {html.escape(str(article["authorRole"]))}</span><i></i><time datetime="{html.escape(str(article["publishedAt"]), quote=True)}">{html.escape(str(article["publishedAt"]))}</time><i></i><span>{int(article["readMinutes"])} 分钟阅读</span></div>
+    <div class="article-byline"><span><a href="/authors/research-desk"><b>{html.escape(str(article["author"]))}</b></a> · {html.escape(str(article["authorRole"]))}</span><i></i><time datetime="{html.escape(str(article["publishedAt"]), quote=True)}">{html.escape(str(article["publishedAt"]))}</time><i></i><span>{int(article["readMinutes"])} 分钟阅读</span></div>
   </div></header>
   <div class="article-layout">
     <div class="article-content"><p class="article-summary">{html.escape(str(article["summary"]))}</p>{''.join(section_parts)}</div>
@@ -1580,6 +1593,8 @@ class ApiHandler(BaseHTTPRequestHandler):
                 "@id": organization_id,
                 "name": "Aperture Intelligence",
                 "url": f"{PUBLIC_BASE_URL}/",
+                "publishingPrinciples": f"{PUBLIC_BASE_URL}/editorial-policy",
+                "correctionsPolicy": f"{PUBLIC_BASE_URL}/corrections",
             },
             {
                 "@context": "https://schema.org",
@@ -1592,9 +1607,9 @@ class ApiHandler(BaseHTTPRequestHandler):
                 "datePublished": article["publishedAt"],
                 "dateModified": article["updatedAt"],
                 "author": {
-                    "@type": "Person",
-                    "name": article["author"],
-                    "jobTitle": article["authorRole"],
+                    "@type": "Organization",
+                    "name": "Aperture 研究编辑部",
+                    "url": f"{PUBLIC_BASE_URL}/authors/research-desk",
                 },
                 "publisher": {"@id": organization_id},
                 "articleSection": article["category"]["name"],
@@ -1754,6 +1769,188 @@ class ApiHandler(BaseHTTPRequestHandler):
             extra_headers={"Cache-Control": "public, max-age=300"},
         )
 
+    def _institutional_page(
+        self,
+        *,
+        eyebrow: str,
+        heading: str,
+        lead: str,
+        canonical_path: str,
+        sections: list[tuple[str, str]],
+        schema: dict,
+    ) -> None:
+        body = "".join(
+            '<div class="methodology-step"><span>{index:02d}</span>'
+            "<div><h2>{title}</h2><p>{text}</p></div></div>".format(
+                index=index,
+                title=html.escape(title),
+                text=html.escape(text),
+            )
+            for index, (title, text) in enumerate(sections, 1)
+        )
+        main_html = (
+            '<div class="methodology-page"><section class="methodology-hero"><div>'
+            f'<p class="article-eyebrow">{html.escape(eyebrow)}</p>'
+            f"<h1>{html.escape(heading)}</h1><p>{html.escape(lead)}</p>"
+            f'</div></section><section class="methodology-body">{body}</section></div>'
+        )
+        self._html(
+            self._page_shell(
+                title=f"{heading} · Aperture Intelligence",
+                description=lead,
+                canonical_path=canonical_path,
+                main_html=main_html,
+                schemas=[schema],
+            ),
+            extra_headers={"Cache-Control": "public, max-age=300"},
+        )
+
+    def _about_page(self) -> None:
+        self._institutional_page(
+            eyebrow="ABOUT APERTURE",
+            heading="关于 Aperture Intelligence",
+            lead="一个公开披露自动化方法、以可追溯证据为基础的技术与商业研究项目。",
+            canonical_path="/about",
+            sections=[
+                (
+                    "研究范围",
+                    "持续研究 AI、Agent、云计算、电商媒体与金融市场，重点解释技术变化如何影响产品、组织、成本和风险。",
+                ),
+                (
+                    "工作方式",
+                    "爬虫 Agent 负责发现和保存一手资料，模型辅助整理证据与形成初稿；新增文章必须进入编辑审核队列，不由采集任务直接公开。",
+                ),
+                (
+                    "证据原则",
+                    "文章保留来源机构、原始链接、发布时间和引用编号。厂商自述、监管数据、学术研究和媒体报道按不同证据强度使用。",
+                ),
+                (
+                    "项目透明度",
+                    "网站代码与问题追踪公开在 GitHub。自动化系统的参与不会被包装成人工作者经历，研究编辑部对最终公开内容负责。",
+                ),
+            ],
+            schema={
+                "@context": "https://schema.org",
+                "@type": "AboutPage",
+                "name": "关于 Aperture Intelligence",
+                "url": f"{PUBLIC_BASE_URL}/about",
+                "mainEntity": {
+                    "@type": "Organization",
+                    "@id": f"{PUBLIC_BASE_URL}/#organization",
+                    "name": "Aperture Intelligence",
+                    "url": f"{PUBLIC_BASE_URL}/",
+                    "publishingPrinciples": f"{PUBLIC_BASE_URL}/editorial-policy",
+                    "correctionsPolicy": f"{PUBLIC_BASE_URL}/corrections",
+                },
+            },
+        )
+
+    def _author_page(self) -> None:
+        self._institutional_page(
+            eyebrow="RESEARCH DESK",
+            heading="Aperture 研究编辑部",
+            lead="由自动化采集、证据审计和人工发布审核共同支持的机构署名，不代表虚构的个人作者。",
+            canonical_path="/authors/research-desk",
+            sections=[
+                (
+                    "署名含义",
+                    "研究编辑部是机构作者。文章中的 Agent 或模型名称表示使用过的研究工具，不是具有人类履历、资质或独立责任的作者。",
+                ),
+                (
+                    "编辑职责",
+                    "编辑审核需要检查标题是否回答明确问题、主要事实能否回到原始来源、相似文章是否应合并，以及观点和事实是否清楚分开。",
+                ),
+                (
+                    "自动化披露",
+                    "信息发现、资料抽取、初稿和证据核验可以由 AgentCore、Codex SDK 与 Bedrock 模型辅助完成；发布决策必须由后台管理员明确执行。",
+                ),
+                (
+                    "联系与纠错",
+                    "事实错误、失效来源和重大遗漏可通过公开 GitHub Issues 提交，处理规则见纠错政策。",
+                ),
+            ],
+            schema={
+                "@context": "https://schema.org",
+                "@type": "ProfilePage",
+                "name": "Aperture 研究编辑部",
+                "url": f"{PUBLIC_BASE_URL}/authors/research-desk",
+                "mainEntity": {
+                    "@type": "Organization",
+                    "name": "Aperture 研究编辑部",
+                    "url": f"{PUBLIC_BASE_URL}/authors/research-desk",
+                    "parentOrganization": {
+                        "@id": f"{PUBLIC_BASE_URL}/#organization"
+                    },
+                },
+            },
+        )
+
+    def _editorial_policy_page(self) -> None:
+        self._institutional_page(
+            eyebrow="EDITORIAL POLICY",
+            heading="编辑与发布政策",
+            lead="公开内容以主题价值、证据质量和独立增量为发布条件，而不是以爬虫运行次数为发布节奏。",
+            canonical_path="/editorial-policy",
+            sections=[
+                (
+                    "先采集，后发布",
+                    "定时任务只负责采集、分析和生成待审核稿。审计通过不等于自动公开；管理员必须在内容后台完成发布操作。",
+                ),
+                (
+                    "拒绝重复内容",
+                    "同一主题在十四天内重复出现时，优先更新已有待审核稿。与现有文章高度重叠、没有新增事实或分析价值的稿件不发布。",
+                ),
+                (
+                    "最低证据门槛",
+                    "候选稿至少需要五条可追溯来源、三个独立发布机构、完整正文和通过证据审计；满足门槛仍需编辑判断。",
+                ),
+                (
+                    "利益与限制",
+                    "厂商资料按厂商自述处理，金融内容不构成投资建议。x402 付费访问、云服务或工具集成不会改变文章结论。",
+                ),
+            ],
+            schema={
+                "@context": "https://schema.org",
+                "@type": "WebPage",
+                "name": "Aperture Intelligence 编辑与发布政策",
+                "url": f"{PUBLIC_BASE_URL}/editorial-policy",
+                "about": {"@id": f"{PUBLIC_BASE_URL}/#organization"},
+            },
+        )
+
+    def _corrections_page(self) -> None:
+        self._institutional_page(
+            eyebrow="CORRECTIONS",
+            heading="纠错政策",
+            lead="可验证的事实错误会被修正并更新修改时间；重要改动不会通过静默删除来掩盖。",
+            canonical_path="/corrections",
+            sections=[
+                (
+                    "如何提交",
+                    "请在 https://github.com/milan9527/geo/issues 提供文章地址、争议文字、建议修正和可核验来源。不要提交账户、支付或其他敏感信息。",
+                ),
+                (
+                    "如何核验",
+                    "编辑部优先检查原始文件、监管记录、官方发布和可复现实验。单一二手转述不足以覆盖更直接的一手证据。",
+                ),
+                (
+                    "如何更新",
+                    "确认错误后修正文稿、来源或结论，并更新页面的修改时间。若整篇文章失去证据基础，将下架并从 sitemap 移除。",
+                ),
+                (
+                    "处理边界",
+                    "观点分歧不自动构成事实错误；但新的可靠数据推翻原判断时，应明确调整结论和适用范围。",
+                ),
+            ],
+            schema={
+                "@context": "https://schema.org",
+                "@type": "WebPage",
+                "name": "Aperture Intelligence 纠错政策",
+                "url": f"{PUBLIC_BASE_URL}/corrections",
+                "about": {"@id": f"{PUBLIC_BASE_URL}/#organization"},
+            },
+        )
+
     def _not_found_page(self) -> None:
         self._html(
             self._page_shell(
@@ -1815,6 +2012,10 @@ class ApiHandler(BaseHTTPRequestHandler):
                 [
                     (f"{PUBLIC_BASE_URL}/", latest),
                     (f"{PUBLIC_BASE_URL}/methodology", None),
+                    (f"{PUBLIC_BASE_URL}/about", None),
+                    (f"{PUBLIC_BASE_URL}/authors/research-desk", None),
+                    (f"{PUBLIC_BASE_URL}/editorial-policy", None),
+                    (f"{PUBLIC_BASE_URL}/corrections", None),
                 ]
             )
             urls.extend(
@@ -1897,6 +2098,10 @@ class ApiHandler(BaseHTTPRequestHandler):
 
 ## Research methodology
 - {PUBLIC_BASE_URL}/methodology
+- {PUBLIC_BASE_URL}/about
+- {PUBLIC_BASE_URL}/authors/research-desk
+- {PUBLIC_BASE_URL}/editorial-policy
+- {PUBLIC_BASE_URL}/corrections
 
 ## Research collections
 - {PUBLIC_BASE_URL}/category/ai
@@ -2759,11 +2964,29 @@ The open article and JSON-LD representation may be quoted with a link and clear 
                 """,
                 (article_id,),
             ).fetchall()
+            research = conn.execute(
+                """
+                SELECT verification_status, verification_json
+                FROM research_runs
+                WHERE output_article_id = %s
+                ORDER BY completed_at DESC NULLS LAST, id DESC
+                LIMIT 1
+                """,
+                (article_id,),
+            ).fetchone()
         item = dict(row)
         item["featured"] = bool(item["featured"])
         item["keywords"] = parse_json(item["keywords"], [])
         item["sections"] = parse_json(item.pop("body_json"), [])
         item["sources"] = [dict(source) for source in sources]
+        item["verification"] = (
+            {
+                "status": research["verification_status"],
+                **parse_json(research["verification_json"], {}),
+            }
+            if research
+            else {}
+        )
         self._json(item)
 
     def _batch_articles(self, payload: dict) -> None:
@@ -2869,7 +3092,11 @@ The open article and JSON-LD representation may be quoted with a link and clear 
                     ),
                 ),
             )
-            if action in {"publish", "delete"}:
+            changes_public_index = action in {"publish", "delete"} or (
+                action == "review"
+                and any(str(row["status"]) == "published" for row in existing)
+            )
+            if changes_public_index:
                 indexing_slugs = [str(row["slug"]) for row in existing]
                 indexing_categories = [
                     str(row["category_slug"]) for row in existing
@@ -3627,7 +3854,13 @@ The open article and JSON-LD representation may be quoted with a link and clear 
         updates["updated_at"] = utc_now()
         columns = ", ".join(f"{key} = %s" for key in updates)
         article = None
+        previous_status = None
         with connection() as conn:
+            previous = conn.execute(
+                "SELECT status FROM articles WHERE id = %s",
+                (article_id,),
+            ).fetchone()
+            previous_status = str(previous["status"]) if previous else None
             cursor = conn.execute(
                 f"""
                 UPDATE articles SET {columns} WHERE id = %s
@@ -3647,9 +3880,13 @@ The open article and JSON-LD representation may be quoted with a link and clear 
             submit_indexing(
                 slugs=[str(article["slug"])],
                 categories=[str(category["slug"])],
-                reason="admin_update_published",
+                reason=(
+                    "admin_update_published"
+                    if article["status"] == "published"
+                    else "admin_unpublish"
+                ),
             )
-            if article["status"] == "published"
+            if article["status"] == "published" or previous_status == "published"
             else False
         )
         self._json(

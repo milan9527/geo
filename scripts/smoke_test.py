@@ -216,6 +216,26 @@ def main() -> None:
             and "/paid" not in sitemap,
             "Sitemap includes only public canonical content",
         )
+        for institutional_path, heading in (
+            ("/about", "关于 Aperture Intelligence"),
+            ("/authors/research-desk", "Aperture 研究编辑部"),
+            ("/editorial-policy", "编辑与发布政策"),
+            ("/corrections", "纠错政策"),
+        ):
+            status, headers, body = request_raw(
+                PUBLIC_PORT,
+                "GET",
+                institutional_path,
+            )
+            document = body.decode("utf-8")
+            check(
+                status == 200
+                and headers["content-type"].startswith("text/html")
+                and f"<h1>{heading}</h1>" in document
+                and f'rel="canonical" href="{PUBLIC_BASE_URL}{institutional_path}"'
+                in document,
+                f"Institutional SEO page {institutional_path}",
+            )
 
         status, results = request(PUBLIC_PORT, "GET", "/api/v1/search?q=Agent")
         check(status == 200 and results, "Full-text content search")

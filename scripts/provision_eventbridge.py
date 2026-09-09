@@ -25,12 +25,12 @@ TARGET_ARN = (
 )
 
 SCHEDULES = [
-    ("geo-research-coder", "research-coder", "cron(0/20 * * * ? *)", "ENABLED"),
-    ("geo-render-scout", "render-scout", "cron(0/15 * * * ? *)", "ENABLED"),
-    ("geo-market-signal", "market-signal", "cron(0 * * * ? *)", "ENABLED"),
-    ("geo-evidence-verifier", "evidence-verifier", "cron(0/10 * * * ? *)", "ENABLED"),
-    ("geo-cloud-release-watch", "cloud-release-watch", "cron(0 0/2 * * ? *)", "ENABLED"),
-    ("geo-commerce-feed-miner", "commerce-feed-miner", "cron(0 0/12 * * ? *)", "ENABLED"),
+    ("geo-research-coder", "research-coder", "cron(10 0 * * ? *)", "ENABLED"),
+    ("geo-render-scout", "render-scout", "cron(10 1 * * ? *)", "ENABLED"),
+    ("geo-market-signal", "market-signal", "cron(10 2 * * ? *)", "ENABLED"),
+    ("geo-evidence-verifier", "evidence-verifier", "cron(10 3 * * ? *)", "ENABLED"),
+    ("geo-cloud-release-watch", "cloud-release-watch", "cron(10 4 * * ? *)", "ENABLED"),
+    ("geo-commerce-feed-miner", "commerce-feed-miner", "cron(10 5 * * ? *)", "ENABLED"),
 ]
 
 

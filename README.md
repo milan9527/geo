@@ -138,8 +138,8 @@ JavaScript 才能被读取。搜索引擎和 Agent 可通过以下入口发现�
 
 ### 主动索引提交
 
-已部署 `geo-intelligence-indexing-notifier` Lambda。管理员创建或批量发布文章、修改已发布
-文章，以及 AgentCore Runtime 自动发布或更新研究稿时，应用会用 `InvocationType=Event`
+已部署 `geo-intelligence-indexing-notifier` Lambda。管理员创建、发布、下架或删除文章时，
+应用会用 `InvocationType=Event`
 异步调用该函数，不阻塞发布请求。函数会：
 
 1. 精确失效文章、分类、sitemap 和 feed 的 CloudFront 缓存；
@@ -237,12 +237,12 @@ EventBridge Scheduler
 
 | Agent | 调度频率 | Scheduler 状态 |
 | --- | --- | --- |
-| Evidence Verifier | 每 10 分钟 | ENABLED |
-| Render Scout | 每 15 分钟 | ENABLED |
-| Research Coder | 每 20 分钟 | ENABLED |
-| Market Signal | 每小时 | ENABLED |
-| Cloud Release Watch | 每 2 小时 | ENABLED |
-| Commerce Feed Miner | 每 12 小时 | ENABLED，固定允许测试网 x402 支付 |
+| Research Coder | 每天 00:10 | ENABLED |
+| Render Scout | 每天 01:10 | ENABLED |
+| Market Signal | 每天 02:10 | ENABLED |
+| Evidence Verifier | 每天 03:10 | ENABLED |
+| Cloud Release Watch | 每天 04:10 | ENABLED |
+| Commerce Feed Miner | 每天 05:10 | ENABLED，固定允许测试网 x402 支付 |
 
 所有计划使用 UTC、关闭 Flexible Time Window、最多重试 2 次、事件最长保留 300 秒。
 重试失败后事件进入 SQS DLQ。管理后台暂停或恢复爬虫时，会同步更新对应 Scheduler
@@ -258,6 +258,10 @@ EventBridge Scheduler
 | Render Scout | 电商、支付、媒体动态页面 | AgentCore Browser + Web Bot Auth → Playwright/CDP 渲染和正文提取 |
 | Market Signal | 科技股、利率与 AI 资本开支研判 | Codex SDK → Code Interpreter → FRED 官方时间序列与变化计算 |
 | Evidence Verifier | Agent 技术与全局证据治理 | 官方来源抓取 → 每次滚动复核最久未审计的 2 篇 → 必要时最多两轮修订和复核 |
+
+定时任务只采集、分析并生成待审核稿，不再自动公开文章。相同分类近 14 天内来源重叠
+或标题高度相似的待审核稿会合并更新。后台发布前会显示证据审计和质量门槛；公开发布
+仍需要管理员明确操作。
 | Cloud Release Watch | 云厂商新服务和企业 AI 架构 | AgentCore Browser 抓取 AWS、Google Cloud 前端渲染页面 |
 | Commerce Feed Miner | 电商 Feed 与机器付费数据 | Codex SDK → Code Interpreter，并可执行受预算约束的 x402 支付抓取 |
 

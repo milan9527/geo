@@ -425,6 +425,10 @@ async function openArticleDetail(articleId) {
   body.innerHTML = '<div class="detail-loading">正在读取完整内容…</div>';
   try {
     const article = await api(`/api/admin/articles/${articleId}`);
+    const gate = article.verification?.publicationGate;
+    const failedChecks = gate
+      ? Object.entries(gate.checks || {}).filter(([, passed]) => !passed).map(([name]) => name)
+      : [];
     $("#contentDetailEyebrow").textContent = `${article.category_name} · ${statusLabel(article.status)}`;
     $("#contentDetailTitle").textContent = article.title;
     body.innerHTML = `
@@ -434,6 +438,16 @@ async function openArticleDetail(articleId) {
         <span>${article.citation_count} 条引用</span>
         <span>${escapeHtml(article.updated_at.slice(0, 10))} 更新</span>
       </div>
+      ${gate ? `
+        <div class="research-process">
+          <h3>发布质量门槛</h3>
+          <div>
+            <b>${gate.ready ? "内容条件已满足，仍需人工审核" : "暂不建议发布"}</b>
+            <span>${gate.sourceCount || 0} 条来源 · ${gate.distinctPublishers || 0} 个独立发布机构 · ${gate.articleCharacters || 0} 字符</span>
+            <p>${failedChecks.length ? `未通过：${failedChecks.join("、")}` : "自动检查均已通过；请继续检查主题增量、重复内容和标题搜索意图。"}</p>
+          </div>
+        </div>
+      ` : ""}
       <p class="detail-dek">${escapeHtml(article.dek)}</p>
       <p class="detail-summary">${escapeHtml(article.summary)}</p>
       <div class="detail-sections">${(Array.isArray(article.sections) ? article.sections : []).map(renderDetailSection).join("")}</div>
@@ -846,6 +860,7 @@ function renderResearch() {
             <p class="research-summary">${run.summary || run.error_message || "研究任务正在执行。"}</p>
             ${run.toolTrace?.provider ? `<div class="research-process"><h3>真实工具执行</h3><div><b>${run.toolTrace.provider}</b><span>Session ${run.toolTrace.sessionId || "n/a"}</span><p>${run.toolTrace.documents || 0} 条文档${run.toolTrace.codexThreadId ? ` · Codex Thread ${run.toolTrace.codexThreadId}` : ""}${run.toolTrace.webBotAuth ? " · Web Bot Auth" : ""}</p></div></div>` : ""}
             ${run.verification?.status ? `<div class="research-process"><h3>证据审计</h3><div><b>${run.verification.status === "verified" ? "已通过" : "需要人工复核"} · ${run.verification.score || 0}</b><span>${run.verification.writingStyle?.name ? `${run.verification.writingStyle.name} · ` : ""}${run.verification.notes || ""}</span><p>${(run.verification.unsupportedClaims || []).join("；") || "未发现无证据支持的关键表述"}</p></div></div>` : ""}
+            ${run.verification?.publicationGate ? `<div class="research-process"><h3>发布质量门槛</h3><div><b>${run.verification.publicationGate.ready ? "自动条件已满足，等待人工审核" : "暂不建议发布"}</b><span>${run.verification.publicationGate.sourceCount || 0} 条来源 · ${run.verification.publicationGate.distinctPublishers || 0} 个独立发布机构</span><p>采集任务不会自动公开内容。</p></div></div>` : ""}
             ${run.analysisProcess?.length ? `<div class="research-process"><h3>分析过程</h3>${run.analysisProcess.map((step, index) => `<div><b>0${index + 1} ${step.step}</b><span>${step.method}</span><p>${step.result}</p><small>${step.evidence}</small></div>`).join("")}</div>` : ""}
             ${run.sections?.length ? `<div class="research-sections"><h3>观点与结论</h3>${run.sections.map((section) => `<div><b>${section.heading}</b>${(section.paragraphs || []).slice(0, 2).map((text) => `<p>${text}</p>`).join("")}${(section.bullets || []).length ? `<ul>${section.bullets.map((item) => `<li>${item}</li>`).join("")}</ul>` : ""}</div>`).join("")}</div>` : ""}
             <div class="research-evidence"><h3>数据与来源</h3>${run.evidence.map((source, index) => `<a href="${source.url}" target="_blank" rel="noreferrer"><span>[S${index + 1}] ${source.publisher} · ${source.source_type}</span><b>${source.title}</b><small>${source.published_at}</small><p>${source.content_excerpt.slice(0, 260)}</p></a>`).join("")}</div>
