@@ -2,6 +2,11 @@
 
 专业 GEO 内容平台 Demo，采用前台、管理后台、API 与数据库分离架构。
 
+公开研究网站：[Aperture GEO Intelligence](https://aperture.zhangwangshu.com/)。
+访问[研究方法](https://aperture.zhangwangshu.com/methodology)了解来源核验与引用规则，
+或通过 [RSS 订阅](https://aperture.zhangwangshu.com/feed.xml)获取新发布的研究。
+引用文章时，请链接到该文章的固定网址，方便读者查阅正文与来源。
+
 ## 架构
 
 ```text
@@ -125,7 +130,7 @@ CloudFront 部署完成后创建 invalidation。
 
 当前线上入口：
 
-- 公开站：`https://aperture.zhangwangshu.com`
+- 公开站：[Aperture GEO Intelligence](https://aperture.zhangwangshu.com/)
 - 管理后台：`https://deu7vkdd3jf5.cloudfront.net`
 - API 健康检查：`https://aperture.zhangwangshu.com/api/health`
 
