@@ -1,0 +1,11 @@
+{
+  "runtimeStatus": "READY",
+  "runtimeVersion": "46",
+  "autoPublish": "false",
+  "updateWindowHours": "336",
+  "sourceOverlapThreshold": "0.35",
+  "indexingNotifierConfigured": true,
+  "searchEnvironmentKeys": [],
+  "searchRuntimeKeys": [],
+  "dedicatedSearchCredentialsFound": false
+}

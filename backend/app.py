@@ -36,6 +36,9 @@ from .analytics import (
     identify_visitor,
 )
 from .database import USE_AURORA_DATA_API, connection, init_db, utc_now
+from .homepage import HOME_DESCRIPTION, HOME_TITLE, render_home
+from .publication_protection import PUBLISHED_PROTECTION_MESSAGE, REVIEW_REQUIRED_MESSAGE
+from .seo import search_description, search_title
 from .x402_payment import (
     X402_NETWORK,
     X402_PAY_TO_ADDRESS,
@@ -773,6 +776,8 @@ def public_article(row: dict, *, detailed: bool = False) -> dict:
         "slug": row["slug"],
         "title": row["title"],
         "dek": row["dek"],
+        "seoTitle": search_title(f"{row['title']} · Aperture Intelligence"),
+        "seoDescription": search_description(row["dek"]),
         "summary": row["summary"],
         "author": row["author"],
         "authorRole": row["author_role"],
@@ -838,6 +843,9 @@ class ApiHandler(BaseHTTPRequestHandler):
         path = parsed.path.rstrip("/") or "/"
         query = parse_qs(parsed.query)
 
+        if path == "/":
+            self._home_page()
+            return
         article_page_match = re.fullmatch(r"/article/([^/]+)", path)
         if article_page_match:
             self._article_page(article_page_match.group(1))
@@ -1399,8 +1407,8 @@ class ApiHandler(BaseHTTPRequestHandler):
         robots: str = "index, follow, max-snippet:-1, max-image-preview:large",
         open_graph_type: str = "website",
     ) -> str:
-        escaped_title = html.escape(title)
-        escaped_description = html.escape(description, quote=True)
+        escaped_title = html.escape(search_title(title))
+        escaped_description = html.escape(search_description(description), quote=True)
         canonical = f"{PUBLIC_BASE_URL}{canonical_path}"
         schema_tags = "".join(
             '<script type="application/ld+json" data-page-schema>{}</script>'.format(
@@ -1487,6 +1495,41 @@ class ApiHandler(BaseHTTPRequestHandler):
     def _safe_source_url(value: object) -> str:
         parsed = urlparse(str(value or ""))
         return str(value) if parsed.scheme in {"http", "https"} else "#"
+
+    def _home_page(self) -> None:
+        with connection() as conn:
+            # Only summaries are needed here; large full bodies can exceed the
+            # Data API response limit as the published catalogue grows.
+            articles = conn.execute(
+                """
+                SELECT a.id, a.slug, a.title, a.dek, a.summary, a.author,
+                       a.read_minutes, a.published_at, a.updated_at, a.hero_style,
+                       c.name category_name, c.eyebrow category_eyebrow,
+                       (SELECT COUNT(*) FROM sources s WHERE s.article_id = a.id) source_count
+                FROM articles a JOIN categories c ON c.id = a.category_id
+                WHERE a.status = 'published'
+                ORDER BY a.featured DESC, a.published_at DESC, a.id DESC
+                LIMIT 30
+                """
+            ).fetchall()
+            categories = conn.execute(
+                """
+                SELECT c.*, COUNT(a.id) article_count
+                FROM categories c LEFT JOIN articles a
+                  ON a.category_id = c.id AND a.status = 'published'
+                GROUP BY c.id ORDER BY c.sort_order
+                """
+            ).fetchall()
+        main_html, schemas = render_home(
+            [dict(row) for row in articles], [dict(row) for row in categories], PUBLIC_BASE_URL
+        )
+        self._html(
+            self._page_shell(
+                title=HOME_TITLE, description=HOME_DESCRIPTION,
+                canonical_path="/", main_html=main_html, schemas=schemas,
+            ),
+            extra_headers={"Cache-Control": "public, max-age=60, s-maxage=300"},
+        )
 
     def _article_page(self, slug: str) -> None:
         article = self._load_public_article(slug)
@@ -1894,11 +1937,15 @@ class ApiHandler(BaseHTTPRequestHandler):
             sections=[
                 (
                     "先采集，后发布",
-                    "定时任务只负责采集、分析和生成待审核稿。审计通过不等于自动公开；管理员必须在内容后台完成发布操作。",
+                    "定时任务先采集证据、生成待审核稿，再检查事实、引用和全文重复。全部合格后自动发布，未通过或不确定的稿件继续等待修订。",
                 ),
                 (
                     "拒绝重复内容",
-                    "同一主题在十四天内重复出现时，优先更新已有待审核稿。与现有文章高度重叠、没有新增事实或分析价值的稿件不发布。",
+                    "新稿与全部已发布文章进行全文比较。重复现有核心内容、没有独立研究价值的稿件不另行发布；新增背景或旁支信息不足以构成独立文章。",
+                ),
+                (
+                    "保留已发布页面",
+                    "已发布页面保持在线并保留原网址，不按文章数量、类别配额、发布时间或后续重复判断删除、下架旧文。需要纠错时在原网址修订并说明改动。",
                 ),
                 (
                     "最低证据门槛",
@@ -1935,7 +1982,7 @@ class ApiHandler(BaseHTTPRequestHandler):
                 ),
                 (
                     "如何更新",
-                    "确认错误后修正文稿、来源或结论，并更新页面的修改时间。若整篇文章失去证据基础，将下架并从 sitemap 移除。",
+                    "确认错误后在原网址修正文稿、来源或结论，并更新修改时间、说明重要改动。已发布页面保持在线；新发现的重复问题用于拦截新稿，不再通过下架旧文处理。",
                 ),
                 (
                     "处理边界",
@@ -2143,6 +2190,8 @@ The open article and JSON-LD representation may be quoted with a link and clear 
                     "name": row["name"],
                     "eyebrow": row["eyebrow"],
                     "description": row["description"],
+                    "seoTitle": search_title(f"{row['name']} · Aperture Intelligence"),
+                    "seoDescription": search_description(row["description"]),
                     "accent": row["accent"],
                     "articleCount": row["article_count"],
                 }
@@ -3032,12 +3081,19 @@ The open article and JSON-LD representation may be quoted with a link and clear 
                 SELECT a.id, a.slug, a.status, c.slug category_slug
                 FROM articles a JOIN categories c ON c.id = a.category_id
                 WHERE a.id IN ({placeholders})
+                FOR UPDATE OF a
                 """,
                 article_ids,
             ).fetchall()
             existing_ids = [int(row["id"]) for row in existing]
             if not existing_ids:
                 self._json({"error": "未找到所选内容"}, HTTPStatus.NOT_FOUND)
+                return
+            if action in {"review", "delete"} and any(row["status"] == "published" for row in existing):
+                self._json({"error": PUBLISHED_PROTECTION_MESSAGE}, HTTPStatus.CONFLICT)
+                return
+            if action == "publish" and any(row["status"] != "published" for row in existing):
+                self._json({"error": REVIEW_REQUIRED_MESSAGE}, HTTPStatus.CONFLICT)
                 return
             existing_placeholders = ", ".join(["%s"] * len(existing_ids))
             if action == "delete":
@@ -3766,6 +3822,9 @@ The open article and JSON-LD representation may be quoted with a link and clear 
         if not slug:
             slug = f"research-{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}"
         status = payload.get("status", "draft")
+        if status == "published":
+            self._json({"error": REVIEW_REQUIRED_MESSAGE}, HTTPStatus.CONFLICT)
+            return
         if status not in {"draft", "review", "published"}:
             status = "draft"
         now = utc_now()
@@ -3857,10 +3916,16 @@ The open article and JSON-LD representation may be quoted with a link and clear 
         previous_status = None
         with connection() as conn:
             previous = conn.execute(
-                "SELECT status FROM articles WHERE id = %s",
+                "SELECT status FROM articles WHERE id = %s FOR UPDATE",
                 (article_id,),
             ).fetchone()
             previous_status = str(previous["status"]) if previous else None
+            if previous_status == "published" and updates.get("status", "published") != "published":
+                self._json({"error": PUBLISHED_PROTECTION_MESSAGE}, HTTPStatus.CONFLICT)
+                return
+            if previous_status and previous_status != "published" and updates.get("status") == "published":
+                self._json({"error": REVIEW_REQUIRED_MESSAGE}, HTTPStatus.CONFLICT)
+                return
             cursor = conn.execute(
                 f"""
                 UPDATE articles SET {columns} WHERE id = %s

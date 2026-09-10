@@ -1,0 +1,1245 @@
+{
+  "site": "https://aperture.zhangwangshu.com",
+  "checkedAt": "2026-09-09T03:39:28.192386+00:00",
+  "checks": [
+    {
+      "check": "robots.txt",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "check": "robots declares sitemap.xml",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "check": "robots declares sitemap-articles.xml",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "check": "Article sitemap matches main sitemap",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "check": "google2fca4b1360d4ff6f.html",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "check": "BingSiteAuth.xml",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "check": "IndexNow ownership file",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "check": "Real 404: /search-check-missing-1c11b1d89763467b83916043d929bd51",
+      "passed": true,
+      "detail": 404
+    },
+    {
+      "check": "Real 404: /search-check-missing-1c11b1d89763467b83916043d929bd51/",
+      "passed": true,
+      "detail": 404
+    },
+    {
+      "check": "Real 404: /article/search-check-missing-1c11b1d89763467b83916043d929bd51",
+      "passed": true,
+      "detail": 404
+    },
+    {
+      "check": "Real 404: /category/search-check-missing-1c11b1d89763467b83916043d929bd51",
+      "passed": true,
+      "detail": 404
+    },
+    {
+      "check": "HEAD returns real 404",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "check": "Home alias resolves to canonical home",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "check": "Unique titles across sitemap pages",
+      "passed": true,
+      "detail": []
+    },
+    {
+      "check": "Unique meta descriptions across sitemap pages",
+      "passed": true,
+      "detail": []
+    }
+  ],
+  "warnings": [
+    "Home article links require JavaScript; category pages and sitemaps expose article URLs."
+  ],
+  "webmasterAccounts": "Not checked: site verification files do not establish account/API access.",
+  "metadataGuidelines": {
+    "titleCharacters": [
+      10,
+      65
+    ],
+    "descriptionCharacters": [
+      25,
+      160
+    ],
+    "meaning": "Site editorial targets, measured in Unicode characters; not an indexing guarantee."
+  },
+  "urlCount": 26,
+  "articleCount": 15,
+  "pages": [
+    {
+      "url": "https://aperture.zhangwangshu.com/",
+      "bot": "Googlebot",
+      "passed": true,
+      "errors": [],
+      "articleLinksInHtml": 0,
+      "titleTexts": [
+        "Aperture Intelligence · 面向 AI 时代的技术与商业研究"
+      ],
+      "descriptions": [
+        "Aperture Intelligence 提供 AI、Agent、云计算、电商媒体与金融市场的深度研究。"
+      ],
+      "h1Texts": [
+        "理解 AI 时代的关键变量"
+      ],
+      "descriptionLengths": [
+        {
+          "characters": 53,
+          "utf8Bytes": 99
+        }
+      ]
+    },
+    {
+      "url": "https://aperture.zhangwangshu.com/",
+      "bot": "bingbot",
+      "passed": true,
+      "errors": [],
+      "articleLinksInHtml": 0,
+      "titleTexts": [
+        "Aperture Intelligence · 面向 AI 时代的技术与商业研究"
+      ],
+      "descriptions": [
+        "Aperture Intelligence 提供 AI、Agent、云计算、电商媒体与金融市场的深度研究。"
+      ],
+      "h1Texts": [
+        "理解 AI 时代的关键变量"
+      ],
+      "descriptionLengths": [
+        {
+          "characters": 53,
+          "utf8Bytes": 99
+        }
+      ]
+    },
+    {
+      "url": "https://aperture.zhangwangshu.com/methodology",
+      "bot": "Googlebot",
+      "passed": true,
+      "errors": [],
+      "articleLinksInHtml": 0,
+      "titleTexts": [
+        "研究方法 · Aperture Intelligence"
+      ],
+      "descriptions": [
+        "Aperture Intelligence 的来源分级、证据验证、行业分析与机器可读内容方法。"
+      ],
+      "h1Texts": [
+        "研究方法"
+      ],
+      "descriptionLengths": [
+        {
+          "characters": 47,
+          "utf8Bytes": 97
+        }
+      ]
+    },
+    {
+      "url": "https://aperture.zhangwangshu.com/methodology",
+      "bot": "bingbot",
+      "passed": true,
+      "errors": [],
+      "articleLinksInHtml": 0,
+      "titleTexts": [
+        "研究方法 · Aperture Intelligence"
+      ],
+      "descriptions": [
+        "Aperture Intelligence 的来源分级、证据验证、行业分析与机器可读内容方法。"
+      ],
+      "h1Texts": [
+        "研究方法"
+      ],
+      "descriptionLengths": [
+        {
+          "characters": 47,
+          "utf8Bytes": 97
+        }
+      ]
+    },
+    {
+      "url": "https://aperture.zhangwangshu.com/about",
+      "bot": "Googlebot",
+      "passed": true,
+      "errors": [],
+      "articleLinksInHtml": 0,
+      "titleTexts": [
+        "关于 Aperture Intelligence"
+      ],
+      "descriptions": [
+        "一个公开披露自动化方法、以可追溯证据为基础的技术与商业研究项目。"
+      ],
+      "h1Texts": [
+        "关于 Aperture Intelligence"
+      ],
+      "descriptionLengths": [
+        {
+          "characters": 32,
+          "utf8Bytes": 96
+        }
+      ]
+    },
+    {
+      "url": "https://aperture.zhangwangshu.com/about",
+      "bot": "bingbot",
+      "passed": true,
+      "errors": [],
+      "articleLinksInHtml": 0,
+      "titleTexts": [
+        "关于 Aperture Intelligence"
+      ],
+      "descriptions": [
+        "一个公开披露自动化方法、以可追溯证据为基础的技术与商业研究项目。"
+      ],
+      "h1Texts": [
+        "关于 Aperture Intelligence"
+      ],
+      "descriptionLengths": [
+        {
+          "characters": 32,
+          "utf8Bytes": 96
+        }
+      ]
+    },
+    {
+      "url": "https://aperture.zhangwangshu.com/authors/research-desk",
+      "bot": "Googlebot",
+      "passed": true,
+      "errors": [],
+      "articleLinksInHtml": 0,
+      "titleTexts": [
+        "Aperture 研究编辑部 · Aperture Intelligence"
+      ],
+      "descriptions": [
+        "由自动化采集、证据审计和人工发布审核共同支持的机构署名，不代表虚构的个人作者。"
+      ],
+      "h1Texts": [
+        "Aperture 研究编辑部"
+      ],
+      "descriptionLengths": [
+        {
+          "characters": 39,
+          "utf8Bytes": 117
+        }
+      ]
+    },
+    {
+      "url": "https://aperture.zhangwangshu.com/authors/research-desk",
+      "bot": "bingbot",
+      "passed": true,
+      "errors": [],
+      "articleLinksInHtml": 0,
+      "titleTexts": [
+        "Aperture 研究编辑部 · Aperture Intelligence"
+      ],
+      "descriptions": [
+        "由自动化采集、证据审计和人工发布审核共同支持的机构署名，不代表虚构的个人作者。"
+      ],
+      "h1Texts": [
+        "Aperture 研究编辑部"
+      ],
+      "descriptionLengths": [
+        {
+          "characters": 39,
+          "utf8Bytes": 117
+        }
+      ]
+    },
+    {
+      "url": "https://aperture.zhangwangshu.com/editorial-policy",
+      "bot": "Googlebot",
+      "passed": true,
+      "errors": [],
+      "articleLinksInHtml": 0,
+      "titleTexts": [
+        "编辑与发布政策 · Aperture Intelligence"
+      ],
+      "descriptions": [
+        "公开内容以主题价值、证据质量和独立增量为发布条件，而不是以爬虫运行次数为发布节奏。"
+      ],
+      "h1Texts": [
+        "编辑与发布政策"
+      ],
+      "descriptionLengths": [
+        {
+          "characters": 41,
+          "utf8Bytes": 123
+        }
+      ]
+    },
+    {
+      "url": "https://aperture.zhangwangshu.com/editorial-policy",
+      "bot": "bingbot",
+      "passed": true,
+      "errors": [],
+      "articleLinksInHtml": 0,
+      "titleTexts": [
+        "编辑与发布政策 · Aperture Intelligence"
+      ],
+      "descriptions": [
+        "公开内容以主题价值、证据质量和独立增量为发布条件，而不是以爬虫运行次数为发布节奏。"
+      ],
+      "h1Texts": [
+        "编辑与发布政策"
+      ],
+      "descriptionLengths": [
+        {
+          "characters": 41,
+          "utf8Bytes": 123
+        }
+      ]
+    },
+    {
+      "url": "https://aperture.zhangwangshu.com/corrections",
+      "bot": "Googlebot",
+      "passed": true,
+      "errors": [],
+      "articleLinksInHtml": 0,
+      "titleTexts": [
+        "纠错政策 · Aperture Intelligence"
+      ],
+      "descriptions": [
+        "可验证的事实错误会被修正并更新修改时间；重要改动不会通过静默删除来掩盖。"
+      ],
+      "h1Texts": [
+        "纠错政策"
+      ],
+      "descriptionLengths": [
+        {
+          "characters": 36,
+          "utf8Bytes": 108
+        }
+      ]
+    },
+    {
+      "url": "https://aperture.zhangwangshu.com/corrections",
+      "bot": "bingbot",
+      "passed": true,
+      "errors": [],
+      "articleLinksInHtml": 0,
+      "titleTexts": [
+        "纠错政策 · Aperture Intelligence"
+      ],
+      "descriptions": [
+        "可验证的事实错误会被修正并更新修改时间；重要改动不会通过静默删除来掩盖。"
+      ],
+      "h1Texts": [
+        "纠错政策"
+      ],
+      "descriptionLengths": [
+        {
+          "characters": 36,
+          "utf8Bytes": 108
+        }
+      ]
+    },
+    {
+      "url": "https://aperture.zhangwangshu.com/category/ai",
+      "bot": "Googlebot",
+      "passed": true,
+      "errors": [],
+      "articleLinksInHtml": 4,
+      "titleTexts": [
+        "AI 行业动向 · Aperture Intelligence"
+      ],
+      "descriptions": [
+        "追踪 AI 大模型、推理系统与算力产业动态，结合一手资料分析技术进展、商业影响和关键风险。"
+      ],
+      "h1Texts": [
+        "AI 行业动向"
+      ],
+      "descriptionLengths": [
+        {
+          "characters": 45,
+          "utf8Bytes": 127
+        }
+      ]
+    },
+    {
+      "url": "https://aperture.zhangwangshu.com/category/ai",
+      "bot": "bingbot",
+      "passed": true,
+      "errors": [],
+      "articleLinksInHtml": 4,
+      "titleTexts": [
+        "AI 行业动向 · Aperture Intelligence"
+      ],
+      "descriptions": [
+        "追踪 AI 大模型、推理系统与算力产业动态，结合一手资料分析技术进展、商业影响和关键风险。"
+      ],
+      "h1Texts": [
+        "AI 行业动向"
+      ],
+      "descriptionLengths": [
+        {
+          "characters": 45,
+          "utf8Bytes": 127
+        }
+      ]
+    },
+    {
+      "url": "https://aperture.zhangwangshu.com/category/agent",
+      "bot": "Googlebot",
+      "passed": true,
+      "errors": [],
+      "articleLinksInHtml": 4,
+      "titleTexts": [
+        "Agent 技术 · Aperture Intelligence"
+      ],
+      "descriptions": [
+        "聚焦 AI Agent 运行时、工具调用、协议、身份、记忆、安全治理与机器支付，基于官方文档和实测证据，分析 Agent 系统的工程进展、落地约束与商业机会。"
+      ],
+      "h1Texts": [
+        "Agent 技术"
+      ],
+      "descriptionLengths": [
+        {
+          "characters": 79,
+          "utf8Bytes": 203
+        }
+      ]
+    },
+    {
+      "url": "https://aperture.zhangwangshu.com/category/agent",
+      "bot": "bingbot",
+      "passed": true,
+      "errors": [],
+      "articleLinksInHtml": 4,
+      "titleTexts": [
+        "Agent 技术 · Aperture Intelligence"
+      ],
+      "descriptions": [
+        "聚焦 AI Agent 运行时、工具调用、协议、身份、记忆、安全治理与机器支付，基于官方文档和实测证据，分析 Agent 系统的工程进展、落地约束与商业机会。"
+      ],
+      "h1Texts": [
+        "Agent 技术"
+      ],
+      "descriptionLengths": [
+        {
+          "characters": 79,
+          "utf8Bytes": 203
+        }
+      ]
+    },
+    {
+      "url": "https://aperture.zhangwangshu.com/category/cloud",
+      "bot": "Googlebot",
+      "passed": true,
+      "errors": [],
+      "articleLinksInHtml": 2,
+      "titleTexts": [
+        "云计算 · Aperture Intelligence"
+      ],
+      "descriptions": [
+        "跟踪 AWS、Azure、Google Cloud 及中国云厂商的新服务与平台战略，分析 AI 基础设施、数据平台和混合云架构的能力差异、成本结构与企业采用影响。"
+      ],
+      "h1Texts": [
+        "云计算"
+      ],
+      "descriptionLengths": [
+        {
+          "characters": 81,
+          "utf8Bytes": 191
+        }
+      ]
+    },
+    {
+      "url": "https://aperture.zhangwangshu.com/category/cloud",
+      "bot": "bingbot",
+      "passed": true,
+      "errors": [],
+      "articleLinksInHtml": 2,
+      "titleTexts": [
+        "云计算 · Aperture Intelligence"
+      ],
+      "descriptions": [
+        "跟踪 AWS、Azure、Google Cloud 及中国云厂商的新服务与平台战略，分析 AI 基础设施、数据平台和混合云架构的能力差异、成本结构与企业采用影响。"
+      ],
+      "h1Texts": [
+        "云计算"
+      ],
+      "descriptionLengths": [
+        {
+          "characters": 81,
+          "utf8Bytes": 191
+        }
+      ]
+    },
+    {
+      "url": "https://aperture.zhangwangshu.com/category/commerce",
+      "bot": "Googlebot",
+      "passed": true,
+      "errors": [],
+      "articleLinksInHtml": 3,
+      "titleTexts": [
+        "电商与媒体 · Aperture Intelligence"
+      ],
+      "descriptions": [
+        "跟踪 Amazon、Alibaba、Temu、SHEIN 等平台及主流媒体的 AI 应用，分析智能购物、内容分发、广告、支付与 Agent 商业模式的真实进展和产业影响。"
+      ],
+      "h1Texts": [
+        "电商与媒体"
+      ],
+      "descriptionLengths": [
+        {
+          "characters": 85,
+          "utf8Bytes": 185
+        }
+      ]
+    },
+    {
+      "url": "https://aperture.zhangwangshu.com/category/commerce",
+      "bot": "bingbot",
+      "passed": true,
+      "errors": [],
+      "articleLinksInHtml": 3,
+      "titleTexts": [
+        "电商与媒体 · Aperture Intelligence"
+      ],
+      "descriptions": [
+        "跟踪 Amazon、Alibaba、Temu、SHEIN 等平台及主流媒体的 AI 应用，分析智能购物、内容分发、广告、支付与 Agent 商业模式的真实进展和产业影响。"
+      ],
+      "h1Texts": [
+        "电商与媒体"
+      ],
+      "descriptionLengths": [
+        {
+          "characters": 85,
+          "utf8Bytes": 185
+        }
+      ]
+    },
+    {
+      "url": "https://aperture.zhangwangshu.com/category/finance",
+      "bot": "Googlebot",
+      "passed": true,
+      "errors": [],
+      "articleLinksInHtml": 2,
+      "titleTexts": [
+        "金融市场 · Aperture Intelligence"
+      ],
+      "descriptions": [
+        "结合监管披露、宏观指标和跨市场数据，研究全球科技股、中国 A 股、证券市场与加密资产，区分事实、推断和观点，给出可验证的市场判断与风险边界。"
+      ],
+      "h1Texts": [
+        "金融市场"
+      ],
+      "descriptionLengths": [
+        {
+          "characters": 70,
+          "utf8Bytes": 204
+        }
+      ]
+    },
+    {
+      "url": "https://aperture.zhangwangshu.com/category/finance",
+      "bot": "bingbot",
+      "passed": true,
+      "errors": [],
+      "articleLinksInHtml": 2,
+      "titleTexts": [
+        "金融市场 · Aperture Intelligence"
+      ],
+      "descriptions": [
+        "结合监管披露、宏观指标和跨市场数据，研究全球科技股、中国 A 股、证券市场与加密资产，区分事实、推断和观点，给出可验证的市场判断与风险边界。"
+      ],
+      "h1Texts": [
+        "金融市场"
+      ],
+      "descriptionLengths": [
+        {
+          "characters": 70,
+          "utf8Bytes": 204
+        }
+      ]
+    },
+    {
+      "url": "https://aperture.zhangwangshu.com/article/agent-research-20260908-2004-1175",
+      "bot": "Googlebot",
+      "passed": true,
+      "errors": [],
+      "articleLinksInHtml": 3,
+      "titleTexts": [
+        "OpenAI、Anthropic、Google与AWS更新涉及执行诊断、身份校验和权限验证"
+      ],
+      "descriptions": [
+        "近期发布说明覆盖用量字段、工具事件、工作区标识、OAuth发行者校验和执行角色验证；这些变化增加或修正了追踪Agent执行过程所需的部分接口，但不代表市场需求、采用规模或竞争格局已经改变。"
+      ],
+      "h1Texts": [
+        "OpenAI、Anthropic、Google与AWS更新涉及执行诊断、身份校验和权限验证"
+      ],
+      "descriptionLengths": [
+        {
+          "characters": 94,
+          "utf8Bytes": 262
+        }
+      ]
+    },
+    {
+      "url": "https://aperture.zhangwangshu.com/article/agent-research-20260908-2004-1175",
+      "bot": "bingbot",
+      "passed": true,
+      "errors": [],
+      "articleLinksInHtml": 3,
+      "titleTexts": [
+        "OpenAI、Anthropic、Google与AWS更新涉及执行诊断、身份校验和权限验证"
+      ],
+      "descriptions": [
+        "近期发布说明覆盖用量字段、工具事件、工作区标识、OAuth发行者校验和执行角色验证；这些变化增加或修正了追踪Agent执行过程所需的部分接口，但不代表市场需求、采用规模或竞争格局已经改变。"
+      ],
+      "h1Texts": [
+        "OpenAI、Anthropic、Google与AWS更新涉及执行诊断、身份校验和权限验证"
+      ],
+      "descriptionLengths": [
+        {
+          "characters": 94,
+          "utf8Bytes": 262
+        }
+      ]
+    },
+    {
+      "url": "https://aperture.zhangwangshu.com/article/agent-research-20260905-0003-599",
+      "bot": "Googlebot",
+      "passed": true,
+      "errors": [],
+      "articleLinksInHtml": 3,
+      "titleTexts": [
+        "Anthropic把Agent影响范围与“脑手解耦”列入工程讨论 · Aperture Intelligence"
+      ],
+      "descriptions": [
+        "Anthropic工程索引讨论如何限制Agent的潜在影响范围，并列出托管Agent“脑手解耦”的文章；AWS材料可以确认AgentCore产品页面存在，但不能用于比较其隔离、授权、机器身份或动作记录能力。"
+      ],
+      "h1Texts": [
+        "Anthropic把Agent影响范围与“脑手解耦”列入工程讨论"
+      ],
+      "descriptionLengths": [
+        {
+          "characters": 103,
+          "utf8Bytes": 247
+        }
+      ]
+    },
+    {
+      "url": "https://aperture.zhangwangshu.com/article/agent-research-20260905-0003-599",
+      "bot": "bingbot",
+      "passed": true,
+      "errors": [],
+      "articleLinksInHtml": 3,
+      "titleTexts": [
+        "Anthropic把Agent影响范围与“脑手解耦”列入工程讨论 · Aperture Intelligence"
+      ],
+      "descriptions": [
+        "Anthropic工程索引讨论如何限制Agent的潜在影响范围，并列出托管Agent“脑手解耦”的文章；AWS材料可以确认AgentCore产品页面存在，但不能用于比较其隔离、授权、机器身份或动作记录能力。"
+      ],
+      "h1Texts": [
+        "Anthropic把Agent影响范围与“脑手解耦”列入工程讨论"
+      ],
+      "descriptionLengths": [
+        {
+          "characters": 103,
+          "utf8Bytes": 247
+        }
+      ]
+    },
+    {
+      "url": "https://aperture.zhangwangshu.com/article/commerce-research-20260905-0004-600",
+      "bot": "Googlebot",
+      "passed": true,
+      "errors": [],
+      "articleLinksInHtml": 3,
+      "titleTexts": [
+        "Stripe讨论Agent买方定价准备，商业影响取决于真实交易 · Aperture Intelligence"
+      ],
+      "descriptions": [
+        "Stripe已公开讨论企业为Agent买方、更快的定价迭代和更灵活的基础设施做准备。 如果Agent获得消费者授权并持续完成订单，定价、支付和服务责任可能出现新的收费安排；具体影响仍要结合交易量、收入贡献、争议率、人工介入率以及平台和监管规则判断。"
+      ],
+      "h1Texts": [
+        "Stripe讨论Agent买方定价准备，商业影响取决于真实交易"
+      ],
+      "descriptionLengths": [
+        {
+          "characters": 124,
+          "utf8Bytes": 338
+        }
+      ]
+    },
+    {
+      "url": "https://aperture.zhangwangshu.com/article/commerce-research-20260905-0004-600",
+      "bot": "bingbot",
+      "passed": true,
+      "errors": [],
+      "articleLinksInHtml": 3,
+      "titleTexts": [
+        "Stripe讨论Agent买方定价准备，商业影响取决于真实交易 · Aperture Intelligence"
+      ],
+      "descriptions": [
+        "Stripe已公开讨论企业为Agent买方、更快的定价迭代和更灵活的基础设施做准备。 如果Agent获得消费者授权并持续完成订单，定价、支付和服务责任可能出现新的收费安排；具体影响仍要结合交易量、收入贡献、争议率、人工介入率以及平台和监管规则判断。"
+      ],
+      "h1Texts": [
+        "Stripe讨论Agent买方定价准备，商业影响取决于真实交易"
+      ],
+      "descriptionLengths": [
+        {
+          "characters": 124,
+          "utf8Bytes": 338
+        }
+      ]
+    },
+    {
+      "url": "https://aperture.zhangwangshu.com/article/ai-research-20260905-0022-607",
+      "bot": "Googlebot",
+      "passed": true,
+      "errors": [],
+      "articleLinksInHtml": 3,
+      "titleTexts": [
+        "Qwen与腾讯展示翻译、Agent和端侧部署路线，共享端点审计未达重复测量门槛 · Aperture Intelligence"
+      ],
+      "descriptions": [
+        "公开案例覆盖多语言模型、端侧翻译、研究Agent和训练生成的可复用神经函数。任务稳定性、调用规模、部署位置以及更新和重训成本，会共同影响减少远程请求能否带来成本、延迟或服务商依赖方面的净收益。"
+      ],
+      "h1Texts": [
+        "Qwen与腾讯展示翻译、Agent和端侧部署路线，共享端点审计未达重复测量门槛"
+      ],
+      "descriptionLengths": [
+        {
+          "characters": 96,
+          "utf8Bytes": 278
+        }
+      ]
+    },
+    {
+      "url": "https://aperture.zhangwangshu.com/article/ai-research-20260905-0022-607",
+      "bot": "bingbot",
+      "passed": true,
+      "errors": [],
+      "articleLinksInHtml": 3,
+      "titleTexts": [
+        "Qwen与腾讯展示翻译、Agent和端侧部署路线，共享端点审计未达重复测量门槛 · Aperture Intelligence"
+      ],
+      "descriptions": [
+        "公开案例覆盖多语言模型、端侧翻译、研究Agent和训练生成的可复用神经函数。任务稳定性、调用规模、部署位置以及更新和重训成本，会共同影响减少远程请求能否带来成本、延迟或服务商依赖方面的净收益。"
+      ],
+      "h1Texts": [
+        "Qwen与腾讯展示翻译、Agent和端侧部署路线，共享端点审计未达重复测量门槛"
+      ],
+      "descriptionLengths": [
+        {
+          "characters": 96,
+          "utf8Bytes": 278
+        }
+      ]
+    },
+    {
+      "url": "https://aperture.zhangwangshu.com/article/ai-research-20260906-0025-766",
+      "bot": "Googlebot",
+      "passed": true,
+      "errors": [],
+      "articleLinksInHtml": 3,
+      "titleTexts": [
+        "Moonshot称Muon训练计算效率约为AdamW两倍，智谱与Qwen展示Agent和安全模型"
+      ],
+      "descriptions": [
+        "多项预印本还研究了可复用的本地神经函数、辅助知识表达和更短的优化提示词。 这些方法是否会改变云端调用结构，取决于跨场景复现、生产采用规模和总成本。"
+      ],
+      "h1Texts": [
+        "Moonshot称Muon训练计算效率约为AdamW两倍，智谱与Qwen展示Agent和安全模型"
+      ],
+      "descriptionLengths": [
+        {
+          "characters": 73,
+          "utf8Bytes": 217
+        }
+      ]
+    },
+    {
+      "url": "https://aperture.zhangwangshu.com/article/ai-research-20260906-0025-766",
+      "bot": "bingbot",
+      "passed": true,
+      "errors": [],
+      "articleLinksInHtml": 3,
+      "titleTexts": [
+        "Moonshot称Muon训练计算效率约为AdamW两倍，智谱与Qwen展示Agent和安全模型"
+      ],
+      "descriptions": [
+        "多项预印本还研究了可复用的本地神经函数、辅助知识表达和更短的优化提示词。 这些方法是否会改变云端调用结构，取决于跨场景复现、生产采用规模和总成本。"
+      ],
+      "h1Texts": [
+        "Moonshot称Muon训练计算效率约为AdamW两倍，智谱与Qwen展示Agent和安全模型"
+      ],
+      "descriptionLengths": [
+        {
+          "characters": 73,
+          "utf8Bytes": 217
+        }
+      ]
+    },
+    {
+      "url": "https://aperture.zhangwangshu.com/article/agent-research-20260906-0033-769",
+      "bot": "Googlebot",
+      "passed": true,
+      "errors": [],
+      "articleLinksInHtml": 3,
+      "titleTexts": [
+        "CrewAI、LangChain与LlamaIndex更新工具执行、内容保留和运行标识"
+      ],
+      "descriptions": [
+        "2026年8月19日至9月4日发布的六条已验证版本记录涉及异步工具接口、失败清理、逐跳SSRF检查、结果保留和运行字段；这些变化能否改善性能、安全或诊断能力，仍取决于实现范围和专项测试。"
+      ],
+      "h1Texts": [
+        "CrewAI、LangChain与LlamaIndex更新工具执行、内容保留和运行标识"
+      ],
+      "descriptionLengths": [
+        {
+          "characters": 93,
+          "utf8Bytes": 253
+        }
+      ]
+    },
+    {
+      "url": "https://aperture.zhangwangshu.com/article/agent-research-20260906-0033-769",
+      "bot": "bingbot",
+      "passed": true,
+      "errors": [],
+      "articleLinksInHtml": 3,
+      "titleTexts": [
+        "CrewAI、LangChain与LlamaIndex更新工具执行、内容保留和运行标识"
+      ],
+      "descriptions": [
+        "2026年8月19日至9月4日发布的六条已验证版本记录涉及异步工具接口、失败清理、逐跳SSRF检查、结果保留和运行字段；这些变化能否改善性能、安全或诊断能力，仍取决于实现范围和专项测试。"
+      ],
+      "h1Texts": [
+        "CrewAI、LangChain与LlamaIndex更新工具执行、内容保留和运行标识"
+      ],
+      "descriptionLengths": [
+        {
+          "characters": 93,
+          "utf8Bytes": 253
+        }
+      ]
+    },
+    {
+      "url": "https://aperture.zhangwangshu.com/article/finance-research-20260906-1810-884",
+      "bot": "Googlebot",
+      "passed": true,
+      "errors": [],
+      "articleLinksInHtml": 3,
+      "titleTexts": [
+        "数字资产24小时涨跌分化，中国人保发行预案列入上交所页面 · Aperture Intelligence"
+      ],
+      "descriptions": [
+        "比特币、以太坊、BNB和XRP在同一观察窗口内方向不一；上交所采集页面显示日期为9月7日的中国人保向特定对象发行A股股票预案等公告，北交所页面显示曙光数创推进股权激励。这些信息反映短期价格和具体公司事项，不能单独判断全球科技股、利率或AI资本开支周期的方向。"
+      ],
+      "h1Texts": [
+        "数字资产24小时涨跌分化，中国人保发行预案列入上交所页面"
+      ],
+      "descriptionLengths": [
+        {
+          "characters": 129,
+          "utf8Bytes": 365
+        }
+      ]
+    },
+    {
+      "url": "https://aperture.zhangwangshu.com/article/finance-research-20260906-1810-884",
+      "bot": "bingbot",
+      "passed": true,
+      "errors": [],
+      "articleLinksInHtml": 3,
+      "titleTexts": [
+        "数字资产24小时涨跌分化，中国人保发行预案列入上交所页面 · Aperture Intelligence"
+      ],
+      "descriptions": [
+        "比特币、以太坊、BNB和XRP在同一观察窗口内方向不一；上交所采集页面显示日期为9月7日的中国人保向特定对象发行A股股票预案等公告，北交所页面显示曙光数创推进股权激励。这些信息反映短期价格和具体公司事项，不能单独判断全球科技股、利率或AI资本开支周期的方向。"
+      ],
+      "h1Texts": [
+        "数字资产24小时涨跌分化，中国人保发行预案列入上交所页面"
+      ],
+      "descriptionLengths": [
+        {
+          "characters": 129,
+          "utf8Bytes": 365
+        }
+      ]
+    },
+    {
+      "url": "https://aperture.zhangwangshu.com/article/finance-research-20260908-0008-1087",
+      "bot": "Googlebot",
+      "passed": true,
+      "errors": [],
+      "articleLinksInHtml": 3,
+      "titleTexts": [
+        "纳斯达克9月4日回落，四种主要数字资产9月7日下跌，A股公告聚焦公司事件 · Aperture Intelligence"
+      ],
+      "descriptions": [
+        "纳斯达克与四种数字资产在不同观察窗口内均有回落，但不能视为同步行情；上交所和北交所记录的是公司公告，不能据此判断A股价格方向。利率和AI资本开支的市场影响需要结合同期数据另行检验。"
+      ],
+      "h1Texts": [
+        "纳斯达克9月4日回落，四种主要数字资产9月7日下跌，A股公告聚焦公司事件"
+      ],
+      "descriptionLengths": [
+        {
+          "characters": 90,
+          "utf8Bytes": 264
+        }
+      ]
+    },
+    {
+      "url": "https://aperture.zhangwangshu.com/article/finance-research-20260908-0008-1087",
+      "bot": "bingbot",
+      "passed": true,
+      "errors": [],
+      "articleLinksInHtml": 3,
+      "titleTexts": [
+        "纳斯达克9月4日回落，四种主要数字资产9月7日下跌，A股公告聚焦公司事件 · Aperture Intelligence"
+      ],
+      "descriptions": [
+        "纳斯达克与四种数字资产在不同观察窗口内均有回落，但不能视为同步行情；上交所和北交所记录的是公司公告，不能据此判断A股价格方向。利率和AI资本开支的市场影响需要结合同期数据另行检验。"
+      ],
+      "h1Texts": [
+        "纳斯达克9月4日回落，四种主要数字资产9月7日下跌，A股公告聚焦公司事件"
+      ],
+      "descriptionLengths": [
+        {
+          "characters": 90,
+          "utf8Bytes": 264
+        }
+      ]
+    },
+    {
+      "url": "https://aperture.zhangwangshu.com/article/ai-research-20260908-0606-1128",
+      "bot": "Googlebot",
+      "passed": true,
+      "errors": [],
+      "articleLinksInHtml": 3,
+      "titleTexts": [
+        "Moonshot、智谱与腾讯扩展模型和Agent能力，AWS展示分层订购助手 · Aperture Intelligence"
+      ],
+      "descriptions": [
+        "训练优化、任务适配、共享记忆和端侧部署形成多种技术路径；这些项目与专项基准不能证明市场份额、价格或平台控制权已经整体迁移。"
+      ],
+      "h1Texts": [
+        "Moonshot、智谱与腾讯扩展模型和Agent能力，AWS展示分层订购助手"
+      ],
+      "descriptionLengths": [
+        {
+          "characters": 61,
+          "utf8Bytes": 183
+        }
+      ]
+    },
+    {
+      "url": "https://aperture.zhangwangshu.com/article/ai-research-20260908-0606-1128",
+      "bot": "bingbot",
+      "passed": true,
+      "errors": [],
+      "articleLinksInHtml": 3,
+      "titleTexts": [
+        "Moonshot、智谱与腾讯扩展模型和Agent能力，AWS展示分层订购助手 · Aperture Intelligence"
+      ],
+      "descriptions": [
+        "训练优化、任务适配、共享记忆和端侧部署形成多种技术路径；这些项目与专项基准不能证明市场份额、价格或平台控制权已经整体迁移。"
+      ],
+      "h1Texts": [
+        "Moonshot、智谱与腾讯扩展模型和Agent能力，AWS展示分层订购助手"
+      ],
+      "descriptionLengths": [
+        {
+          "characters": 61,
+          "utf8Bytes": 183
+        }
+      ]
+    },
+    {
+      "url": "https://aperture.zhangwangshu.com/article/cloud-research-20260908-1808-1173",
+      "bot": "Googlebot",
+      "passed": true,
+      "errors": [],
+      "articleLinksInHtml": 3,
+      "titleTexts": [
+        "Qwen3.8-27B提供按请求推理档位，SGLang Tracing细化单次请求观测"
+      ],
+      "descriptions": [
+        "推理深度、长上下文和请求追踪成为可单独测试的架构变量；它们能否改善成本、故障定位和安全控制，取决于工作负载、观测质量与权限设计。"
+      ],
+      "h1Texts": [
+        "Qwen3.8-27B提供按请求推理档位，SGLang Tracing细化单次请求观测"
+      ],
+      "descriptionLengths": [
+        {
+          "characters": 64,
+          "utf8Bytes": 192
+        }
+      ]
+    },
+    {
+      "url": "https://aperture.zhangwangshu.com/article/cloud-research-20260908-1808-1173",
+      "bot": "bingbot",
+      "passed": true,
+      "errors": [],
+      "articleLinksInHtml": 3,
+      "titleTexts": [
+        "Qwen3.8-27B提供按请求推理档位，SGLang Tracing细化单次请求观测"
+      ],
+      "descriptions": [
+        "推理深度、长上下文和请求追踪成为可单独测试的架构变量；它们能否改善成本、故障定位和安全控制，取决于工作负载、观测质量与权限设计。"
+      ],
+      "h1Texts": [
+        "Qwen3.8-27B提供按请求推理档位，SGLang Tracing细化单次请求观测"
+      ],
+      "descriptionLengths": [
+        {
+          "characters": 64,
+          "utf8Bytes": 192
+        }
+      ]
+    },
+    {
+      "url": "https://aperture.zhangwangshu.com/article/agent-research-20260904-0805-494",
+      "bot": "Googlebot",
+      "passed": true,
+      "errors": [],
+      "articleLinksInHtml": 3,
+      "titleTexts": [
+        "LangChain 1.4.0增加MCP适配入口并修正Agent工具路由 · Aperture Intelligence"
+      ],
+      "descriptions": [
+        "LangChain 1.4.0增加langchain.mcp命名空间、MCPAdapter和可运行示例，并修正Agent工具路由中的目标模型信息。 此前版本还涉及成员会话、中断路由和工具发现缓存；部署时仍需分别验证会话控制、追踪记录、授权边界和机器身份。"
+      ],
+      "h1Texts": [
+        "LangChain 1.4.0增加MCP适配入口并修正Agent工具路由"
+      ],
+      "descriptionLengths": [
+        {
+          "characters": 127,
+          "utf8Bytes": 293
+        }
+      ]
+    },
+    {
+      "url": "https://aperture.zhangwangshu.com/article/agent-research-20260904-0805-494",
+      "bot": "bingbot",
+      "passed": true,
+      "errors": [],
+      "articleLinksInHtml": 3,
+      "titleTexts": [
+        "LangChain 1.4.0增加MCP适配入口并修正Agent工具路由 · Aperture Intelligence"
+      ],
+      "descriptions": [
+        "LangChain 1.4.0增加langchain.mcp命名空间、MCPAdapter和可运行示例，并修正Agent工具路由中的目标模型信息。 此前版本还涉及成员会话、中断路由和工具发现缓存；部署时仍需分别验证会话控制、追踪记录、授权边界和机器身份。"
+      ],
+      "h1Texts": [
+        "LangChain 1.4.0增加MCP适配入口并修正Agent工具路由"
+      ],
+      "descriptionLengths": [
+        {
+          "characters": 127,
+          "utf8Bytes": 293
+        }
+      ]
+    },
+    {
+      "url": "https://aperture.zhangwangshu.com/article/cloud-research-20260907-1806-1048",
+      "bot": "Googlebot",
+      "passed": true,
+      "errors": [],
+      "articleLinksInHtml": 3,
+      "titleTexts": [
+        "阿里云扩展模型与巴西基础设施，AWS突出数据底座，Google Cloud细分联络中心AI更新节奏"
+      ],
+      "descriptions": [
+        "2026年8月至9月披露的材料覆盖模型、地域基础设施、数据平台和生产更新制度。它们增加了企业可配置的AI架构变量，但不能直接证明成本、迁移效率或生产可靠性已经改善。"
+      ],
+      "h1Texts": [
+        "阿里云扩展模型与巴西基础设施，AWS突出数据底座，Google Cloud细分联络中心AI更新节奏"
+      ],
+      "descriptionLengths": [
+        {
+          "characters": 82,
+          "utf8Bytes": 230
+        }
+      ]
+    },
+    {
+      "url": "https://aperture.zhangwangshu.com/article/cloud-research-20260907-1806-1048",
+      "bot": "bingbot",
+      "passed": true,
+      "errors": [],
+      "articleLinksInHtml": 3,
+      "titleTexts": [
+        "阿里云扩展模型与巴西基础设施，AWS突出数据底座，Google Cloud细分联络中心AI更新节奏"
+      ],
+      "descriptions": [
+        "2026年8月至9月披露的材料覆盖模型、地域基础设施、数据平台和生产更新制度。它们增加了企业可配置的AI架构变量，但不能直接证明成本、迁移效率或生产可靠性已经改善。"
+      ],
+      "h1Texts": [
+        "阿里云扩展模型与巴西基础设施，AWS突出数据底座，Google Cloud细分联络中心AI更新节奏"
+      ],
+      "descriptionLengths": [
+        {
+          "characters": 82,
+          "utf8Bytes": 230
+        }
+      ]
+    },
+    {
+      "url": "https://aperture.zhangwangshu.com/article/commerce-research-20260908-1807-1174",
+      "bot": "Googlebot",
+      "passed": true,
+      "errors": [],
+      "articleLinksInHtml": 3,
+      "titleTexts": [
+        "eBay扩展AI卖家工具与Facebook商品分发，Salesforce展示代理与CRM连接"
+      ],
+      "descriptions": [
+        "eBay披露AI辅助上架、消息管理、搜索和个性化推荐，并成为Facebook联盟合作的测试伙伴。 Salesforce页面则介绍员工与AI代理协作，以及在Claude中使用Salesforce数据、工作流和业务规则的产品方向。 这些变化涉及工具和渠道连接，不等于代理已经能够自主完成支付与履约。"
+      ],
+      "h1Texts": [
+        "eBay扩展AI卖家工具与Facebook商品分发，Salesforce展示代理与CRM连接"
+      ],
+      "descriptionLengths": [
+        {
+          "characters": 147,
+          "utf8Bytes": 353
+        }
+      ]
+    },
+    {
+      "url": "https://aperture.zhangwangshu.com/article/commerce-research-20260908-1807-1174",
+      "bot": "bingbot",
+      "passed": true,
+      "errors": [],
+      "articleLinksInHtml": 3,
+      "titleTexts": [
+        "eBay扩展AI卖家工具与Facebook商品分发，Salesforce展示代理与CRM连接"
+      ],
+      "descriptions": [
+        "eBay披露AI辅助上架、消息管理、搜索和个性化推荐，并成为Facebook联盟合作的测试伙伴。 Salesforce页面则介绍员工与AI代理协作，以及在Claude中使用Salesforce数据、工作流和业务规则的产品方向。 这些变化涉及工具和渠道连接，不等于代理已经能够自主完成支付与履约。"
+      ],
+      "h1Texts": [
+        "eBay扩展AI卖家工具与Facebook商品分发，Salesforce展示代理与CRM连接"
+      ],
+      "descriptionLengths": [
+        {
+          "characters": 147,
+          "utf8Bytes": 353
+        }
+      ]
+    },
+    {
+      "url": "https://aperture.zhangwangshu.com/article/ai-research-20260908-1205-1165",
+      "bot": "Googlebot",
+      "passed": true,
+      "errors": [],
+      "articleLinksInHtml": 3,
+      "titleTexts": [
+        "Meta展示模型项目，百度与百川呈现Agent、API和云服务入口 · Aperture Intelligence"
+      ],
+      "descriptions": [
+        "2026年7月至9月的相关页面覆盖多模态编码器、Agent定位、工具接口和行业项目；这些机构与厂商表述可以说明产品组织方式，但不能直接建立性能排名、采用规模或生产率结论。"
+      ],
+      "h1Texts": [
+        "Meta展示模型项目，百度与百川呈现Agent、API和云服务入口"
+      ],
+      "descriptionLengths": [
+        {
+          "characters": 85,
+          "utf8Bytes": 233
+        }
+      ]
+    },
+    {
+      "url": "https://aperture.zhangwangshu.com/article/ai-research-20260908-1205-1165",
+      "bot": "bingbot",
+      "passed": true,
+      "errors": [],
+      "articleLinksInHtml": 3,
+      "titleTexts": [
+        "Meta展示模型项目，百度与百川呈现Agent、API和云服务入口 · Aperture Intelligence"
+      ],
+      "descriptions": [
+        "2026年7月至9月的相关页面覆盖多模态编码器、Agent定位、工具接口和行业项目；这些机构与厂商表述可以说明产品组织方式，但不能直接建立性能排名、采用规模或生产率结论。"
+      ],
+      "h1Texts": [
+        "Meta展示模型项目，百度与百川呈现Agent、API和云服务入口"
+      ],
+      "descriptionLengths": [
+        {
+          "characters": 85,
+          "utf8Bytes": 233
+        }
+      ]
+    },
+    {
+      "url": "https://aperture.zhangwangshu.com/article/commerce-research-20260908-0006-1090",
+      "bot": "Googlebot",
+      "passed": true,
+      "errors": [],
+      "articleLinksInHtml": 3,
+      "titleTexts": [
+        "Amazon公开列出Alexa目标价自动购买功能，Shopify披露新店首单数据 · Aperture Intelligence"
+      ],
+      "descriptions": [
+        "Amazon的新闻索引把商品比较、价格历史查询和按目标价自动购买列入Alexa购物介绍；这一入口是否会影响购物行为，仍取决于实际开放范围、用户采用、交易表现和错误成本。"
+      ],
+      "h1Texts": [
+        "Amazon公开列出Alexa目标价自动购买功能，Shopify披露新店首单数据"
+      ],
+      "descriptionLengths": [
+        {
+          "characters": 84,
+          "utf8Bytes": 230
+        }
+      ]
+    },
+    {
+      "url": "https://aperture.zhangwangshu.com/article/commerce-research-20260908-0006-1090",
+      "bot": "bingbot",
+      "passed": true,
+      "errors": [],
+      "articleLinksInHtml": 3,
+      "titleTexts": [
+        "Amazon公开列出Alexa目标价自动购买功能，Shopify披露新店首单数据 · Aperture Intelligence"
+      ],
+      "descriptions": [
+        "Amazon的新闻索引把商品比较、价格历史查询和按目标价自动购买列入Alexa购物介绍；这一入口是否会影响购物行为，仍取决于实际开放范围、用户采用、交易表现和错误成本。"
+      ],
+      "h1Texts": [
+        "Amazon公开列出Alexa目标价自动购买功能，Shopify披露新店首单数据"
+      ],
+      "descriptionLengths": [
+        {
+          "characters": 84,
+          "utf8Bytes": 230
+        }
+      ]
+    }
+  ],
+  "passed": true
+}

@@ -111,7 +111,9 @@ chmod +x scripts/deploy_web_ecs.sh
 ./scripts/deploy_web_ecs.sh
 ```
 
-脚本只使用 AWS CLI 和各服务 API，不调用 CloudFormation、CDK 或 SAM。它会构建 ARM64
+仅部署 API 与公开站时使用 `./scripts/deploy_web_ecs.sh --public-only`。
+
+脚本使用 AWS CLI 和 Python AWS SDK，不调用 CloudFormation、CDK 或 SAM。它会构建 ARM64
 后端镜像，等待 ECR 扫描确认无 Critical/High 漏洞后注册新的 ECS task definition，
 滚动更新 Fargate 服务、同步两个 S3 前端、增量维护 SSR cache behaviors，等待
 CloudFront 部署完成后创建 invalidation。
@@ -142,7 +144,7 @@ JavaScript 才能被读取。搜索引擎和 Agent 可通过以下入口发现�
 应用会用 `InvocationType=Event`
 异步调用该函数，不阻塞发布请求。函数会：
 
-1. 精确失效文章、分类、sitemap 和 feed 的 CloudFront 缓存；
+1. 精确失效首页、文章、分类、sitemap 和 feed 的 CloudFront 缓存；
 2. 向 IndexNow 提交文章与分类 URL；
 3. 使用公开验证文件
    `https://aperture.zhangwangshu.com/indexnow-key.txt` 证明站点控制权。
@@ -164,9 +166,127 @@ Google、Bing 和百度的站长平台仍需要站点所有者完成验证，不
 - 百度搜索资源平台：验证 HTTPS 站点后提交 sitemap；如需 API 主动推送，还必须提供该
   站点专属推送 token 和每日配额。
 
-仓库和已部署环境没有 Search Console OAuth、Bing Webmaster API key 或百度推送 token，
-因此当前不能声称这三个平台已经由 API 提交。取得站点所有权凭证后，应放入 Secrets
-Manager，不写入仓库或 ECS 明文环境变量。
+Google 验证文件 `/google2fca4b1360d4ff6f.html` 和 Bing 验证文件 `/BingSiteAuth.xml`
+已经公开提供。文件可访问不代表站长平台已完成验证或已提交 sitemap；当前没有配置本站的
+Search Console OAuth、Bing Webmaster API key 或百度推送 token，无法从本站环境确认
+账号内的提交、覆盖率和收录状态。取得凭证后应放入 Secrets Manager，不写入仓库或 ECS
+明文环境变量。普通研究文章不使用 Google Indexing API，也不使用已废弃的 sitemap ping。
+
+公开站使用独立的 CloudFront Function：未知页面返回真实 404 和 `noindex`，
+`/index.html` 永久重定向到 `/`。本地公开站同样返回真实 404；管理后台保留 SPA 路由。
+只更新公开站边缘路由（默认预览，加 `--apply` 执行）：
+
+```bash
+.venv/bin/python scripts/configure_public_search.py --distribution-id E57TFN7Z03O69 --apply
+```
+
+CloudFront 更新传播完成后，可检查 robots、两份 sitemap、验证文件、真实 404，以及
+sitemap 中所有页面对 Googlebot/Bingbot 的 HTTP 状态、canonical 和索引指令：
+
+```bash
+python3 scripts/check_search_indexing.py --output /tmp/geo-search-audit.json
+```
+
+需要主动通知时加 `--submit-indexnow`，只有全部必需检查通过后才提交 sitemap 中的
+公开页面（包括首页、机构页、分类和文章）。日常文章发布继续由现有 Lambda 自动通知，
+无需反复全量提交。该检查模拟爬虫 User-Agent，只证明站点侧可抓取性，不能代替站长平台
+的实际抓取与索引报告。
+
+文章搜索标题与摘要由 `backend/seo.py` 统一生成，API 的 `seoTitle`、`seoDescription`
+供前端导航复用。站内目标为标题 10–65 个字符、描述 25–160 个字符：过长标题先省略
+品牌后缀，摘要移除引用编号并优先在完整句子处结束。正文标题、导语和证据引用保留原文。
+长度按 Unicode 字符统计，UTF-8 字节数仅用于诊断；这不是搜索引擎保证收录的阈值。
+检查脚本同时检查标题/描述是否重复，浏览器导航同步更新 canonical 与 Open Graph。
+
+```bash
+.venv/bin/python scripts/test_search_metadata.py
+```
+
+2026-09-09 全站复核：15 项发现/路由/唯一性检查、52 次页面检查（26 个 URL × 两种爬虫）、
+26 页浏览器直接访问及22次前端导航检查全部通过。7个页面的搜索元数据已优化，
+IndexNow 更新通知返回 HTTP 200。逐页结果见
+[全站搜索检查报告](reports/search-audit-2026-09-09.md)。
+通知已受理不代表已收录，Bing 已索引报告需等待重新抓取更新，可先使用 URL Inspection
+的实时测试核对当前页面。
+
+2026-09-10 首页改为服务器渲染，初始 HTML 直接提供已发布文章的标题、摘要、链接与
+ItemList。首页最多显示30篇，分类页提供该领域全部已发布文章；草稿与待审核内容不公开。
+CloudFront 的精确 `/` 行为转发至 ECS，禁用公开分发的 S3 DefaultRootObject，
+`/index.html` 继续重定向至 `/`；管理后台路由不变。自动发布或下架时同时刷新首页缓存。
+搜索审计增加 Googlebot 智能手机版，并检查首页和分类的 HTML 链接是否覆盖站点地图中的文章。
+排查结论与线上验证见 [首页索引检查报告](reports/google-home-indexing-2026-09-10.md)。
+
+### 全库自动审核与去重
+
+2026-09-10 起保留当前正常发布的页面：已发布文章不能删除、转回草稿或待审核，也不能
+修改其 URL。数据库触发器保护这三个约束；后台仍可管理未发布稿和调整已发布内容的定价。
+`scripts/curate_search_index.py --apply` 已禁用，分类数量和文章年龄不再触发下架。
+
+新文章沿用“证据审核 + 与全部已发布文章逐对全文去重”的自动发布流程。后台不能通过
+“立即发布”、单篇改状态或批量发布绕过审核。批量审核优先保留已有公开网址，旧文后续
+审核发现问题时记录修订意见，不改变发布状态；与旧文重复或关系不确定的新稿不发布。
+旧版发布计划必须按 `2026-09-10-preserve-published` 规则重新生成后才能应用。
+线上核对与测试结果见 [已发布页面保护报告](reports/publication-protection-2026-09-10.md)。
+
+保护与发布测试：
+
+```bash
+.venv/bin/python scripts/test_editorial_review.py
+# 后两项使用 PUBLICATION_TEST_DATABASE_URL 指向的本地临时 PostgreSQL schema。
+.venv/bin/python scripts/test_publication_protection.py
+.venv/bin/python scripts/test_scheduled_publication.py
+```
+
+`scripts/review_articles.py` 对已发布、待审核和草稿统一审核。先保存全文及来源快照，
+再逐篇核验证据、计算全文相似度、做跨类别语义筛查，并对候选重复稿进行双方全文比对。
+同一来源或主题不会直接判重；每个重复结论都有推荐保留版本和理由，避免按每类固定篇数筛选。
+
+```bash
+set -a
+source .env.aws
+set +a
+REVIEW_DIR=.review-runs/2026-09-09
+.venv/bin/python scripts/review_articles.py snapshot --work-dir "$REVIEW_DIR"
+.venv/bin/python scripts/review_articles.py quality --work-dir "$REVIEW_DIR" --workers 6
+.venv/bin/python scripts/review_articles.py similarities --work-dir "$REVIEW_DIR"
+.venv/bin/python scripts/review_articles.py deduplicate --work-dir "$REVIEW_DIR" --workers 6
+.venv/bin/python scripts/review_articles.py record --work-dir "$REVIEW_DIR"
+.venv/bin/python scripts/review_articles.py report --work-dir "$REVIEW_DIR"
+```
+
+模型结果可按内容与证据指纹恢复，失败可重跑对应步骤。重复关系不做未经全文确认的传递合并；
+最终建议发布集合会逐对全文复核。相同核心事件的一篇已被另一篇覆盖时，
+增加背景、旁支新闻或测试建议不能使两篇分别通过；优先保留覆盖更完整的版本。
+去重策略有独立版本号，策略更新后旧判重缓存及发布计划失效，已验证的内容质量结果可复用。
+原始快照与模型响应放在已忽略的
+`.review-runs/` 目录，逐篇结论存入 `article_editorial_reviews`。
+
+仅复核当前公开文章时，使用新快照和工作目录，准备与当前内容、证据匹配的逐篇质量结果，
+执行 `deduplicate-published`。该命令对所有已发布文章进行两两全文比较，包含跨类别组合。
+随后 `record --publish-approved` 只应用这组已发布文章的结果，不会重新发布其他待审核稿。
+
+`record` 默认只保存审核记录。需要应用发布结果时，使用
+`record --publish-approved`：发布独立合格稿，将重复或未达标的已发布稿退回审核，保留原文；
+随后执行 `notify` 清理公开缓存并通知 IndexNow。应用前会复核全库范围、文章/来源指纹
+与状态，发现并发修改时停止，要求刷新快照并恢复审核。
+
+审核使用已保存的来源摘录及数据，不等于重新抓取全部外链；证据缺口会阻止自动通过。
+回归检查：`.venv/bin/python scripts/test_editorial_review.py`。
+
+2026-09-09 首轮全库审核覆盖 186 篇：26 篇独立合格、90 篇重复、70 篇待修改/补证，
+已按确认应用发布结果：新增发布 21 篇，保留已发布合格稿 5 篇，
+将原已发布但未通过本轮审核的 10 篇退回待审核，原稿全部保留。逐篇理由及推荐保留版本见
+[审核报告](reports/editorial-review-2026-09-09.md)。
+
+用户反馈后，发现首轮误把相同核心内容新增背景段落当作独立价值。修正策略后，
+对当时已发布的26篇完成全部325对全文复核，11篇重复稿退回待审核，当前保留15篇，
+其中Agent技术4篇。原稿均保留，详见
+[重复复核修正版](reports/editorial-dedup-correction-2026-09-09.md)。
+
+新版去重规则已接入定时生成和待审核稿复核，线上 `RESEARCH_AUTO_PUBLISH=true`。
+批量审核与定时任务共用 `editorial_policy.py`，避免判重标准漂移。
+最新上线与验证结果见 [自动发布记录](reports/automatic-publication-2026-09-09.md)；
+此前的搜索通知见 [搜索更新记录](reports/search-refresh-2026-09-09.md)。
 
 部署或更新访问统计基础设施：
 
@@ -189,7 +309,7 @@ Python 3.13 Alpine ARM64 镜像，以非 root UID `10001` 运行；当前 ECR �
 | Aurora | `geo-intelligence-demo` | PostgreSQL 17.7、Serverless v2 0.5–2 ACU、不自动暂停、Data API |
 | Aurora | `geo-intelligence-demo-writer` | `db.serverless` 写节点 |
 | Secrets Manager | Aurora 托管主凭证 | 应用只保存 Secret ARN |
-| Bedrock | `geo-intelligence-sol` | GPT-5.6 Sol 应用推理配置 |
+| Bedrock | `geo-intelligence-astra` | GPT-6 Astra 应用推理配置 |
 | AgentCore Runtime | `geo_intelligence_agent` | HTTP、PUBLIC、ARM64、非 root、不可变 digest、READY |
 | AgentCore Browser | `geo_intelligence_browser` | PUBLIC、Web Bot Auth 签名已开启 |
 | AgentCore Code Interpreter | `geo_intelligence_code` | PUBLIC、READY |
@@ -217,7 +337,7 @@ Python 3.13 Alpine ARM64 镜像，以非 root UID `10001` 运行；当前 ECR �
 AgentCore Runtime 支持：
 
 - `{"action":"health"}`：检查 Aurora 内容数、模型与工具配置
-- `{"action":"analyze", ...}`：通过 Bedrock GPT-5.6 Sol 生成专业研究简报
+- `{"action":"analyze", ...}`：通过 Bedrock GPT-6 Astra 生成专业研究简报
 - `{"action":"tool_config"}`：返回 Browser、Code Interpreter 与行业范围
 - `{"action":"x402_fetch","url":"..."}`：通过 AgentCore Payments 购买 x402 内容
 - `{"action":"scheduled_crawl","crawlerSlug":"..."}`：执行真实抓取、研究、证据审计和入库
@@ -257,16 +377,31 @@ EventBridge Scheduler
 | Research Coder | AI、基础模型、Agent 与云端 AI 基础设施 | Codex SDK 生成 Python 爬虫 → Code Interpreter 执行官方 RSS 抓取 |
 | Render Scout | 电商、支付、媒体动态页面 | AgentCore Browser + Web Bot Auth → Playwright/CDP 渲染和正文提取 |
 | Market Signal | 科技股、利率与 AI 资本开支研判 | Codex SDK → Code Interpreter → FRED 官方时间序列与变化计算 |
-| Evidence Verifier | Agent 技术与全局证据治理 | 官方来源抓取 → 每次滚动复核最久未审计的 2 篇 → 必要时最多两轮修订和复核 |
-
-定时任务只采集、分析并生成待审核稿，不再自动公开文章。相同分类近 14 天内来源重叠
-或标题高度相似的待审核稿会合并更新。后台发布前会显示证据审计和质量门槛；公开发布
-仍需要管理员明确操作。
+| Evidence Verifier | Agent 技术与全局证据治理 | 官方来源抓取 → 每次滚动复核2篇待审核稿 → 必要时最多两轮修订和复核 |
 | Cloud Release Watch | 云厂商新服务和企业 AI 架构 | AgentCore Browser 抓取 AWS、Google Cloud 前端渲染页面 |
 | Commerce Feed Miner | 电商 Feed 与机器付费数据 | Codex SDK → Code Interpreter，并可执行受预算约束的 x402 支付抓取 |
 
+定时任务先保存待审核稿，质量和去重均通过后自动发布。质量门槛包括审核分数至少90、
+至少5个不同来源地址、3个来源机构、可核对摘录、正确引用编号和完整正文，且没有事实、
+引用或因果问题。新稿随后与所有已发布文章逐一全文比较，不限类别和发布时间。
+核心内容重复、包含关系、判定不确定或模型异常均留待审核；增加背景段落不能绕过去重。
+
+来源或标题相似只用于更新近14天内的待审核稿，不会直接覆盖已发布文章。
+正文与来源在同一事务中保存；提交发布前再次核对稿件和已发布集合的内容指纹，
+并发修改时保留待审核，防止两个任务基于同一旧目录同时发布。
+Evidence Verifier仅复核待审核稿的最新研究版本；证据未变化的任务也会重查关联的待审核稿。
+审核、去重和发布理由写入研究记录，发布成功后自动更新缓存、sitemap并通知IndexNow。
+
+部署时可以显式切换自动发布；不指定开关则保留线上原设置：
+
+```bash
+bash scripts/deploy_agent_runtime.sh --auto-publish
+# 恢复人工发布：
+bash scripts/deploy_agent_runtime.sh --no-auto-publish
+```
+
 Codex 使用 Runtime 的 AWS 身份和 Amazon Bedrock provider 调用
-`openai.gpt-5.6-sol`。生成源码在执行前经过 AST 安全检查；网络域名、子进程、原始
+`openai.gpt-6-astra`。生成源码在执行前经过 AST 安全检查；网络域名、子进程、原始
 socket、动态代码执行、云元数据和宿主文件路径均受限制。源码、Codex thread、token
 用量、Code Interpreter/Browser session 和支付交易都写入 Aurora 供后台审计。
 
@@ -351,12 +486,13 @@ GET /agent/v1/articles/agent-runtime-control-plane
    - 问题定义、数据对照、因果约束识别、产业映射等分析过程；
    - 核心观点、证据矩阵、深度行业分析、结论、风险边界和未来观察指标。
 4. 研究稿先接受独立证据审计。存在不支持的事实、引用或因果表述时，系统会按审计结果
-   自动修订并再次审计；只有二次审计通过的内容才自动发布，并立即出现在用户内容站
+   自动修订并再次审计；质量门槛和全站全文去重均通过后才自动发布，并出现在用户内容站
    对应分类、文章详情页和面向 Agent 的机器可读内容接口中。未通过的稿件保留在后台
    审核区，后台“内容管理”可以继续修改、发布或撤回。
 
 “任务记录”用于查看运行状态、工具会话、证据数量和错误信息，不是研究正文入口。
-来源无变化时，任务会标记为 `skipped` 并关联上一版研究稿，避免重复消耗模型。
+来源无变化时，任务会标记为 `skipped` 并关联上一版研究稿，避免重复生成正文；
+如果关联稿仍待审核，自动发布开启时会重新审核并检查是否可以发布。
 
 ### 数据源注册中心
 
@@ -402,13 +538,13 @@ Feed 和时间序列证据合并，避免把前端渲染页面当作静态 HTML�
 回写 `last_tested_at`、成功/失败状态和错误原因。认证来源使用绑定 Secret 测试；未配置凭据
 会明确标记失败。x402 来源以有效 HTTP 402 challenge 作为连通性成功。
 
-研究生成不是抓取摘要拼接。Runtime 会先保存可追溯证据，再调用 GPT-5.6 Sol 执行事实与
+研究生成不是抓取摘要拼接。Runtime 会先保存可追溯证据，再调用 GPT-6 Astra 执行事实与
 观点分离、跨来源对照、因果边界检查和产业影响推演。结构化时间序列会直接进入生成、
 审计和修订上下文。系统根据主题和证据选择机制解释、比较研究、数据研究札记、行业田野
 观察、批判性综述或架构决策分析，不强制统一章节标题；每篇仍必须包含证据表、实质分析、
 替代解释和可由未来数据检验的结尾。语言要求普通读者可读，禁止公关套话；金融内容额外
-强制显示“不构成投资建议”。`RESEARCH_AUTO_PUBLISH` 默认为 `true`；如需恢复人工审核
-流程，可将其设置为 `false`。
+强制显示“不构成投资建议”。应用未配置时 `RESEARCH_AUTO_PUBLISH` 默认为 `false`；
+当前线上已显式开启为 `true`，发布仍需同时通过质量和全文去重门槛。
 
 ### 管理员登录
 

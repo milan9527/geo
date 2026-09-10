@@ -1,0 +1,34 @@
+[
+  {
+    "mobile": false,
+    "javascript": false,
+    "passed": true,
+    "articleLinks": 15,
+    "navigation": false
+  },
+  {
+    "mobile": false,
+    "javascript": true,
+    "passed": true,
+    "articleLinks": 15,
+    "navigation": true
+  },
+  {
+    "mobile": true,
+    "javascript": false,
+    "passed": true,
+    "articleLinks": 15,
+    "navigation": false
+  },
+  {
+    "mobile": true,
+    "javascript": true,
+    "passed": true,
+    "articleLinks": 15,
+    "navigation": true
+  },
+  {
+    "scenario": "public API unavailable; SSR content and native article links survive",
+    "passed": true
+  }
+]

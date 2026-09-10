@@ -56,6 +56,7 @@ def build_urls(slugs: list[str], categories: list[str]) -> list[str]:
 
 def invalidate(slugs: list[str], categories: list[str], request_id: str) -> str:
     paths = [
+        "/",
         *(f"/article/{quote(slug, safe='')}" for slug in slugs),
         *(f"/category/{quote(category, safe='')}" for category in categories),
         "/sitemap.xml",

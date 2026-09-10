@@ -314,8 +314,8 @@ CATEGORIES = [
         "name": "AI 行业动向",
         "eyebrow": "ARTIFICIAL INTELLIGENCE",
         "description": (
-            "持续追踪全球与中国基础模型、推理系统、算力基础设施和 AI 产业竞争格局，"
-            "结合厂商发布、学术论文与市场数据，分析技术变化、商业影响和关键风险。"
+            "追踪 AI 大模型、推理系统与算力产业动态，"
+            "结合一手资料分析技术进展、商业影响和关键风险。"
         ),
         "accent": "#5D7CFF",
         "sort_order": 1,
@@ -367,11 +367,15 @@ CATEGORIES = [
 ]
 
 CATEGORY_DESCRIPTION_UPGRADES = {
-    "ai": "追踪基础模型、推理系统和产业格局的关键变化。",
-    "agent": "深入运行时、工具、身份、记忆和机器支付基础设施。",
-    "cloud": "解读云厂商新服务、平台战略与基础设施经济性。",
-    "commerce": "观察 AI 如何改变内容分发、购买决策和商业模式。",
-    "finance": "提供数据驱动的科技产业与证券市场研究框架。",
+    "ai": (
+        "追踪基础模型、推理系统和产业格局的关键变化。",
+        "持续追踪全球与中国基础模型、推理系统、算力基础设施和 AI 产业竞争格局，"
+        "结合厂商发布、学术论文与市场数据，分析技术变化、商业影响和关键风险。",
+    ),
+    "agent": ("深入运行时、工具、身份、记忆和机器支付基础设施。",),
+    "cloud": ("解读云厂商新服务、平台战略与基础设施经济性。",),
+    "commerce": ("观察 AI 如何改变内容分发、购买决策和商业模式。",),
+    "finance": ("提供数据驱动的科技产业与证券市场研究框架。",),
 }
 
 
@@ -1320,6 +1324,8 @@ def init_db() -> None:
         for statement in SCHEMA.split(";"):
             if statement.strip():
                 conn.execute(statement)
+        from .publication_protection import ensure_publication_protection
+        ensure_publication_protection(conn)
         category_count = conn.execute(
             "SELECT COUNT(*) AS count FROM categories"
         ).fetchone()["count"]
@@ -1352,15 +1358,16 @@ def _reconcile_managed_category_descriptions(conn: Any) -> None:
         str(item["slug"]): str(item["description"])
         for item in CATEGORIES
     }
-    for slug, legacy_description in CATEGORY_DESCRIPTION_UPGRADES.items():
-        conn.execute(
-            """
-            UPDATE categories
-            SET description = %s
-            WHERE slug = %s AND description = %s
-            """,
-            (descriptions[slug], slug, legacy_description),
-        )
+    for slug, legacy_descriptions in CATEGORY_DESCRIPTION_UPGRADES.items():
+        for legacy_description in legacy_descriptions:
+            conn.execute(
+                """
+                UPDATE categories
+                SET description = %s
+                WHERE slug = %s AND description = %s
+                """,
+                (descriptions[slug], slug, legacy_description),
+            )
 
 
 def _seed_articles(conn: Any) -> None:

@@ -340,15 +340,14 @@ function renderContent() {
   $("#pageTitle").textContent = "内容管理";
   $("#adminApp").innerHTML = `
     <section class="view-page">
-      <div class="view-header"><div><h2>专业内容库</h2><p>管理发布状态、GEO 权威度、访问模式与 Agent 定价。</p></div><div class="view-actions"><button class="ghost-button" id="exportContent">导出内容</button><button class="primary-button" id="createContent">创建研究</button></div></div>
+      <div class="view-header"><div><h2>专业内容库</h2><p>已发布页面保持在线；新稿通过证据审核与全文去重后自动发布。</p></div><div class="view-actions"><button class="ghost-button" id="exportContent">导出内容</button><button class="primary-button" id="createContent">创建研究</button></div></div>
       <div class="table-panel">
         <div class="table-toolbar">
           <div class="content-filters"><input id="contentSearch" placeholder="搜索标题或作者…"/><select id="statusFilter"><option value="">全部状态</option><option value="published">已发布</option><option value="review">待审核</option><option value="draft">草稿</option></select></div>
           <div class="bulk-actions" id="bulkActions">
             <span>已选择 <b id="selectedCount">0</b> 篇</span>
-            <button data-batch-action="publish" disabled>批量发布</button>
             <button data-batch-action="review" disabled>转为审核</button>
-            <button class="danger" data-batch-action="delete" disabled>删除</button>
+            <button class="danger" data-batch-action="delete" disabled>删除未发布稿</button>
           </div>
         </div>
         <table class="data-table"><thead><tr><th class="select-column"><input type="checkbox" id="selectAllArticles" aria-label="选择当前列表全部内容" /></th><th>内容</th><th>分类</th><th>状态</th><th>GEO 权威度</th><th>AI 引用</th><th>Agent 访问</th><th>更新时间</th><th>操作</th></tr></thead><tbody id="contentRows"></tbody></table>
@@ -376,7 +375,7 @@ function renderContentRows() {
       <td><b>${item.authority_score}</b> / 100</td><td>${fmt(item.citation_count)}</td>
       <td><span class="access-pill">${item.access_model === "open" ? "开放" : `x402 · $${item.agent_price}`}</span></td>
       <td>${relativeTime(item.updated_at)}</td>
-      <td><div class="action-group"><button class="table-action" data-open-article="${item.id}" title="查看内容"><svg><use href="#i-content"></use></svg></button><button class="table-action" data-toggle-publish="${item.id}" data-status="${item.status}" title="${item.status === "published" ? "转为审核" : "发布"}"><svg><use href="#${item.status === "published" ? "i-pause" : "i-play"}"></use></svg></button></div></td>
+      <td><div class="action-group"><button class="table-action" data-open-article="${item.id}" title="查看内容"><svg><use href="#i-content"></use></svg></button>${item.status === "draft" ? `<button class="table-action" data-submit-review="${item.id}" title="转为待审核"><svg><use href="#i-play"></use></svg></button>` : `<span>${item.status === "published" ? "保持公开" : "等待审核"}</span>`}</div></td>
     </tr>
   `).join("");
   updateBulkActions();
@@ -384,8 +383,9 @@ function renderContentRows() {
 
 function updateBulkActions() {
   const count = state.selectedArticles.size;
+  const containsPublished = state.articles.some((item) => state.selectedArticles.has(item.id) && item.status === "published");
   if ($("#selectedCount")) $("#selectedCount").textContent = count;
-  $$("[data-batch-action]").forEach((button) => { button.disabled = count === 0; });
+  $$("[data-batch-action]").forEach((button) => { button.disabled = count === 0 || containsPublished; });
   const visible = filteredContentRows().map((item) => item.id);
   if ($("#selectAllArticles")) {
     $("#selectAllArticles").checked = visible.length > 0 && visible.every((id) => state.selectedArticles.has(id));
@@ -417,6 +417,26 @@ function renderDetailSource(source, index) {
     : `<div class="detail-source-unlinked">${content}</div>`;
 }
 
+function publicationSummary(verification, status) {
+  const gate = verification?.publicationGate;
+  const dedup = verification?.semanticDeduplication;
+  if (status === "published") return { title: "已发布", detail: "当前文章已公开，审核依据见下方记录。" };
+  if (!gate?.ready) return { title: "质量审核未通过", detail: "请根据证据审计修订；质量和全文去重均通过后才可自动发布。" };
+  const reasons = {
+    duplicate_content: "与已发布文章核心内容重复，保留待审核。",
+    uncertain_comparison: "文章之间的独立价值尚未确认，保留待审核。",
+    review_unavailable: "本次全文复核未完成，保留待审核。",
+    candidate_changed: "审核期间文章内容发生变化，需要重新审核。",
+    published_catalog_changed: "审核期间已发布内容有更新，需要重新比对。",
+    automatic_publication_disabled: "该次任务未启用自动发布。",
+  };
+  if (dedup?.published) return { title: "当前待审核", detail: "该稿曾通过自动审核；当前发布状态以内容管理为准。" };
+  return {
+    title: dedup?.reason === "duplicate_content" ? "重复内容，待审核" : "质量通过，等待全文复核",
+    detail: reasons[dedup?.reason] || "尚无完整的全文去重记录；定时任务通过全部检查后自动发布。",
+  };
+}
+
 async function openArticleDetail(articleId) {
   const modal = $("#contentDetailModal");
   const body = $("#contentDetailBody");
@@ -426,6 +446,7 @@ async function openArticleDetail(articleId) {
   try {
     const article = await api(`/api/admin/articles/${articleId}`);
     const gate = article.verification?.publicationGate;
+    const publication = publicationSummary(article.verification, article.status);
     const failedChecks = gate
       ? Object.entries(gate.checks || {}).filter(([, passed]) => !passed).map(([name]) => name)
       : [];
@@ -442,9 +463,9 @@ async function openArticleDetail(articleId) {
         <div class="research-process">
           <h3>发布质量门槛</h3>
           <div>
-            <b>${gate.ready ? "内容条件已满足，仍需人工审核" : "暂不建议发布"}</b>
+            <b>${escapeHtml(publication.title)}</b>
             <span>${gate.sourceCount || 0} 条来源 · ${gate.distinctPublishers || 0} 个独立发布机构 · ${gate.articleCharacters || 0} 字符</span>
-            <p>${failedChecks.length ? `未通过：${failedChecks.join("、")}` : "自动检查均已通过；请继续检查主题增量、重复内容和标题搜索意图。"}</p>
+            <p>${escapeHtml(publication.detail)}${failedChecks.length ? ` 未通过：${escapeHtml(failedChecks.join("、"))}` : ""}</p>
           </div>
         </div>
       ` : ""}
@@ -860,7 +881,7 @@ function renderResearch() {
             <p class="research-summary">${run.summary || run.error_message || "研究任务正在执行。"}</p>
             ${run.toolTrace?.provider ? `<div class="research-process"><h3>真实工具执行</h3><div><b>${run.toolTrace.provider}</b><span>Session ${run.toolTrace.sessionId || "n/a"}</span><p>${run.toolTrace.documents || 0} 条文档${run.toolTrace.codexThreadId ? ` · Codex Thread ${run.toolTrace.codexThreadId}` : ""}${run.toolTrace.webBotAuth ? " · Web Bot Auth" : ""}</p></div></div>` : ""}
             ${run.verification?.status ? `<div class="research-process"><h3>证据审计</h3><div><b>${run.verification.status === "verified" ? "已通过" : "需要人工复核"} · ${run.verification.score || 0}</b><span>${run.verification.writingStyle?.name ? `${run.verification.writingStyle.name} · ` : ""}${run.verification.notes || ""}</span><p>${(run.verification.unsupportedClaims || []).join("；") || "未发现无证据支持的关键表述"}</p></div></div>` : ""}
-            ${run.verification?.publicationGate ? `<div class="research-process"><h3>发布质量门槛</h3><div><b>${run.verification.publicationGate.ready ? "自动条件已满足，等待人工审核" : "暂不建议发布"}</b><span>${run.verification.publicationGate.sourceCount || 0} 条来源 · ${run.verification.publicationGate.distinctPublishers || 0} 个独立发布机构</span><p>采集任务不会自动公开内容。</p></div></div>` : ""}
+            ${run.verification?.publicationGate ? `<div class="research-process"><h3>发布审核</h3><div><b>${escapeHtml(publicationSummary(run.verification, run.article_status).title)}</b><span>${run.verification.publicationGate.sourceCount || 0} 条来源 · ${run.verification.publicationGate.distinctPublishers || 0} 个独立发布机构</span><p>${escapeHtml(publicationSummary(run.verification, run.article_status).detail)}</p></div></div>` : ""}
             ${run.analysisProcess?.length ? `<div class="research-process"><h3>分析过程</h3>${run.analysisProcess.map((step, index) => `<div><b>0${index + 1} ${step.step}</b><span>${step.method}</span><p>${step.result}</p><small>${step.evidence}</small></div>`).join("")}</div>` : ""}
             ${run.sections?.length ? `<div class="research-sections"><h3>观点与结论</h3>${run.sections.map((section) => `<div><b>${section.heading}</b>${(section.paragraphs || []).slice(0, 2).map((text) => `<p>${text}</p>`).join("")}${(section.bullets || []).length ? `<ul>${section.bullets.map((item) => `<li>${item}</li>`).join("")}</ul>` : ""}</div>`).join("")}</div>` : ""}
             <div class="research-evidence"><h3>数据与来源</h3>${run.evidence.map((source, index) => `<a href="${source.url}" target="_blank" rel="noreferrer"><span>[S${index + 1}] ${source.publisher} · ${source.source_type}</span><b>${source.title}</b><small>${source.published_at}</small><p>${source.content_excerpt.slice(0, 260)}</p></a>`).join("")}</div>
@@ -894,7 +915,7 @@ function renderSettings() {
           <div class="setting-row"><div><strong>分析数据保留</strong><span>当前统计保留周期</span></div><b>${setting("analytics_retention_days", 120)} 天</b></div>
         </article>
         <article class="setting-card"><h2>推理与运行时</h2>
-          <div class="setting-row"><div><strong>分析模型</strong><span>Amazon Bedrock 应用推理配置</span></div><b>GPT-5.6 Sol</b></div>
+          <div class="setting-row"><div><strong>分析模型</strong><span>Amazon Bedrock 应用推理配置</span></div><b>GPT-6 Astra</b></div>
           <div class="setting-row"><div><strong>AgentCore Runtime</strong><span>Browser + Code Interpreter</span></div><span class="status-pill running">READY</span></div>
           <div class="setting-row"><div><strong>EventBridge Scheduler</strong><span>6 条计划 · Lambda 桥接 · SQS DLQ</span></div><span class="status-pill running">ACTIVE</span></div>
         </article>
@@ -983,13 +1004,12 @@ function bindEvents() {
     if (articleDetail) await openArticleDetail(Number(articleDetail.dataset.openArticle));
     const batchAction = event.target.closest("[data-batch-action]");
     if (batchAction) await batchArticles(batchAction.dataset.batchAction);
-    const publish = event.target.closest("[data-toggle-publish]");
-    if (publish) {
-      const status = publish.dataset.status === "published" ? "review" : "published";
-      await api(`/api/admin/articles/${publish.dataset.togglePublish}`, { method: "PATCH", body: JSON.stringify({ status }) });
+    const review = event.target.closest("[data-submit-review]");
+    if (review) {
+      await api(`/api/admin/articles/${review.dataset.submitReview}`, { method: "PATCH", body: JSON.stringify({ status: "review" }) });
       state.articles = await api("/api/admin/articles");
       renderContent();
-      showToast(status === "published" ? "内容已发布" : "内容已转入审核");
+      showToast("内容已转入审核", "通过证据审核与全文去重后自动发布");
     }
     const run = event.target.closest("[data-run-crawler]");
     if (run) {

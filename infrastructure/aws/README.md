@@ -6,7 +6,7 @@ Provisioned on 2026-09-03 in `us-east-1`, account `632930644527`.
 
 - Aurora cluster: `arn:aws:rds:us-east-1:632930644527:cluster:geo-intelligence-demo`
 - Aurora writer: `geo-intelligence-demo-writer`
-- Bedrock profile: `arn:aws:bedrock:us-east-1:632930644527:application-inference-profile/jiuyqf37o67n`
+- Bedrock profile: `arn:aws:bedrock:us-east-1:632930644527:application-inference-profile/8b2k32fwobdd`
 - AgentCore Runtime: `arn:aws:bedrock-agentcore:us-east-1:632930644527:runtime/geo_intelligence_agent-hyVRs073Db`
 - AgentCore Browser: `geo_intelligence_browser-MmjFQMhTTf`
 - AgentCore Code Interpreter: `geo_intelligence_code-7mOodJooC0`
@@ -64,8 +64,8 @@ The container is Linux ARM64, runs as UID `10001`, listens on port `8080`, and i
 The ECR image is deployed by immutable digest. The deployed image scan completed with no Critical,
 High, or Medium findings.
 
-The active Runtime is version 36 and uses image digest
-`sha256:2e0e2caaf47c8331e36666c6e53958bc380c52563ff33949cdf77a6a6b6e34a6`.
+The active Runtime is version 47 and uses image digest
+`sha256:97dc87115aad70530e332e645853d1ff9ca9a275f64b53ac624d1121a5dcf0a3`.
 It runs Codex SDK through the Amazon Bedrock provider, AgentCore Code Interpreter, AgentCore
 Browser with Web Bot Auth, evidence remediation, and budgeted AgentCore Payments. Crawl source
 profiles are loaded from Aurora `data_sources` and `agent_source_assignments` on every invocation;

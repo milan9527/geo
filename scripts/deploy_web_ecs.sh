@@ -4,6 +4,17 @@ set -euo pipefail
 PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$PROJECT_DIR"
 
+DEPLOY_ADMIN=true
+case "${1:-}" in
+  "") ;;
+  --public-only) DEPLOY_ADMIN=false ;;
+  *) echo "Usage: $0 [--public-only]" >&2; exit 1 ;;
+esac
+if [ "$#" -gt 1 ]; then
+  echo "Usage: $0 [--public-only]" >&2
+  exit 1
+fi
+
 if [ ! -f ".env.aws" ]; then
   echo ".env.aws is required." >&2
   exit 1
@@ -307,26 +318,6 @@ aws ecs wait services-stable \
   --cluster "$ECS_CLUSTER" \
   --services "$ECS_SERVICE"
 
-aws s3 sync frontend/public "s3://${PUBLIC_BUCKET}" \
-  --region "$DEPLOY_REGION" \
-  --delete \
-  --exclude index.html \
-  --cache-control 'public,max-age=300'
-aws s3 cp frontend/public/index.html "s3://${PUBLIC_BUCKET}/index.html" \
-  --region "$DEPLOY_REGION" \
-  --content-type text/html \
-  --cache-control 'no-cache'
-
-aws s3 sync frontend/admin "s3://${ADMIN_BUCKET}" \
-  --region "$DEPLOY_REGION" \
-  --delete \
-  --exclude index.html \
-  --cache-control 'public,max-age=300'
-aws s3 cp frontend/admin/index.html "s3://${ADMIN_BUCKET}/index.html" \
-  --region "$DEPLOY_REGION" \
-  --content-type text/html \
-  --cache-control 'no-cache'
-
 PUBLIC_DISTRIBUTION_WRAPPER="${DEPLOY_TEMP_DIR}/public-distribution-wrapper.json"
 PUBLIC_DISTRIBUTION_CONFIG="${DEPLOY_TEMP_DIR}/public-distribution-config.json"
 aws cloudfront get-distribution-config \
@@ -336,6 +327,7 @@ PUBLIC_DISTRIBUTION_ETAG="$(
   jq -r '.ETag' "$PUBLIC_DISTRIBUTION_WRAPPER"
 )"
 SSR_PATHS='[
+  "/",
   "article/*",
   "category/*",
   "methodology",
@@ -355,6 +347,7 @@ jq \
   --arg ssrCachePolicy "$SSR_CACHE_POLICY_ID" \
   '
     .DistributionConfig
+    | .DefaultRootObject = ""
     | (.CacheBehaviors.Items[] | select(.PathPattern == "api/*")) as $api
     | .CacheBehaviors.Items = (
         (
@@ -390,15 +383,47 @@ aws cloudfront update-distribution \
   --id "$PUBLIC_DISTRIBUTION" \
   --if-match "$PUBLIC_DISTRIBUTION_ETAG" \
   --distribution-config "file://${PUBLIC_DISTRIBUTION_CONFIG}" >/dev/null
+SEARCH_PYTHON="${PROJECT_DIR}/.venv/bin/python"
+if [ ! -x "$SEARCH_PYTHON" ]; then
+  SEARCH_PYTHON=python3
+fi
+"$SEARCH_PYTHON" scripts/configure_public_search.py \
+  --distribution-id "$PUBLIC_DISTRIBUTION" --apply
 aws cloudfront wait distribution-deployed \
   --id "$PUBLIC_DISTRIBUTION"
+
+# Serve the new home route before shipping JavaScript that reuses its HTML.
+aws s3 sync frontend/public "s3://${PUBLIC_BUCKET}" \
+  --region "$DEPLOY_REGION" \
+  --delete \
+  --exclude index.html \
+  --cache-control 'public,max-age=300'
+aws s3 cp frontend/public/index.html "s3://${PUBLIC_BUCKET}/index.html" \
+  --region "$DEPLOY_REGION" \
+  --content-type text/html \
+  --cache-control 'no-cache'
+
+if [ "$DEPLOY_ADMIN" = true ]; then
+  aws s3 sync frontend/admin "s3://${ADMIN_BUCKET}" \
+    --region "$DEPLOY_REGION" \
+    --delete \
+    --exclude index.html \
+    --cache-control 'public,max-age=300'
+  aws s3 cp frontend/admin/index.html "s3://${ADMIN_BUCKET}/index.html" \
+    --region "$DEPLOY_REGION" \
+    --content-type text/html \
+    --cache-control 'no-cache'
+fi
+
 
 aws cloudfront create-invalidation \
   --distribution-id "$PUBLIC_DISTRIBUTION" \
   --paths '/*' >/dev/null
-aws cloudfront create-invalidation \
-  --distribution-id "$ADMIN_DISTRIBUTION" \
-  --paths '/*' >/dev/null
+if [ "$DEPLOY_ADMIN" = true ]; then
+  aws cloudfront create-invalidation \
+    --distribution-id "$ADMIN_DISTRIBUTION" \
+    --paths '/*' >/dev/null
+fi
 
 PUBLIC_DOMAIN="$(
   aws cloudfront get-distribution \

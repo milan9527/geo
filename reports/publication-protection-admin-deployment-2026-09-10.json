@@ -1,0 +1,18 @@
+{
+  "files": [
+    {
+      "file": "app.js",
+      "sha256": "60d624a7950e3d28595a391c821272c9703d4bd2098ce0dd8f7b435b4c35bd29",
+      "etag": "\"f8d94555e426a4ae1992f9def3bcb256\"",
+      "liveMatchesStaged": true
+    },
+    {
+      "file": "index.html",
+      "sha256": "9a201a312d7c28c9da660696cbb5e4440e522f55ab52e0eb805db717b5402f56",
+      "etag": "\"22769156782675b21b1ae14de77f2b15\"",
+      "liveMatchesStaged": true
+    }
+  ],
+  "invalidationId": "I2GX9LLX8BW2ATXGSXX1BJTHV6",
+  "invalidationStatus": "Completed"
+}

@@ -1,0 +1,313 @@
+{
+  "runtimeVersion": "47",
+  "health": {
+    "status": "healthy",
+    "service": "geo-intelligence-agent",
+    "database": {
+      "engine": "Aurora PostgreSQL",
+      "articleCount": 186
+    },
+    "model": "arn:aws:bedrock:us-east-1:632930644527:application-inference-profile/8b2k32fwobdd",
+    "publication": {
+      "automatic": true,
+      "qualityMinimumScore": 90,
+      "dedupePolicyVersion": "2026-09-09-v2-core-coverage",
+      "scope": "all_published_articles",
+      "concurrentChangePolicy": "keep_in_review"
+    },
+    "tools": {
+      "browserId": "geo_intelligence_browser-MmjFQMhTTf",
+      "codeInterpreterId": "geo_intelligence_code-7mOodJooC0"
+    },
+    "timestamp": "2026-09-09T03:54:07+00:00"
+  },
+  "previousMaxJobId": 1184,
+  "publishedBefore": [
+    {
+      "id": 105,
+      "slug": "agent-research-20260904-0805-494"
+    },
+    {
+      "id": 116,
+      "slug": "agent-research-20260905-0003-599"
+    },
+    {
+      "id": 117,
+      "slug": "commerce-research-20260905-0004-600"
+    },
+    {
+      "id": 124,
+      "slug": "ai-research-20260905-0022-607"
+    },
+    {
+      "id": 134,
+      "slug": "ai-research-20260906-0025-766"
+    },
+    {
+      "id": 136,
+      "slug": "agent-research-20260906-0033-769"
+    },
+    {
+      "id": 152,
+      "slug": "finance-research-20260906-1810-884"
+    },
+    {
+      "id": 176,
+      "slug": "cloud-research-20260907-1806-1048"
+    },
+    {
+      "id": 184,
+      "slug": "commerce-research-20260908-0006-1090"
+    },
+    {
+      "id": 185,
+      "slug": "finance-research-20260908-0008-1087"
+    },
+    {
+      "id": 192,
+      "slug": "ai-research-20260908-0606-1128"
+    },
+    {
+      "id": 197,
+      "slug": "ai-research-20260908-1205-1165"
+    },
+    {
+      "id": 203,
+      "slug": "commerce-research-20260908-1807-1174"
+    },
+    {
+      "id": 205,
+      "slug": "cloud-research-20260908-1808-1173"
+    },
+    {
+      "id": 206,
+      "slug": "agent-research-20260908-2004-1175"
+    }
+  ],
+  "validationDispatch": {
+    "statusCode": 202,
+    "runtimeStatusCode": 200,
+    "runtimeSessionId": "e90fb513-dc78-4fbf-ad6b-951106fa8858",
+    "crawler": "evidence-verifier",
+    "accepted": true,
+    "result": {
+      "status": "accepted",
+      "executionMode": "async",
+      "dispatchId": "aa54ee62-5bec-4434-a5ae-f37b7004b954",
+      "crawler": "evidence-verifier",
+      "message": "AgentCore Runtime 已接收后台任务",
+      "acceptedAt": "2026-09-09T03:54:09+00:00"
+    }
+  },
+  "deployment": {
+    "version": "47",
+    "status": "READY",
+    "image": "632930644527.dkr.ecr.us-east-1.amazonaws.com/geo-intelligence-agent@sha256:97dc87115aad70530e332e645853d1ff9ca9a275f64b53ac624d1121a5dcf0a3",
+    "autoPublish": "true",
+    "scanStatus": "COMPLETE",
+    "scanSeverityCounts": {}
+  },
+  "tests": {
+    "batchDeduplicationRegression": 10,
+    "publicationGateAndPostgreSQL": 13,
+    "runtimeIntegration": 5,
+    "knownDuplicateLiveModel": {
+      "articles": [
+        170,
+        136
+      ],
+      "relation": "duplicate",
+      "confidence": 0.98
+    }
+  },
+  "schedules": [
+    {
+      "name": "geo-evidence-verifier",
+      "state": "ENABLED",
+      "expression": "cron(10 3 * * ? *)",
+      "timezone": "UTC"
+    },
+    {
+      "name": "geo-render-scout",
+      "state": "ENABLED",
+      "expression": "cron(10 1 * * ? *)",
+      "timezone": "UTC"
+    },
+    {
+      "name": "geo-cloud-release-watch",
+      "state": "ENABLED",
+      "expression": "cron(10 4 * * ? *)",
+      "timezone": "UTC"
+    },
+    {
+      "name": "geo-commerce-feed-miner",
+      "state": "ENABLED",
+      "expression": "cron(10 5 * * ? *)",
+      "timezone": "UTC"
+    },
+    {
+      "name": "geo-market-signal",
+      "state": "ENABLED",
+      "expression": "cron(10 2 * * ? *)",
+      "timezone": "UTC"
+    },
+    {
+      "name": "geo-research-coder",
+      "state": "ENABLED",
+      "expression": "cron(10 0 * * ? *)",
+      "timezone": "UTC"
+    }
+  ],
+  "adminUpdate": {
+    "file": "app.js",
+    "sha256": "b2c3d8eee21f202ef5d508ecedb270ada2853f41a1c69e779976dcf015c54d56",
+    "invalidationId": "I3ASZBRQ3JL6CSU574DP9YDCM9",
+    "verifiedLive": true,
+    "invalidationStatus": "Completed"
+  },
+  "productionValidation": {
+    "runId": 935,
+    "articleId": 200,
+    "verificationStatus": "verified",
+    "score": 98,
+    "publicationGate": {
+      "ready": true,
+      "checks": {
+        "verified": true,
+        "verificationScore": true,
+        "noMaterialIssues": true,
+        "completeArticle": true,
+        "sourceCount": true,
+        "publisherDiversity": true,
+        "archivedEvidence": true,
+        "validCitations": true,
+        "substantiveLength": true,
+        "humanTitle": true
+      },
+      "sourceCount": 10,
+      "distinctPublishers": 6,
+      "archivedSources": 10,
+      "articleCharacters": 4701,
+      "policy": "quality_then_full_text_deduplication",
+      "dedupePolicyVersion": "2026-09-09-v2-core-coverage"
+    },
+    "deduplication": {
+      "policyVersion": "2026-09-09-v2-core-coverage",
+      "published": false,
+      "comparedArticles": 15,
+      "reason": "duplicate_content",
+      "candidateHash": "793c2505eac0f1ce32f83ab701c4a1f1d0440cbe7c7f1ad53dda607ff2e5bcc2",
+      "duplicateOf": [
+        206
+      ]
+    },
+    "comparedPairs": [
+      {
+        "articleId": 105,
+        "relation": "distinct",
+        "confidence": 0.99
+      },
+      {
+        "articleId": 116,
+        "relation": "distinct",
+        "confidence": 0.96
+      },
+      {
+        "articleId": 117,
+        "relation": "distinct",
+        "confidence": 0.99
+      },
+      {
+        "articleId": 124,
+        "relation": "distinct",
+        "confidence": 0.99
+      },
+      {
+        "articleId": 134,
+        "relation": "distinct",
+        "confidence": 0.99
+      },
+      {
+        "articleId": 136,
+        "relation": "distinct",
+        "confidence": 0.98
+      },
+      {
+        "articleId": 152,
+        "relation": "distinct",
+        "confidence": 1.0
+      },
+      {
+        "articleId": 176,
+        "relation": "distinct",
+        "confidence": 0.99
+      },
+      {
+        "articleId": 184,
+        "relation": "distinct",
+        "confidence": 0.99
+      },
+      {
+        "articleId": 185,
+        "relation": "distinct",
+        "confidence": 1.0
+      },
+      {
+        "articleId": 192,
+        "relation": "distinct",
+        "confidence": 0.99
+      },
+      {
+        "articleId": 197,
+        "relation": "distinct",
+        "confidence": 0.99
+      },
+      {
+        "articleId": 203,
+        "relation": "distinct",
+        "confidence": 0.99
+      },
+      {
+        "articleId": 205,
+        "relation": "distinct",
+        "confidence": 0.99
+      },
+      {
+        "articleId": 206,
+        "relation": "duplicate",
+        "confidence": 0.96
+      }
+    ],
+    "job": {
+      "id": 1185,
+      "status": "completed",
+      "message": "已更新并提交审核深度研究《Agent 工具与 SDK 更新：来源校验、机器身份和用量归属各管哪一环》；10 条证据，审计 verified (98)，21188 tokens",
+      "finished_at": "2026-09-09T03:56:42+00:00"
+    }
+  },
+  "crossVerification": [
+    {
+      "runId": 929,
+      "articleId": 208,
+      "score": 98,
+      "qualityReady": true,
+      "reason": "duplicate_content",
+      "published": false,
+      "comparedArticles": 15
+    },
+    {
+      "runId": 930,
+      "articleId": 209,
+      "score": 98,
+      "qualityReady": true,
+      "reason": "duplicate_content",
+      "published": false,
+      "comparedArticles": 15
+    }
+  ],
+  "articleStatuses": {
+    "draft": 7,
+    "published": 15,
+    "review": 164
+  }
+}

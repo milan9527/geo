@@ -28,7 +28,7 @@ AgentCore Runtime — GEO Orchestrator（已部署）
 Raw store / normalized documents / entity graph
         |
         v
-Bedrock GPT 5.6 Sol — analysis pipeline（已部署并验证）
+Bedrock GPT-6 Astra — analysis pipeline（已部署并验证）
         |
         +-- AI 行业动向
         +-- Agent 技术进展
@@ -48,7 +48,7 @@ Event stream -> traffic attribution -> A/B metrics -> dashboard
 ```
 
 云数据库使用 Aurora PostgreSQL 17.7 Serverless v2（0.5–2 ACU，不自动暂停）与 Data API。Runtime 健康调用、
-Aurora 查询、GPT-5.6 Sol 分析调用，以及 Stripe Privy 钱包在 Base Sepolia 上购买 x402
+Aurora 查询、GPT-6 Astra 分析调用，以及 Stripe Privy 钱包在 Base Sepolia 上购买 x402
 内容均已通过。Codex SDK 自动生成爬虫、Code Interpreter 执行、Browser Tool 自动化、
 证据复核、文章入库与 Variant B 商户收款已经接入生产 Demo。主网钱包、退款、财务对账
 与监管流程尚未启用。
@@ -66,7 +66,7 @@ Bedrock 校验线程，最后写回完成/失败状态。失败事件最多重�
 工作目录，并在进入 Code Interpreter 前运行静态检查和资源策略检查。
 
 当前生产 Runtime 使用 Codex SDK，并通过 Amazon Bedrock provider 调用
-`openai.gpt-5.6-sol`。Codex 生成的站点爬虫经过 AST 安全检查后交给 AgentCore Code
+`openai.gpt-6-astra`。Codex 生成的站点爬虫经过 AST 安全检查后交给 AgentCore Code
 Interpreter 执行；源码、thread、token 用量与工具 session 都写入 Aurora。
 
 ### Code Interpreter worker

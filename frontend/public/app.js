@@ -72,10 +72,28 @@ function compactStory(article) {
   `;
 }
 
-function setMeta({ title, description, article }) {
+function setMeta({ title, description, article, robots = "index, follow, max-snippet:-1, max-image-preview:large" }) {
   document.title = title;
   $('meta[name="description"]').setAttribute("content", description);
-  $('link[rel="canonical"]')?.setAttribute("href", `${location.origin}${location.pathname}`);
+  $('meta[name="robots"]')?.setAttribute("content", robots);
+  const canonical = $('link[rel="canonical"]');
+  const publicOrigin = canonical ? new URL(canonical.href).origin : location.origin;
+  const canonicalPath = location.pathname.replace(/\/+$/, "") || "/";
+  canonical?.setAttribute("href", `${publicOrigin}${canonicalPath}`);
+  for (const [property, content] of Object.entries({
+    "og:title": title,
+    "og:description": description,
+    "og:url": `${publicOrigin}${canonicalPath}`,
+    "og:type": article ? "article" : "website",
+  })) {
+    let tag = $(`meta[property="${property}"]`);
+    if (!tag) {
+      tag = document.createElement("meta");
+      tag.setAttribute("property", property);
+      document.head.append(tag);
+    }
+    tag.setAttribute("content", content);
+  }
   $$("script[data-page-schema]").forEach((schema) => schema.remove());
   $("#pageSchema")?.remove();
   if (article) {
@@ -92,14 +110,14 @@ function setMeta({ title, description, article }) {
       author: {
         "@type": "Organization",
         name: "Aperture 研究编辑部",
-        url: `${location.origin}/authors/research-desk`,
+        url: `${publicOrigin}/authors/research-desk`,
       },
       about: article.keywords,
       citation: article.sources.map((source) => source.url),
       publisher: {
         "@type": "Organization",
         name: "Aperture Intelligence",
-        url: `${location.origin}/`,
+        url: `${publicOrigin}/`,
       },
     });
     document.head.append(schema);
@@ -120,122 +138,18 @@ function updateNavActive() {
   });
 }
 
-function renderHome() {
-  const featured = state.articles.filter((item) => item.featured);
-  const hero = featured[0] || state.articles[0];
-  const remaining = state.articles.filter((item) => item.id !== hero.id);
-  const signal = remaining.find((item) => item.category.slug === "agent") || remaining[0];
+async function renderHome() {
+  // Reuse the same published content for direct visits and in-app navigation.
+  const response = await fetch("/", { headers: { Accept: "text/html" } });
+  if (!response.ok) throw new Error(`Home ${response.status}`);
+  const page = new DOMParser().parseFromString(await response.text(), "text/html");
+  if (location.pathname !== "/") return;
   setMeta({
-    title: "Aperture Intelligence · 面向 AI 时代的技术与商业研究",
-    description: "提供 AI、Agent、云计算、电商媒体与金融市场的深度研究与可验证专业判断。",
+    title: page.title,
+    description: $('meta[name="description"]', page).content,
   });
-
-  $("#app").innerHTML = `
-    <section class="home-hero">
-      <div class="hero-inner">
-        <div class="hero-copy">
-          <p class="hero-eyebrow">INDEPENDENT TECHNOLOGY INTELLIGENCE</p>
-          <h1>理解 AI 时代的<br /><em>关键变量</em></h1>
-          <p class="hero-summary">${hero.summary}</p>
-          <a class="hero-cta" href="/article/${hero.slug}" data-link>
-            阅读首席研究 <svg><use href="#icon-arrow"></use></svg>
-          </a>
-          <div class="hero-meta">
-            <span>由 <b>${hero.author}</b> 撰写</span><i></i>
-            <span>${formatDate(hero.publishedAt)}</span><i></i>
-            <span>权威度 ${hero.authorityScore}</span>
-          </div>
-        </div>
-        <div class="hero-intelligence" aria-hidden="true">
-          <div class="signal-orbit">
-            <div class="signal-core"><strong>${hero.authorityScore}</strong><span>AUTHORITY</span></div>
-            <div class="signal-node one">证据来源<b>38 verified</b></div>
-            <div class="signal-node two">AI 引用<b>${formatNumber(hero.citationCount)}</b></div>
-            <div class="signal-node three">内容更新<b>Today</b></div>
-            <i class="signal-dot a"></i><i class="signal-dot b"></i><i class="signal-dot c"></i>
-          </div>
-        </div>
-      </div>
-    </section>
-
-    <div class="signal-strip">
-      <div class="signal-strip-inner">
-        <span class="signal-strip-label">今日研究信号</span>
-        <a class="signal-strip-content" href="/article/${signal.slug}" data-link>
-          <span>高关注</span><b>${signal.title}</b>
-        </a>
-        <span class="signal-strip-time">更新于 24 分钟前</span>
-      </div>
-    </div>
-
-    <section class="section">
-      <div class="section-heading">
-        <div>
-          <p class="section-eyebrow">EDITOR'S SELECTION</p>
-          <h2>值得关注的核心判断</h2>
-          <p>从复杂信号中提炼真正影响技术决策与商业价值的变量。</p>
-        </div>
-        <a class="section-link" href="/category/agent" data-link>浏览全部研究 <svg><use href="#icon-arrow"></use></svg></a>
-      </div>
-      <div class="featured-grid">
-        ${storyCard(hero, { large: true })}
-        <div class="side-stories">
-          ${remaining.slice(0, 2).map(compactStory).join("")}
-        </div>
-      </div>
-    </section>
-
-    <section class="category-band">
-      <div class="category-band-inner">
-        <div class="section-heading">
-          <div>
-            <p class="section-eyebrow">RESEARCH COVERAGE</p>
-            <h2>五个研究领域，一套证据标准</h2>
-            <p>覆盖技术基础设施、产业采用与资本市场的完整传导链。</p>
-          </div>
-        </div>
-        <div class="category-list">
-          ${state.categories.map((category, index) => `
-            <a class="category-item" href="/category/${category.slug}" data-link>
-              <span class="category-index">0${index + 1}</span>
-              <h3>${category.name}</h3>
-              <p>${category.description}</p>
-              <span>${category.articleCount} 篇研究 <svg><use href="#icon-arrow"></use></svg></span>
-            </a>
-          `).join("")}
-        </div>
-      </div>
-    </section>
-
-    <section class="section">
-      <div class="section-heading">
-        <div>
-          <p class="section-eyebrow">LATEST RESEARCH</p>
-          <h2>最新分析</h2>
-          <p>持续追踪最新发布、行业变化与可操作的研究框架。</p>
-        </div>
-      </div>
-      <div class="latest-grid">
-        ${remaining.slice(2, 8).map((article) => storyCard(article)).join("")}
-      </div>
-    </section>
-
-    <section class="section">
-      <div class="method-grid">
-        <div class="method-intro">
-          <p class="section-eyebrow">WHY APERTURE</p>
-          <h2>为人类判断，也为机器理解</h2>
-          <p>每篇研究都同时提供清晰叙事、结构化声明和可追溯来源，让专业读者与 AI Agent 都能准确使用。</p>
-          <a class="section-link" href="/methodology" data-link>了解研究方法 <svg><use href="#icon-arrow"></use></svg></a>
-        </div>
-        <div class="method-list">
-          <div class="method-item"><span>01</span><div><h3>来源分级与交叉验证</h3><p>区分官方文档、监管数据、行业研究与二手报道，重要结论由独立来源相互验证。</p></div></div>
-          <div class="method-item"><span>02</span><div><h3>声明到证据的明确映射</h3><p>记录每个事实的时间、口径与来源，使内容能够被复核、更新和安全引用。</p></div></div>
-          <div class="method-item"><span>03</span><div><h3>人类与 Agent 双重表达</h3><p>面向读者提供完整分析，同时为 Agent 输出实体、声明、来源和许可信息。</p></div></div>
-        </div>
-      </div>
-    </section>
-  `;
+  $("#app").innerHTML = $("#app", page).innerHTML;
+  $$("script[data-page-schema]", page).forEach((schema) => document.head.append(schema.cloneNode(true)));
 }
 
 async function renderCategory(slug) {
@@ -244,8 +158,8 @@ async function renderCategory(slug) {
   let articles = state.articles.filter((item) => item.category.slug === slug);
   if (!articles.length) articles = await api(`/api/v1/articles?category=${encodeURIComponent(slug)}`);
   setMeta({
-    title: `${category.name} · Aperture Intelligence`,
-    description: category.description,
+    title: category.seoTitle || `${category.name} · Aperture Intelligence`,
+    description: category.seoDescription || category.description,
   });
   $("#app").innerHTML = `
     <section class="category-hero">
@@ -292,8 +206,8 @@ async function renderArticle(slug) {
   try {
     const article = await api(`/api/v1/articles/${encodeURIComponent(slug)}`);
     setMeta({
-      title: `${article.title} · Aperture Intelligence`,
-      description: article.dek,
+      title: article.seoTitle || `${article.title} · Aperture Intelligence`,
+      description: article.seoDescription || article.dek,
       article,
     });
     const initials = article.author.slice(0, 2);
@@ -363,7 +277,7 @@ async function renderArticle(slug) {
 function renderMethodology() {
   setMeta({
     title: "研究方法 · Aperture Intelligence",
-    description: "Aperture Intelligence 的来源、证据、分析与机器可读内容方法。",
+    description: "Aperture Intelligence 的来源分级、证据验证、行业分析与机器可读内容方法。",
   });
   const steps = [
     ["定义问题", "把宽泛趋势拆解为可验证的问题、实体和时间范围，先确定什么证据能够改变判断。"],
@@ -384,7 +298,7 @@ function renderMethodology() {
 }
 
 function renderNotFound() {
-  setMeta({ title: "页面未找到 · Aperture Intelligence", description: "请求的页面不存在。" });
+  setMeta({ title: "页面未找到 · Aperture Intelligence", description: "请求的页面不存在。", robots: "noindex, nofollow" });
   $("#app").innerHTML = `<div class="not-found"><span>404</span><h1>没有找到这项研究</h1><p>内容可能已更新或移动。</p><a href="/" data-link>返回首页</a></div>`;
 }
 
@@ -393,7 +307,7 @@ async function renderRoute() {
   updateNavActive();
   $("#primaryNav").classList.remove("open");
   const path = location.pathname.replace(/\/+$/, "") || "/";
-  if (path === "/") renderHome();
+  if (path === "/") await renderHome();
   else if (path.startsWith("/category/")) await renderCategory(path.split("/")[2]);
   else if (path.startsWith("/article/")) await renderArticle(path.split("/")[2]);
   else if (path === "/methodology") renderMethodology();

@@ -44,6 +44,9 @@ def create_spa_handler(directory: Path, label: str):
                 self.send_error(404)
                 return
             if clean_path and not requested.exists():
+                if label == "public":
+                    self.send_error(404)
+                    return
                 self.path = "/index.html"
             super().do_GET()
 
@@ -54,7 +57,13 @@ def create_spa_handler(directory: Path, label: str):
             parsed = urlparse(self.path)
             clean_path = unquote(parsed.path).lstrip("/")
             requested = (directory / clean_path).resolve()
+            if directory not in requested.parents and requested != directory:
+                self.send_error(404)
+                return
             if clean_path and not requested.exists():
+                if label == "public":
+                    self.send_error(404)
+                    return
                 self.path = "/index.html"
             super().do_HEAD()
 
@@ -73,7 +82,8 @@ def create_spa_handler(directory: Path, label: str):
         def _is_api_request(self) -> bool:
             path = urlparse(self.path).path
             return (
-                path.startswith("/api/")
+                (label == "public" and path == "/")
+                or path.startswith("/api/")
                 or path.startswith("/agent/")
                 or path.startswith("/article/")
                 or path.startswith("/category/")

@@ -1,0 +1,34 @@
+{
+  "checkedAt": "2026-09-10T02:02:51.207316+00:00",
+  "cloudfront": {
+    "id": "E57TFN7Z03O69",
+    "status": "Deployed",
+    "defaultRoot": "",
+    "homeBehavior": [
+      "api-alb"
+    ],
+    "invalidation": {
+      "Id": "IED82FJLC4PX039NF33QMECECS",
+      "CreateTime": "2026-09-10 02:02:09.639000+00:00",
+      "Status": "Completed"
+    }
+  },
+  "backend": {
+    "taskDefinition": "arn:aws:ecs:us-east-1:632930644527:task-definition/geo-intelligence-api:28",
+    "deployments": [
+      {
+        "status": "PRIMARY",
+        "rolloutState": "COMPLETED"
+      }
+    ]
+  },
+  "javascript": {
+    "sha256": "09f2af4867aa1bc77c4c5be926e41f4ba515f78a1cfea93207414ecea5c99481",
+    "matchesLocal": true
+  },
+  "notifier": {
+    "FunctionName": "geo-intelligence-indexing-notifier",
+    "LastUpdateStatus": "Successful",
+    "CodeSha256": "vmF9iJDu31HPJkLHguR2DN2wboPM/vu+E/SPAknb18Q="
+  }
+}

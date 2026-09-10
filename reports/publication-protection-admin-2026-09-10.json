@@ -1,0 +1,11 @@
+{
+  "passed": true,
+  "publishedSelectionBlocksDeleteAndReview": true,
+  "unreviewedDirectPublishRemoved": true,
+  "draftEditingAvailable": true,
+  "newArticleStates": [
+    "draft",
+    "review"
+  ],
+  "pageErrors": []
+}

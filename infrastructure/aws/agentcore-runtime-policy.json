@@ -2,17 +2,17 @@
   "Version": "2012-10-17",
   "Statement": [
     {
-      "Sid": "BedrockGPT56Sol",
+      "Sid": "BedrockGPT6Astra",
       "Effect": "Allow",
       "Action": [
         "bedrock:InvokeModel",
         "bedrock:InvokeModelWithResponseStream"
       ],
       "Resource": [
-        "arn:aws:bedrock:us-east-1:632930644527:application-inference-profile/jiuyqf37o67n",
-        "arn:aws:bedrock:us-east-1::foundation-model/openai.gpt-5.6-sol",
-        "arn:aws:bedrock:us-east-2::foundation-model/openai.gpt-5.6-sol",
-        "arn:aws:bedrock:us-west-2::foundation-model/openai.gpt-5.6-sol"
+        "arn:aws:bedrock:us-east-1:632930644527:application-inference-profile/8b2k32fwobdd",
+        "arn:aws:bedrock:us-east-1::foundation-model/openai.gpt-6-astra",
+        "arn:aws:bedrock:us-east-2::foundation-model/openai.gpt-6-astra",
+        "arn:aws:bedrock:us-west-2::foundation-model/openai.gpt-6-astra"
       ]
     },
     {
@@ -22,7 +22,7 @@
       "Resource": "arn:aws:bedrock-mantle:us-east-1:632930644527:project/*",
       "Condition": {
         "StringEquals": {
-          "bedrock-mantle:Model": "openai.gpt-5.6-sol"
+          "bedrock-mantle:Model": "openai.gpt-6-astra"
         }
       }
     },

@@ -1,15 +1,18 @@
 #!/usr/bin/env python3
-"""Reduce the public index to a small, reversible set of differentiated research."""
+"""Historical curation report; fixed-quota unpublishing is permanently disabled."""
 
 from __future__ import annotations
 
 import argparse
 import json
 import os
+from pathlib import Path
+import sys
 from collections import Counter
 
 import boto3
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from backend.database import connection, utc_now
 
 
@@ -50,6 +53,11 @@ def main() -> None:
         help="Invalidate changed URLs and notify IndexNow after applying.",
     )
     args = parser.parse_args()
+    if args.apply:
+        parser.error(
+            "Fixed-quota unpublishing is disabled. Preserve published URLs; "
+            "review new candidates before publication and keep existing pages online."
+        )
 
     with connection() as conn:
         published = conn.execute(

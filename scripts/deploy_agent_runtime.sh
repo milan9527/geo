@@ -4,6 +4,15 @@ set -euo pipefail
 PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$PROJECT_DIR"
 
+DEPLOY_AUTO_PUBLISH=""
+for option in "$@"; do
+  case "$option" in
+    --auto-publish) DEPLOY_AUTO_PUBLISH="true" ;;
+    --no-auto-publish) DEPLOY_AUTO_PUBLISH="false" ;;
+    *) echo "Unknown option: $option" >&2; exit 2 ;;
+  esac
+done
+
 if [ ! -f ".env.aws" ]; then
   echo ".env.aws is required." >&2
   exit 1
@@ -93,6 +102,9 @@ aws bedrock-agentcore-control get-agent-runtime \
 jq \
   --arg runtimeId "$RUNTIME_ID" \
   --arg image "$PINNED_IMAGE_URI" \
+  --arg bedrockModelId "${BEDROCK_MODEL_ID:?BEDROCK_MODEL_ID is required}" \
+  --arg bedrockCodexModel "${BEDROCK_CODEX_MODEL:-openai.gpt-6-astra}" \
+  --arg autoPublish "$DEPLOY_AUTO_PUBLISH" \
   '{
     agentRuntimeId: $runtimeId,
     agentRuntimeArtifact: {
@@ -106,7 +118,12 @@ jq \
     environmentVariables: (
       .environmentVariables
       + {
-          RESEARCH_AUTO_PUBLISH: "false",
+          BEDROCK_MODEL_ID: $bedrockModelId,
+          BEDROCK_CODEX_MODEL: $bedrockCodexModel,
+          RESEARCH_AUTO_PUBLISH: (
+            if $autoPublish != "" then $autoPublish
+            else (.environmentVariables.RESEARCH_AUTO_PUBLISH // "false") end
+          ),
           RESEARCH_ARTICLE_UPDATE_WINDOW_HOURS: "336",
           RESEARCH_ARTICLE_SOURCE_OVERLAP_THRESHOLD: "0.35"
         }
@@ -140,7 +157,7 @@ RUNTIME_RESULT="$(
   aws bedrock-agentcore-control get-agent-runtime \
     --region "$DEPLOY_REGION" \
     --agent-runtime-id "$RUNTIME_ID" \
-    --query '{version:agentRuntimeVersion,status:status,image:agentRuntimeArtifact.containerConfiguration.containerUri}' \
+    --query '{version:agentRuntimeVersion,status:status,image:agentRuntimeArtifact.containerConfiguration.containerUri,autoPublish:environmentVariables.RESEARCH_AUTO_PUBLISH}' \
     --output json
 )"
 

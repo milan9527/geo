@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import os
 import sys
+from unittest.mock import Mock, patch
 from pathlib import Path
 
 os.environ.setdefault("GEO_PUBLIC_DISTRIBUTION_ID", "TESTDISTRIBUTION")
@@ -11,7 +12,8 @@ sys.path.insert(
     str(Path(__file__).resolve().parents[1] / "aws_indexing_notifier"),
 )
 
-import lambda_function
+with patch("boto3.client", return_value=Mock()):
+    import lambda_function
 
 
 def main() -> None:
@@ -30,6 +32,12 @@ def main() -> None:
         "https://aperture.zhangwangshu.com/category/agent",
         "https://aperture.zhangwangshu.com/category/ai",
     ]
+    lambda_function.cloudfront.create_invalidation.return_value = {"Invalidation": {"Id": "TEST"}}
+    lambda_function.invalidate(slugs, categories, "test")
+    paths = lambda_function.cloudfront.create_invalidation.call_args.kwargs["InvalidationBatch"]["Paths"]
+    assert "/" in paths["Items"]
+    assert "/sitemap.xml" in paths["Items"]
+    assert paths["Quantity"] == len(set(paths["Items"]))
     print("Indexing notifier unit checks passed")
 
 

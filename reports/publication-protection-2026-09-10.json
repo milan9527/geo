@@ -1,0 +1,171 @@
+{
+  "checkedAt": "2026-09-10T03:22:12.956123+00:00",
+  "publishedBefore": 16,
+  "publishedAfter": 17,
+  "previousPublishedContentAndUrlsUnchanged": true,
+  "publishedArticles": [
+    {
+      "id": 105,
+      "slug": "agent-research-20260904-0805-494",
+      "status": "published",
+      "content_hash": "2265ed8de3c8ef790c90067de4148d9a"
+    },
+    {
+      "id": 116,
+      "slug": "agent-research-20260905-0003-599",
+      "status": "published",
+      "content_hash": "1da67e72ad701f7f36d352a1f4e9522a"
+    },
+    {
+      "id": 117,
+      "slug": "commerce-research-20260905-0004-600",
+      "status": "published",
+      "content_hash": "a978f7742b903695f481f8aeeaef8b18"
+    },
+    {
+      "id": 124,
+      "slug": "ai-research-20260905-0022-607",
+      "status": "published",
+      "content_hash": "579292f9a754b6f752da748ae5accf79"
+    },
+    {
+      "id": 134,
+      "slug": "ai-research-20260906-0025-766",
+      "status": "published",
+      "content_hash": "063bc9c834bd20d57c0221b591489f96"
+    },
+    {
+      "id": 136,
+      "slug": "agent-research-20260906-0033-769",
+      "status": "published",
+      "content_hash": "207e047afb3020c26b43f395f3cbe08c"
+    },
+    {
+      "id": 152,
+      "slug": "finance-research-20260906-1810-884",
+      "status": "published",
+      "content_hash": "d2a3252f0ebb83b42335be31d41e23cd"
+    },
+    {
+      "id": 176,
+      "slug": "cloud-research-20260907-1806-1048",
+      "status": "published",
+      "content_hash": "933b2018ed5f592ebfc59e67ce4b232d"
+    },
+    {
+      "id": 184,
+      "slug": "commerce-research-20260908-0006-1090",
+      "status": "published",
+      "content_hash": "268b15addbdad8021effd96b6eb7a15e"
+    },
+    {
+      "id": 185,
+      "slug": "finance-research-20260908-0008-1087",
+      "status": "published",
+      "content_hash": "2f807334e8957cbd90c5cc424a60f745"
+    },
+    {
+      "id": 192,
+      "slug": "ai-research-20260908-0606-1128",
+      "status": "published",
+      "content_hash": "0e99c356aa642744b144cbe28831d76a"
+    },
+    {
+      "id": 197,
+      "slug": "ai-research-20260908-1205-1165",
+      "status": "published",
+      "content_hash": "8d3f40e2d1c196dc54e39a6e145a8bf6"
+    },
+    {
+      "id": 202,
+      "slug": "ai-research-20260908-1805-1172",
+      "status": "published",
+      "content_hash": "5e37ae1bc48be55de2e18f318d7de9a3"
+    },
+    {
+      "id": 203,
+      "slug": "commerce-research-20260908-1807-1174",
+      "status": "published",
+      "content_hash": "d31fac3038110260155a49218417d8be"
+    },
+    {
+      "id": 205,
+      "slug": "cloud-research-20260908-1808-1173",
+      "status": "published",
+      "content_hash": "2e3b1a4da762ca2f199b6f8850b0d0de"
+    },
+    {
+      "id": 206,
+      "slug": "agent-research-20260908-2004-1175",
+      "status": "published",
+      "content_hash": "b0af38377a014540056a59c3ded35068"
+    },
+    {
+      "id": 210,
+      "slug": "cloud-research-20260909-0008-1181",
+      "status": "published",
+      "content_hash": "ff5c02ca8dda0d64abb4a097bf3d9805"
+    }
+  ],
+  "articleStates": [
+    {
+      "status": "draft",
+      "n": 7
+    },
+    {
+      "status": "published",
+      "n": 17
+    },
+    {
+      "status": "review",
+      "n": 162
+    }
+  ],
+  "databaseProtection": {
+    "enabled": "O",
+    "definition": "CREATE TRIGGER protect_published_article BEFORE DELETE OR UPDATE ON public.articles FOR EACH ROW EXECUTE FUNCTION geo_protect_published_article()"
+  },
+  "tests": {
+    "editorialReview": 12,
+    "publicationProtection": 6,
+    "scheduledPublicationWithProtection": 13,
+    "adminBrowser": "passed"
+  },
+  "newAutomaticPublications": [
+    {
+      "id": 202,
+      "slug": "ai-research-20260908-1805-1172",
+      "title": "Anthropic聚焦长时Agent与设备接口，AWS介绍跨账户模型治理方案",
+      "updated_at": "2026-09-10T03:17:29+00:00",
+      "runId": 921,
+      "score": 98,
+      "qualityReady": true,
+      "comparedArticles": 16,
+      "reason": "published"
+    },
+    {
+      "id": 210,
+      "slug": "cloud-research-20260909-0008-1181",
+      "title": "Snowflake多代理研究、Google Cloud代理产品与AWS混合云编排：企业AI架构如何取舍",
+      "updated_at": "2026-09-10T03:15:34+00:00",
+      "runId": 931,
+      "score": 99,
+      "qualityReady": true,
+      "comparedArticles": 15,
+      "reason": "published"
+    }
+  ],
+  "deployment": {
+    "checkedAt": "2026-09-10T03:25:08.264892+00:00",
+    "taskDefinition": "arn:aws:ecs:us-east-1:632930644527:task-definition/geo-intelligence-api:29",
+    "backendRollout": "COMPLETED",
+    "publicDistribution": "Deployed",
+    "publicInvalidation": {
+      "id": "I2MCPCHRQF00RSKQQKT40VUBZ",
+      "status": "Completed"
+    },
+    "imageScan": "COMPLETE",
+    "findingSeverityCounts": {},
+    "publicPoliciesUpdated": true
+  }
+}

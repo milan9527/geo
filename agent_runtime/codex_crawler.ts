@@ -47,7 +47,7 @@ export interface CrawlArtifact {
 }
 
 const BEDROCK_MODEL =
-  process.env.BEDROCK_CODEX_MODEL ?? "openai.gpt-5.6-sol";
+  process.env.BEDROCK_CODEX_MODEL ?? "openai.gpt-6-astra";
 const AWS_REGION = process.env.AWS_REGION ?? "us-east-1";
 
 const codex = new Codex({
