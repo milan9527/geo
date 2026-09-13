@@ -31,7 +31,7 @@ not call CloudFormation, CDK, or SAM:
 - ECS cluster/service: `geo-intelligence` / `geo-intelligence-api`
 - ALB: `geo-intelligence-alb-136542997.us-east-1.elb.amazonaws.com`
 - ECR repository: `632930644527.dkr.ecr.us-east-1.amazonaws.com/geo-intelligence-api`
-- Active task definition: `geo-intelligence-api:16`
+- Active task definition: `geo-intelligence-api:30`
 
 Both buckets block every form of public access and grant object reads only to their CloudFront
 distribution through OAC. The ALB security group accepts port 80 only from the AWS-managed

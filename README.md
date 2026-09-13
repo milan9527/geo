@@ -117,6 +117,7 @@ chmod +x scripts/deploy_web_ecs.sh
 ```
 
 仅部署 API 与公开站时使用 `./scripts/deploy_web_ecs.sh --public-only`。
+仅滚动更新 API 容器时使用 `./scripts/deploy_web_ecs.sh --api-only`。
 
 脚本使用 AWS CLI 和 Python AWS SDK，不调用 CloudFormation、CDK 或 SAM。它会构建 ARM64
 后端镜像，等待 ECR 扫描确认无 Critical/High 漏洞后注册新的 ECS task definition，

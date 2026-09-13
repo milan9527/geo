@@ -5,13 +5,15 @@ PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$PROJECT_DIR"
 
 DEPLOY_ADMIN=true
+DEPLOY_WEB=true
 case "${1:-}" in
   "") ;;
   --public-only) DEPLOY_ADMIN=false ;;
-  *) echo "Usage: $0 [--public-only]" >&2; exit 1 ;;
+  --api-only) DEPLOY_ADMIN=false; DEPLOY_WEB=false ;;
+  *) echo "Usage: $0 [--public-only|--api-only]" >&2; exit 1 ;;
 esac
 if [ "$#" -gt 1 ]; then
-  echo "Usage: $0 [--public-only]" >&2
+  echo "Usage: $0 [--public-only|--api-only]" >&2
   exit 1
 fi
 
@@ -317,6 +319,12 @@ aws ecs wait services-stable \
   --region "$DEPLOY_REGION" \
   --cluster "$ECS_CLUSTER" \
   --services "$ECS_SERVICE"
+
+if [ "$DEPLOY_WEB" = false ]; then
+  curl --fail --silent --show-error "${PUBLIC_BASE_URL}/api/health" >/dev/null
+  printf 'Backend image: %s\n' "$IMAGE_URI"
+  exit 0
+fi
 
 PUBLIC_DISTRIBUTION_WRAPPER="${DEPLOY_TEMP_DIR}/public-distribution-wrapper.json"
 PUBLIC_DISTRIBUTION_CONFIG="${DEPLOY_TEMP_DIR}/public-distribution-config.json"

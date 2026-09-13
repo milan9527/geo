@@ -8,6 +8,7 @@ const state = {
   customEnd: todayIso(),
   selectedArticles: new Set(),
   user: null,
+  loadError: false,
   metrics: null,
   articles: [],
   research: [],
@@ -150,14 +151,15 @@ async function login(event) {
       }),
     });
     showAdmin(result.user);
-    await loadAll();
-    renderDashboard();
   } catch (error) {
     showLogin(error.message || "登录失败，请重试。");
+    return;
   } finally {
     button.disabled = false;
     button.innerHTML = '登录控制台 <svg><use href="#i-arrow"></use></svg>';
   }
+  state.view = "dashboard";
+  await loadAdminData();
 }
 
 async function logout() {
@@ -927,6 +929,10 @@ function renderSettings() {
 async function switchView(view) {
   state.view = view;
   $$(".nav-item").forEach((item) => item.classList.toggle("active", item.dataset.view === view));
+  if (state.loadError) {
+    renderDataLoadError();
+    return;
+  }
   if (view === "dashboard") renderDashboard();
   if (view === "content") renderContent();
   if (view === "research") renderResearch();
@@ -934,6 +940,35 @@ async function switchView(view) {
   if (view === "sources") renderSources();
   if (view === "jobs") renderJobs();
   if (view === "settings") renderSettings();
+}
+
+function renderDataLoadError() {
+  $("#pageTitle").textContent = "后台数据加载失败";
+  $("#adminApp").innerHTML = `
+    <section class="panel" role="alert">
+      <div class="panel-header">
+        <div><h2>暂时无法读取后台数据</h2><p>登录会话仍然有效，请稍后重试。</p></div>
+        <button class="primary-button" data-retry-admin>重新加载</button>
+      </div>
+    </section>
+  `;
+}
+
+async function loadAdminData() {
+  try {
+    await loadAll();
+    state.loadError = false;
+    await switchView(state.view);
+    return true;
+  } catch (error) {
+    if (error.status === 401) {
+      showLogin("登录会话已过期，请重新登录。");
+    } else if (state.user) {
+      state.loadError = true;
+      renderDataLoadError();
+    }
+    return false;
+  }
 }
 
 async function loadAll() {
@@ -958,9 +993,9 @@ async function refresh() {
   const button = $("#refreshButton");
   button.classList.add("spinning");
   try {
-    await loadAll();
-    switchView(state.view);
-    showToast("数据已刷新", "统计、内容和 Agent 状态已同步");
+    if (await loadAdminData()) {
+      showToast("数据已刷新", "统计、内容和 Agent 状态已同步");
+    }
   } finally {
     button.classList.remove("spinning");
   }
@@ -981,6 +1016,10 @@ function bindEvents() {
   $("#runAllButton").addEventListener("click", runAll);
   $("#logoutButton").addEventListener("click", logout);
   document.addEventListener("click", async (event) => {
+    if (event.target.closest("[data-retry-admin]")) {
+      await refresh();
+      return;
+    }
     const range = event.target.closest("[data-range]");
     if (range) {
       state.range = range.dataset.range;
@@ -1215,15 +1254,15 @@ async function init() {
   try {
     const session = await api("/api/admin/auth/me");
     showAdmin(session.user);
-    await loadAll();
-    renderDashboard();
   } catch (error) {
     if (error.status === 401) {
       showLogin();
       return;
     }
     showLogin("无法连接管理 API，请确认后端服务运行正常。");
+    return;
   }
+  await loadAdminData();
 }
 
 document.addEventListener("DOMContentLoaded", init);

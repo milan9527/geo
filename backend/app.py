@@ -37,6 +37,7 @@ from .analytics import (
 )
 from .database import USE_AURORA_DATA_API, connection, init_db, utc_now
 from .homepage import HOME_DESCRIPTION, HOME_TITLE, render_home
+from .metrics import load_metrics_rows
 from .publication_protection import PUBLISHED_PROTECTION_MESSAGE, REVIEW_REQUIRED_MESSAGE
 from .seo import search_description, search_title
 from .x402_payment import (
@@ -2552,36 +2553,9 @@ The open article and JSON-LD representation may be quoted with a link and clear 
         end = end_date.isoformat()
         previous_start = previous_start_date.isoformat()
         with connection() as conn:
-            traffic_rows = [
-                dict(row)
-                for row in conn.execute(
-                    """
-                    SELECT bucket_hour, visitor_type, agent_name, path_group,
-                           article_slug, access_variant, requests,
-                           successful_requests, bytes_sent, visitor_hll
-                    FROM traffic_hourly
-                    WHERE bucket_hour >= %s AND bucket_hour < %s
-                    ORDER BY bucket_hour
-                    """,
-                    (previous_start, next_date.isoformat()),
-                ).fetchall()
-            ]
-            business_events = [
-                dict(row)
-                for row in conn.execute(
-                    """
-                    SELECT te.id, te.event_type, te.visitor_type,
-                           te.agent_name, te.article_id, te.occurred_at,
-                           te.metadata, a.slug article_slug,
-                           a.title article_title
-                    FROM traffic_events te
-                    LEFT JOIN articles a ON a.id = te.article_id
-                    WHERE te.occurred_at >= %s AND te.occurred_at < %s
-                    ORDER BY te.occurred_at
-                    """,
-                    (previous_start, next_date.isoformat()),
-                ).fetchall()
-            ]
+            traffic_rows, business_events = load_metrics_rows(
+                conn, previous_start, next_date.isoformat(),
+            )
             status_counts = {
                 row["status"]: row["count"]
                 for row in conn.execute(

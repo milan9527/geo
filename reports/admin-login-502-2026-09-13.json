@@ -1,0 +1,194 @@
+{
+  "date": "2026-09-13",
+  "rootCause": "Aurora Data API metrics result exceeded 1 MB after successful authentication",
+  "before": {
+    "checks": [
+      {
+        "path": "/api/v1/categories",
+        "status": 200,
+        "bytes": 2877,
+        "seconds": 1.27
+      },
+      {
+        "path": "/api/admin/data-sources/test-batch",
+        "status": 200,
+        "bytes": 112,
+        "seconds": 1.5
+      },
+      {
+        "path": "/api/admin/settings",
+        "status": 200,
+        "bytes": 617,
+        "seconds": 2.28
+      },
+      {
+        "path": "/api/admin/events",
+        "status": 200,
+        "bytes": 13668,
+        "seconds": 2.28
+      },
+      {
+        "path": "/api/admin/jobs",
+        "status": 200,
+        "bytes": 32173,
+        "seconds": 2.28
+      },
+      {
+        "path": "/api/admin/metrics?range=30d",
+        "status": 502,
+        "bytes": 122,
+        "seconds": 2.38
+      },
+      {
+        "path": "/api/admin/articles",
+        "status": 200,
+        "bytes": 75894,
+        "seconds": 2.79
+      },
+      {
+        "path": "/api/admin/data-sources",
+        "status": 200,
+        "bytes": 142141,
+        "seconds": 2.97
+      },
+      {
+        "path": "/api/admin/crawlers",
+        "status": 200,
+        "bytes": 20387,
+        "seconds": 3.1
+      },
+      {
+        "path": "/api/admin/research",
+        "status": 200,
+        "bytes": 1250337,
+        "seconds": 3.28
+      }
+    ],
+    "publishedCount": 21
+  },
+  "browser": {
+    "checkedAt": "2026-09-13",
+    "checks": [
+      {
+        "check": "live login and dashboard",
+        "passed": true
+      },
+      {
+        "check": "initial authenticated API requests",
+        "passed": true,
+        "paths": [
+          "/api/admin/articles",
+          "/api/admin/auth/login",
+          "/api/admin/crawlers",
+          "/api/admin/data-sources",
+          "/api/admin/data-sources/test-batch",
+          "/api/admin/events",
+          "/api/admin/jobs",
+          "/api/admin/metrics",
+          "/api/admin/research",
+          "/api/admin/settings",
+          "/api/v1/categories"
+        ]
+      },
+      {
+        "check": "statistics 7d",
+        "passed": true,
+        "status": 200
+      },
+      {
+        "check": "statistics 30d",
+        "passed": true,
+        "status": 200
+      },
+      {
+        "check": "statistics 90d",
+        "passed": true,
+        "status": 200
+      },
+      {
+        "check": "366-day custom statistics",
+        "passed": true,
+        "status": 200
+      },
+      {
+        "check": "content list",
+        "passed": true,
+        "rows": 191
+      },
+      {
+        "check": "refresh",
+        "passed": true
+      },
+      {
+        "check": "session restored after reload",
+        "passed": true
+      },
+      {
+        "check": "logout",
+        "passed": true
+      }
+    ],
+    "pageErrors": []
+  },
+  "backend": {
+    "service": {
+      "taskDefinition": "arn:aws:ecs:us-east-1:632930644527:task-definition/geo-intelligence-api:30",
+      "runningCount": 1,
+      "pendingCount": 0
+    },
+    "rollout": [
+      {
+        "status": "PRIMARY",
+        "runningCount": 1,
+        "rolloutState": "COMPLETED"
+      }
+    ],
+    "publications": {
+      "allPreserved": true,
+      "before": 21,
+      "after": 21,
+      "protectionEnabled": true
+    },
+    "publicChecks": [
+      {
+        "url": "https://deu7vkdd3jf5.cloudfront.net/api/health",
+        "status": 200
+      },
+      {
+        "url": "https://aperture.zhangwangshu.com/api/health",
+        "status": 200
+      },
+      {
+        "url": "https://aperture.zhangwangshu.com/",
+        "status": 200
+      },
+      {
+        "url": "https://aperture.zhangwangshu.com/sitemap.xml",
+        "status": 200
+      }
+    ]
+  },
+  "admin": {
+    "distribution": "E1OMOLTZCN9KUQ",
+    "path": "/app.js",
+    "sha256": "ec921f2c56b770b5d1a01944ca7bfc8b03cdc5c311180e5c785f6486bbe3ac46",
+    "etag": "\"d090cebe1ddc598a8381a32d1deca5c3\"",
+    "invalidationId": "I354C6GO7PY5M6N76I8FK0N7QW",
+    "invalidationStatus": "Completed"
+  },
+  "image": {
+    "tag": "20260913021349-59b4e94",
+    "digest": "sha256:ed804f2806bc676b439cf7cefc5711db769196d9572bbcc4c8f9afea9c22ed18",
+    "scanStatus": "COMPLETE",
+    "findingSeverityCounts": {}
+  },
+  "regressions": {
+    "postgresqlPassed": 5,
+    "chromiumPassed": 5
+  },
+  "cleanup": {
+    "temporaryAccountRemoved": true,
+    "temporarySessionsRemoved": true,
+    "localCredentialsRemoved": true
+  }
+}
