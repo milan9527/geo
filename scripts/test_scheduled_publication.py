@@ -20,6 +20,7 @@ from psycopg.rows import dict_row
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from aws_runtime.publication import PublicationStore, content_identity, quality_gate, review_and_publish
 from backend.publication_protection import ensure_publication_protection
+from backend.article_redirects import ensure_article_redirects
 
 
 def evidence():
@@ -95,6 +96,7 @@ class SqlPublicationTests(unittest.TestCase):
                 INSERT INTO categories(slug) VALUES('agent'),('cloud');
             """)
             ensure_publication_protection(conn)
+            ensure_article_redirects(conn)
 
     @classmethod
     def tearDownClass(cls):
@@ -107,7 +109,7 @@ class SqlPublicationTests(unittest.TestCase):
 
     def setUp(self):
         with self.connect() as conn:
-            conn.execute("TRUNCATE sources,articles RESTART IDENTITY")
+            conn.execute("TRUNCATE article_redirects,sources,articles RESTART IDENTITY")
         self.store = PublicationStore(self.sql, self.transaction)
 
     @contextmanager
@@ -143,6 +145,22 @@ class SqlPublicationTests(unittest.TestCase):
     def run_gate(self, article, compare=distinct, store=None):
         return review_and_publish(store or self.store, article["id"], article["contentHash"],
                                   {"ready": True}, compare, enabled=True)
+
+    def test_redirected_legacy_article_is_never_republished_or_overwritten(self):
+        target = self.publish_existing()
+        legacy = self.draft("legacy")
+        self.sql("""INSERT INTO article_redirects VALUES
+            ('legacy',:source,:target,'hash','hash','{}','2026-09-14')""",
+            {"source": legacy["id"], "target": target["id"]})
+        compare = Mock(side_effect=AssertionError("redirect must stop before model review"))
+        self.assertEqual(self.run_gate(legacy, compare)["reason"], "legacy_url_redirected")
+        candidate = {"output_article_id": legacy["id"], "updated_at": self.store.article(legacy["id"])["updated_at"]}
+        new = self.store.save_draft(self.values("fresh"), evidence(), update_candidate=candidate)
+        self.assertNotEqual(new["id"], legacy["id"])
+        self.assertEqual(self.store.article(legacy["id"])["slug"], "legacy")
+        with self.assertRaises(ValueError):
+            self.store.save_draft(self.values("fresh-again"), evidence(),
+                                  update_candidate=candidate, require_existing=True)
 
     def test_independent_article_publishes_after_cross_category_full_text_check(self):
         existing = self.publish_existing()

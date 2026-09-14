@@ -1201,6 +1201,7 @@ def article_update_candidate(
               AND r.status = 'completed'
               AND r.output_article_id IS NOT NULL
               AND a.status IN ('draft', 'review')
+              AND NOT EXISTS(SELECT 1 FROM article_redirects red WHERE red.source_article_id=a.id)
             ORDER BY r.completed_at DESC, r.id DESC
             LIMIT 40
             """,
@@ -1287,6 +1288,7 @@ def article_title_candidate(
             JOIN categories c ON c.id = a.category_id
             WHERE c.slug = :category_slug
               AND a.status IN ('draft', 'review')
+              AND NOT EXISTS(SELECT 1 FROM article_redirects red WHERE red.source_article_id=a.id)
             ORDER BY a.updated_at DESC
             LIMIT 60
             """,
@@ -1976,6 +1978,7 @@ def reverify_recent_research(exclude_run_id: int, *, article_id: int = 0) -> lis
             JOIN articles a ON a.id = r.output_article_id
             WHERE r.status = 'completed' AND r.id != :exclude_run_id
               AND a.status IN ('draft', 'review')
+              AND NOT EXISTS(SELECT 1 FROM article_redirects red WHERE red.source_article_id=a.id)
               AND (:target_article_id=0 OR a.id=:target_article_id)
               AND NOT EXISTS (
                   SELECT 1 FROM research_runs newer
@@ -2193,7 +2196,8 @@ def persist_research_output(
         article_id = previous[0]["output_article_id"]
         previous_article = publication_store.article(article_id)
         rechecks = []
-        if AUTO_PUBLISH_RESEARCH and previous_article["status"] in {"draft", "review"}:
+        if (AUTO_PUBLISH_RESEARCH and previous_article["status"] in {"draft", "review"}
+                and not previous_article.get("redirect_target_id")):
             rechecks = reverify_recent_research(run_id, article_id=article_id)
             previous[0] = rows(execute_sql(
                 """SELECT id,output_article_id,summary,verification_status,verification_json

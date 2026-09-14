@@ -1326,6 +1326,8 @@ def init_db() -> None:
                 conn.execute(statement)
         from .publication_protection import ensure_publication_protection
         ensure_publication_protection(conn)
+        from .article_redirects import ensure_article_redirects
+        ensure_article_redirects(conn)
         category_count = conn.execute(
             "SELECT COUNT(*) AS count FROM categories"
         ).fetchone()["count"]

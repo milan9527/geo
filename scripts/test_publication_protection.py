@@ -19,6 +19,7 @@ from psycopg.rows import dict_row
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from backend.database import SCHEMA
 from backend.publication_protection import ensure_publication_protection
+from backend.article_redirects import ensure_article_redirects
 
 
 @unittest.skipUnless(os.environ.get("PUBLICATION_TEST_DATABASE_URL"), "local PostgreSQL URL not set")
@@ -33,6 +34,7 @@ class PublicationProtectionTests(unittest.TestCase):
             for statement in SCHEMA.split(";")[:3]:
                 conn.execute(statement)
             ensure_publication_protection(conn)
+            ensure_article_redirects(conn)
             conn.execute("""INSERT INTO categories(slug,name,eyebrow,description,accent)
                             VALUES('agent','Agent 技术','AGENT','分类说明','teal')""")
         with patch("backend.database.init_db"):
@@ -65,7 +67,7 @@ class PublicationProtectionTests(unittest.TestCase):
     def setUp(self):
         # Never truncate production. Each test owns a disposable local schema.
         with self.connect() as conn:
-            conn.execute("TRUNCATE sources, articles RESTART IDENTITY")
+            conn.execute("TRUNCATE article_redirects, sources, articles RESTART IDENTITY")
             for slug, status in [("existing", "published"), ("new-draft", "draft"), ("pending", "review")]:
                 conn.execute(
                     """INSERT INTO articles(
@@ -149,6 +151,57 @@ class PublicationProtectionTests(unittest.TestCase):
         with self.connect() as conn:
             conn.execute("DELETE FROM articles WHERE id=2")
             self.assertEqual(conn.execute("SELECT count(*) n FROM articles WHERE status='published'").fetchone()["n"], 1)
+
+    def add_redirect(self):
+        with self.connect() as conn:
+            conn.execute("""INSERT INTO article_redirects VALUES
+                ('pending',3,1,'source-hash','target-hash','{}','2026-09-14')""")
+
+    def test_legacy_get_head_json_and_agent_routes_redirect_in_one_hop(self):
+        self.add_redirect()
+        for method in ["GET", "HEAD"]:
+            for prefix, suffix in [("/article/", ""), ("/api/v1/articles/", ""),
+                                   ("/agent/v1/articles/", ""), ("/agent/v1/articles/", "/paid")]:
+                for query in ["", "?utm_source=old"]:
+                    with self.subTest(method=method, prefix=prefix, suffix=suffix, query=query):
+                        client = HTTPConnection("127.0.0.1", self.server.server_port, timeout=10)
+                        try:
+                            client.request(method, prefix + "pending" + suffix + query)
+                            response = client.getresponse()
+                            self.assertEqual(response.status, 301)
+                            self.assertEqual(response.getheader("Location"),
+                                             self.app.PUBLIC_BASE_URL + prefix + "existing" + suffix)
+                            self.assertEqual(response.read(), b"")
+                        finally:
+                            client.close()
+        self.assertEqual(self.request("GET", "/article/existing")[0], 200)
+        self.assertEqual(self.request("GET", "/article/unknown")[0], 404)
+        self.assertEqual(self.request("GET", "/api/v1/articles/unknown")[0], 404)
+
+    def test_redirect_sources_cannot_be_deleted_renamed_or_republished(self):
+        self.add_redirect()
+        for sql, error in [
+            ("DELETE FROM articles WHERE id=3", psycopg.errors.ForeignKeyViolation),
+            ("UPDATE articles SET slug='replacement' WHERE id=3", psycopg.errors.CheckViolation),
+            ("UPDATE articles SET status='published' WHERE id=3", psycopg.errors.CheckViolation),
+        ]:
+            with self.subTest(sql=sql), self.assertRaises(error):
+                with self.connect() as conn:
+                    conn.execute(sql)
+        code, body = self.request("PATCH", "/api/admin/articles/batch",
+                                  {"ids": [2, 3], "action": "delete", "confirm": True})
+        self.assertEqual(code, 409, body)
+        with self.connect() as conn:
+            self.assertEqual(conn.execute("SELECT count(*) n FROM articles").fetchone()["n"], 3)
+
+    def test_redirects_reject_unpublished_targets_wrong_slugs_and_cycles(self):
+        for slug, source, target in [("pending", 3, 2), ("wrong", 3, 1),
+                                     ("existing", 1, 3), ("pending", 3, 3)]:
+            with self.subTest(slug=slug, source=source, target=target):
+                with self.assertRaises(psycopg.errors.CheckViolation):
+                    with self.connect() as conn:
+                        conn.execute("""INSERT INTO article_redirects VALUES
+                            (%s,%s,%s,'hash','hash','{}','2026-09-14')""", (slug, source, target))
 
 
 if __name__ == "__main__":

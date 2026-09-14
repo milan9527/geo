@@ -70,8 +70,10 @@ class PublicationStore:
 
     def article(self, article_id, tx=None):
         rows = self.sql(
-            """SELECT a.*, c.slug category_slug FROM articles a
-               JOIN categories c ON c.id=a.category_id WHERE a.id=:article_id""",
+            """SELECT a.*, c.slug category_slug, r.target_article_id redirect_target_id
+               FROM articles a JOIN categories c ON c.id=a.category_id
+               LEFT JOIN article_redirects r ON r.source_article_id=a.id
+               WHERE a.id=:article_id""",
             {"article_id": article_id}, transaction_id=tx,
         )
         if not rows:
@@ -116,10 +118,13 @@ class PublicationStore:
             current = []
             if update_candidate:
                 current = self.sql(
-                    "SELECT id,status,updated_at FROM articles WHERE id=:article_id FOR UPDATE",
+                    """SELECT a.id,a.status,a.updated_at,
+                              EXISTS(SELECT 1 FROM article_redirects r WHERE r.source_article_id=a.id) redirected
+                       FROM articles a WHERE a.id=:article_id FOR UPDATE OF a""",
                     {"article_id": update_candidate["output_article_id"]}, transaction_id=tx,
                 )
             can_update = bool(current and current[0]["status"] in {"draft", "review"}
+                              and not current[0].get("redirected")
                               and current[0]["updated_at"] == update_candidate.get("updated_at"))
             if require_existing and not can_update:
                 raise ValueError("Draft changed while its evidence was being reviewed")
@@ -188,6 +193,9 @@ def review_and_publish(store, article_id, expected_hash, gate, compare, *, enabl
         return result
     try:
         candidate = store.article(article_id)
+        if candidate.get("redirect_target_id"):
+            result["reason"] = "legacy_url_redirected"
+            return result
         if candidate["status"] not in {"draft", "review"} or content_identity(candidate) != expected_hash:
             result["reason"] = "candidate_changed"
             return result

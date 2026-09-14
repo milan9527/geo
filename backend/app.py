@@ -37,6 +37,7 @@ from .analytics import (
 )
 from .database import USE_AURORA_DATA_API, connection, init_db, utc_now
 from .homepage import HOME_DESCRIPTION, HOME_TITLE, render_home
+from .article_redirects import REDIRECT_PROTECTION_MESSAGE, redirect_target
 from .metrics import load_metrics_rows
 from .publication_protection import PUBLISHED_PROTECTION_MESSAGE, REVIEW_REQUIRED_MESSAGE
 from .seo import search_description, search_title
@@ -1535,6 +1536,8 @@ class ApiHandler(BaseHTTPRequestHandler):
     def _article_page(self, slug: str) -> None:
         article = self._load_public_article(slug)
         if not article:
+            if self._redirect_legacy_article(slug, "/article/"):
+                return
             self._not_found_page()
             return
         escaped_slug = quote(str(article["slug"]), safe="")
@@ -2227,9 +2230,24 @@ The open article and JSON-LD representation may be quoted with a link and clear 
             ).fetchall()
         self._json([public_article(dict(row)) for row in rows])
 
+    def _redirect_legacy_article(self, slug: str, prefix: str, suffix: str = "") -> bool:
+        with connection() as conn:
+            target = redirect_target(conn, unquote(slug))
+        if not target:
+            return False
+        location = f"{PUBLIC_BASE_URL}{prefix}{quote(target, safe='')}{suffix}"
+        self._text(
+            "", HTTPStatus.MOVED_PERMANENTLY,
+            content_type="text/plain; charset=utf-8",
+            extra_headers={"Location": location, "Cache-Control": "public, max-age=300"},
+        )
+        return True
+
     def _article(self, slug: str) -> None:
         response = self._load_public_article(slug)
         if not response:
+            if self._redirect_legacy_article(slug, "/api/v1/articles/"):
+                return
             self._json({"error": "Article not found"}, HTTPStatus.NOT_FOUND)
             return
         self._json(response)
@@ -2271,6 +2289,8 @@ The open article and JSON-LD representation may be quoted with a link and clear 
                 (slug,),
             ).fetchone()
             if not row:
+                if self._redirect_legacy_article(slug, "/agent/v1/articles/", "/paid" if paid else ""):
+                    return
                 self._json({"error": "Article not found"}, HTTPStatus.NOT_FOUND)
                 return
             sources = [
@@ -3071,6 +3091,13 @@ The open article and JSON-LD representation may be quoted with a link and clear 
                 return
             existing_placeholders = ", ".join(["%s"] * len(existing_ids))
             if action == "delete":
+                redirected = conn.execute(
+                    f"SELECT source_article_id FROM article_redirects WHERE source_article_id IN ({existing_placeholders}) LIMIT 1",
+                    existing_ids,
+                ).fetchone()
+                if redirected:
+                    self._json({"error": REDIRECT_PROTECTION_MESSAGE}, HTTPStatus.CONFLICT)
+                    return
                 conn.execute(
                     f"""
                     UPDATE research_runs SET output_article_id = NULL

@@ -1,0 +1,186 @@
+{
+  "date": "2026-09-14",
+  "appliedAt": "2026-09-14T03:23:25+00:00",
+  "scope": "13 legacy article URLs identified in the September traffic review",
+  "redirects": [
+    {
+      "sourceArticleId": 56,
+      "sourceUrl": "https://aperture.zhangwangshu.com/article/cloud-research-20260903-0908-165",
+      "targetArticleId": 210,
+      "targetUrl": "https://aperture.zhangwangshu.com/article/cloud-research-20260909-0008-1181",
+      "status": 301,
+      "confidence": 0.9,
+      "reason": "56的核心价值是依据AWS活动页和Google Cloud目录提出架构验证要求；210已覆盖这些主要事实、证据边界及结论。56剩余的SKU规则、会议数量和案例补充不足以独立成篇。210另以ArcticSwarm基准结果、协作机制和遥测管道能力支撑更具体的研究问题，并非仅多列测试建议。其新增价值值得保留，但不能使已被覆盖的56同时获得独立发表理由，建议保留210、合并56必要细节。"
+    },
+    {
+      "sourceArticleId": 86,
+      "sourceUrl": "https://aperture.zhangwangshu.com/article/commerce-research-20260903-1050-245",
+      "targetArticleId": 184,
+      "targetUrl": "https://aperture.zhangwangshu.com/article/commerce-research-20260908-0006-1090",
+      "status": 301,
+      "confidence": 0.9,
+      "reason": "标题、导语及正文比较显示，86的主要实证价值是Shopify首单数据、创业者调查及其解释边界，184已覆盖。86独有的Stripe导航定位和相关阅读名称没有形成独立核心结论，可并入。184则以Alexa目标价自动购买的公开披露为主线，有新增消费者侧功能证据，并明确索引标题不能证明部署效果。保留184是因其覆盖共同核心且主线更明确，而非日期更新或篇幅更长；86不宜另发。"
+    },
+    {
+      "sourceArticleId": 93,
+      "sourceUrl": "https://aperture.zhangwangshu.com/article/agent-research-20260903-2103-396",
+      "targetArticleId": 116,
+      "targetUrl": "https://aperture.zhangwangshu.com/article/agent-research-20260905-0003-599",
+      "status": 301,
+      "confidence": 0.96,
+      "reason": "93以AWS平台与OpenAI案例对照展开，116虽改用Anthropic架构议题开篇，主要篇幅仍复用同批案例，回答相同的能力与授权区分问题，结论也一致。新增索引条目没有形成经实现或实验支持的独立结论。116覆盖93主要案例与治理价值，围绕受控执行更集中，并明确限制架构推论，宜保留116；AWS摘录支持范围的冲突须在发布前核对。"
+    },
+    {
+      "sourceArticleId": 102,
+      "sourceUrl": "https://aperture.zhangwangshu.com/article/ai-research-20260904-0659-488",
+      "targetArticleId": 116,
+      "targetUrl": "https://aperture.zhangwangshu.com/article/agent-research-20260905-0003-599",
+      "status": 301,
+      "confidence": 0.9,
+      "reason": "102以OpenAI任务结果、数据连接和治理安排为核心，主要事实及其解释边界已被116覆盖。116虽以受控执行为切口，但新增工程索引与平台摘录不足以证明独立架构效果，测试建议也不构成新研究，因此不宜分别发表。建议保留116：其保留核心案例指标及归因限制，并围绕能力证据不能替代授权证据组织正文，主线较集中；102的产业外推边界可并入。"
+    },
+    {
+      "sourceArticleId": 126,
+      "sourceUrl": "https://aperture.zhangwangshu.com/article/agent-research-20260905-0033-609",
+      "targetArticleId": 136,
+      "targetUrl": "https://aperture.zhangwangshu.com/article/agent-research-20260906-0033-769",
+      "status": 301,
+      "confidence": 0.99,
+      "reason": "两稿标题、导语和主要篇幅均围绕同一组六条版本记录，研究问题及结论高度一致，没有不同实验结果或独立事件。136已覆盖126的核心价值，并将执行边界、内容完整性、运行字段和对象标识的证据组织得更集中，明确限定推论范围。126新增的背景、个别修复与时间计算可合并，不足以独立发表；因此保留136。"
+    },
+    {
+      "sourceArticleId": 151,
+      "sourceUrl": "https://aperture.zhangwangshu.com/article/commerce-research-20260906-1808-887",
+      "targetArticleId": 203,
+      "targetUrl": "https://aperture.zhangwangshu.com/article/commerce-research-20260908-1807-1174",
+      "status": 301,
+      "confidence": 0.98,
+      "reason": "标题、导语及主要篇幅均围绕同一组eBay工具披露、Facebook合作和交易能力边界，核心结论一致。203已覆盖151的主要价值，并补足CRM跨界面连接的具体证据；新增内容仍是产品定位和条件性评估，不能支撑两篇独立发表。建议保留203，将正文聚焦于工具、分发与执行权限的区别，并压缩泛行业推演；151的少量限定说明可合并。"
+    },
+    {
+      "sourceArticleId": 169,
+      "sourceUrl": "https://aperture.zhangwangshu.com/article/agent-research-20260907-0713-975",
+      "targetArticleId": 206,
+      "targetUrl": "https://aperture.zhangwangshu.com/article/agent-research-20260908-2004-1175",
+      "status": 301,
+      "confidence": 0.96,
+      "reason": "169的标题、导语和主体围绕会话、工具解析、角色验证及工作区标识，206虽以新增诊断与身份校验切入，仍完整承接这些核心事实，并得出相同的执行关联与治理验证结论，构成主要价值覆盖。新增版本是真实增量，但不足以使被覆盖的169另具独立发表价值。推荐206：版本归属及证据边界更清晰，执行链证据更完整，正文也较少旁支展开；并非仅因日期更新而保留。"
+    },
+    {
+      "sourceArticleId": 177,
+      "sourceUrl": "https://aperture.zhangwangshu.com/article/ai-research-20260907-1806-1047",
+      "targetArticleId": 197,
+      "targetUrl": "https://aperture.zhangwangshu.com/article/ai-research-20260908-1205-1165",
+      "status": 301,
+      "confidence": 0.97,
+      "reason": "177以任务成本和迁移为题，197以产品定位和接口区别为题，但197正文已覆盖177的核心事实、机制及条件性结论。177更充分的采购推演和测试建议没有形成独立实证结论；197新增项目也不足以使两稿同时成立。推荐保留197：其百度分类与百川协议证据更完整，关键机制论证更具体，且保留成本、迁移和GPU-CFR适用边界，并非仅因修订较晚或篇幅更长。"
+    },
+    {
+      "sourceArticleId": 180,
+      "sourceUrl": "https://aperture.zhangwangshu.com/article/agent-research-20260908-0003-1085",
+      "targetArticleId": 136,
+      "targetUrl": "https://aperture.zhangwangshu.com/article/agent-research-20260906-0033-769",
+      "status": 301,
+      "confidence": 0.94,
+      "reason": "两稿标题侧重不同，但导语和主要正文均围绕相同LangChain、LlamaIndex版本，讨论异步工具、内容与状态修复及证据边界。180的MCP时间线是真实新增材料，但相关结论止于版本顺序与迁移检查建议，未形成足以另发的核心研究。136覆盖共同核心，并以CrewAI连续版本具体支撑执行边界、结果保留和运行标识，证据链更完整、正文更聚焦；180增量可合并。"
+    },
+    {
+      "sourceArticleId": 182,
+      "sourceUrl": "https://aperture.zhangwangshu.com/article/ai-research-20260908-0004-1088",
+      "targetArticleId": 202,
+      "targetUrl": "https://aperture.zhangwangshu.com/article/ai-research-20260908-1805-1172",
+      "status": 301,
+      "confidence": 0.94,
+      "reason": "标题、导语和主要篇幅均围绕同批Anthropic公告及两篇预印本，核心结论同为发布不能证明部署成熟，需兼容实现、采用和运行数据。202的AWS拓扑是真实增量，但主要补充共同部署议题，未使两稿各自形成独立研究结论。建议保留202：它覆盖共同核心证据，并以具体治理结构支撑较聚焦的部署分析；182的后续模型条目和新闻旁支可择要并入。"
+    },
+    {
+      "sourceArticleId": 165,
+      "sourceUrl": "https://aperture.zhangwangshu.com/article/finance-research-20260907-0605-965",
+      "targetArticleId": 135,
+      "targetUrl": "https://aperture.zhangwangshu.com/article/finance-research-20260906-0026-767",
+      "status": 301,
+      "confidence": 0.94,
+      "reason": "标题和导语分别突出纳指单日回落与FINRA规则，但全文比较显示，165的核心证据及结论——监管、申报信息不足以判断共同周期——已被135覆盖。165独有内容只是旁支公告和未来验证建议，未形成独立研究结果。135保留上述证据边界，并以可复算的9月1日纳指观测组织分析，监管披露也更完整，故保留135；其新增行情事实不能反过来证明165仍须独立发表。"
+    }
+  ],
+  "restored": [
+    {
+      "id": 112,
+      "url": "https://aperture.zhangwangshu.com/article/finance-research-20260904-1205-524",
+      "title": "欧洲央行利率的三个历史节点：两降一升与科技投资传导",
+      "qualityScore": 95,
+      "status": 200
+    },
+    {
+      "id": 135,
+      "url": "https://aperture.zhangwangshu.com/article/finance-research-20260906-0026-767",
+      "title": "2026年9月1日纳指回落271.12点、约1.03%：历史观测与解释边界[S4]",
+      "qualityScore": 92,
+      "status": 200
+    }
+  ],
+  "revisedPublished": [
+    {
+      "id": 116,
+      "url": "https://aperture.zhangwangshu.com/article/agent-research-20260905-0003-599",
+      "title": "企业Agent如何走向受控执行：Anthropic“脑手解耦”、AWS平台与OpenAI案例",
+      "qualityScore": 94
+    },
+    {
+      "id": 197,
+      "url": "https://aperture.zhangwangshu.com/article/ai-research-20260908-1205-1165",
+      "title": "Meta展示模型项目，百度与百川呈现Agent定位与工具接口区别",
+      "qualityScore": 93
+    },
+    {
+      "id": 206,
+      "url": "https://aperture.zhangwangshu.com/article/agent-research-20260908-2004-1175",
+      "title": "Agent执行控制更新：9月8日诊断与身份校验，如何承接工作区、会话和记忆验证",
+      "qualityScore": 95
+    }
+  ],
+  "verification": {
+    "originalPublishedUrlsPreserved": 22,
+    "originalBodiesUnchanged": 19,
+    "publishedPages200": 24,
+    "fullTextPublicationComparisons": 105,
+    "redirectCoverageComparisons": 11,
+    "localRegressionTestsPassed": 49,
+    "localTransactionRehearsalPassed": true,
+    "browserTestsPassed": true,
+    "unknownUrlsRemain404": true,
+    "sitemaps": {
+      "/sitemap.xml": {
+        "status": 200,
+        "urlCount": 35,
+        "articleCount": 24
+      },
+      "/sitemap-articles.xml": {
+        "status": 200,
+        "urlCount": 24,
+        "articleCount": 24
+      }
+    },
+    "homeArticleLinks": 24
+  },
+  "deployment": {
+    "apiTaskDefinition": 31,
+    "apiImage": "sha256:8b79062101b753ea6391a01c842bbaa6c02d9fd3677ff8c26225d87a9fbeef7b",
+    "runtimeVersion": 48,
+    "runtimeImage": "sha256:469c8817be4b5df5058d0bf6314818fd4d788c5bf8338c10354ffca57d2c1841",
+    "runtimeStatus": "READY",
+    "autoPublish": true,
+    "enabledSchedules": 6,
+    "imageScans": "COMPLETE, no findings"
+  },
+  "indexing": {
+    "indexnowStatus": 200,
+    "submittedUrls": 26,
+    "invalidationIds": [
+      "I5DRMO21OMBT48T7R88U8UZNKV",
+      "I91U0D0TD5ULO94NGRGXF64ZI5"
+    ],
+    "invalidationsCompleted": true,
+    "googleSearchConsoleSubmitted": false
+  }
+}

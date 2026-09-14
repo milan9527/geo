@@ -205,6 +205,9 @@ function renderSection(section) {
 async function renderArticle(slug) {
   try {
     const article = await api(`/api/v1/articles/${encodeURIComponent(slug)}`);
+    if (article.slug !== decodeURIComponent(slug)) {
+      history.replaceState({}, "", `/article/${encodeURIComponent(article.slug)}`);
+    }
     setMeta({
       title: article.seoTitle || `${article.title} · Aperture Intelligence`,
       description: article.seoDescription || article.dek,
