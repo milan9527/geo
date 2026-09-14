@@ -39,6 +39,7 @@ from .database import USE_AURORA_DATA_API, connection, init_db, utc_now
 from .homepage import HOME_DESCRIPTION, HOME_TITLE, render_home
 from .article_redirects import REDIRECT_PROTECTION_MESSAGE, redirect_target
 from .metrics import load_metrics_rows
+from .research import read_research_rows
 from .publication_protection import PUBLISHED_PROTECTION_MESSAGE, REVIEW_REQUIRED_MESSAGE
 from .seo import search_description, search_title
 from .x402_payment import (
@@ -3671,7 +3672,9 @@ The open article and JSON-LD representation may be quoted with a link and clear 
 
     def _admin_research(self) -> None:
         with connection() as conn:
-            runs = conn.execute(
+            conn.execute("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY")
+            runs = read_research_rows(
+                conn,
                 """
                 SELECT r.*, a.name agent_name, a.kind agent_kind,
                        o.title article_title, o.slug article_slug,
@@ -3689,9 +3692,10 @@ The open article and JSON-LD representation may be quoted with a link and clear 
                 FROM research_runs r
                 JOIN crawler_agents a ON a.id = r.agent_id
                 LEFT JOIN articles o ON o.id = r.output_article_id
-                ORDER BY r.started_at DESC LIMIT 20
-                """
-            ).fetchall()
+                ORDER BY r.started_at DESC, r.id DESC LIMIT 20
+                """,
+                order_by="started_at DESC, id DESC",
+            )
             result = []
             for run in runs:
                 item = dict(run)
@@ -3703,24 +3707,29 @@ The open article and JSON-LD representation may be quoted with a link and clear 
                     item.pop("verification_json"), {}
                 )
                 item["sections"] = parse_json(item.pop("body_json"), [])
+                evidence_rows = read_research_rows(
+                    conn,
+                    """
+                    SELECT id, publisher, title, url, published_at, retrieved_at,
+                           source_type, content_excerpt
+                    FROM research_evidence
+                    WHERE run_id = %s
+                    """,
+                    (run["id"],),
+                    order_by="id",
+                )
                 item["evidence"] = [
-                    dict(evidence)
-                    for evidence in conn.execute(
-                        """
-                        SELECT publisher, title, url, published_at, retrieved_at,
-                               source_type, content_excerpt
-                        FROM research_evidence
-                        WHERE run_id = %s ORDER BY id
-                        """,
-                        (run["id"],),
-                    ).fetchall()
+                    {key: value for key, value in evidence.items() if key != "id"}
+                    for evidence in evidence_rows
                 ]
                 result.append(item)
         self._json(result)
 
     def _admin_research_detail(self, run_id: int) -> None:
         with connection() as conn:
-            run = conn.execute(
+            conn.execute("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY")
+            runs = read_research_rows(
+                conn,
                 """
                 SELECT r.*, a.name agent_name, a.kind agent_kind,
                        o.title article_title, o.slug article_slug,
@@ -3736,39 +3745,42 @@ The open article and JSON-LD representation may be quoted with a link and clear 
                 WHERE r.id = %s
                 """,
                 (run_id,),
-            ).fetchone()
-            if not run:
+                order_by="id",
+            )
+            if not runs:
                 self._json({"error": "Research run not found"}, HTTPStatus.NOT_FOUND)
                 return
-            item = dict(run)
+            item = runs[0]
             item["analysisProcess"] = parse_json(
                 item.pop("analysis_process_json"), []
             )
             item["toolTrace"] = parse_json(item.pop("tool_trace_json"), {})
             item["verification"] = parse_json(item.pop("verification_json"), {})
             item["sections"] = parse_json(item.pop("body_json"), [])
-            evidence_rows = [
-                dict(evidence)
-                for evidence in conn.execute(
-                    """
-                    SELECT id, publisher, title, url, published_at, retrieved_at,
-                           source_type, content_excerpt
-                    FROM research_evidence WHERE run_id = %s ORDER BY id
-                    """,
-                    (run_id,),
-                ).fetchall()
-            ]
+            evidence_rows = read_research_rows(
+                conn,
+                """
+                SELECT id, publisher, title, url, published_at, retrieved_at,
+                       source_type, content_excerpt
+                FROM research_evidence WHERE run_id = %s
+                """,
+                (run_id,),
+                order_by="id",
+            )
             item["evidence"] = []
             for evidence in evidence_rows:
-                payload = conn.execute(
+                payloads = read_research_rows(
+                    conn,
                     (
-                        "SELECT "
+                        "SELECT id, "
                         + EVIDENCE_DATA_SQL
                         + " AS data_json "
                         "FROM research_evidence WHERE id = %s"
                     ),
                     (evidence.pop("id"),),
-                ).fetchone()
+                    order_by="id",
+                )
+                payload = payloads[0] if payloads else None
                 evidence["data"] = parse_json(
                     payload["data_json"] if payload else "{}", {}
                 )
