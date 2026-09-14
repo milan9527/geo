@@ -1,0 +1,143 @@
+{
+  "date": "2026-09-14",
+  "site": "https://deu7vkdd3jf5.cloudfront.net/",
+  "cause": {
+    "endpoint": "/api/admin/research",
+    "loginStatus": 200,
+    "beforeEndpointStatus": 502,
+    "databaseError": "UnsupportedResultException: The result exceeds the size limit 1 MB.",
+    "latestRows": 20,
+    "queryJsonBytes": 1094895,
+    "auditFieldBytes": 752702
+  },
+  "fix": {
+    "codeCommit": "2d5967f",
+    "chunkCharacters": 8192,
+    "chunksPerPage": 8,
+    "consistentReadSnapshot": true,
+    "endpoints": [
+      "/api/admin/research",
+      "/api/admin/research/{id}"
+    ],
+    "databaseAuditAndEvidencePreserved": true
+  },
+  "tests": {
+    "postgresqlRegressionTestsPassed": 4,
+    "productionReadOnlyHandlerList": {
+      "status": 200,
+      "rows": 20,
+      "bytes": 1337245,
+      "seconds": 1.65
+    },
+    "browser": {
+      "phase": "after",
+      "loginStatus": 200,
+      "initialRequests": {
+        "/api/admin/data-sources/test-batch": 200,
+        "/api/admin/events": 200,
+        "/api/admin/settings": 200,
+        "/api/admin/jobs": 200,
+        "/api/admin/articles": 200,
+        "/api/v1/categories": 200,
+        "/api/admin/data-sources": 200,
+        "/api/admin/crawlers": 200,
+        "/api/admin/metrics?range=30d": 200,
+        "/api/admin/research": 200
+      },
+      "errors": [],
+      "researchDetails": [
+        {
+          "id": 967,
+          "status": 200,
+          "evidence": 10,
+          "verification": "verified"
+        },
+        {
+          "id": 966,
+          "status": 200,
+          "evidence": 10,
+          "verification": "verified"
+        },
+        {
+          "id": 965,
+          "status": 200,
+          "evidence": 15,
+          "verification": "verified"
+        }
+      ],
+      "visitedViews": [
+        {
+          "view": "content",
+          "title": "内容管理"
+        },
+        {
+          "view": "research",
+          "title": "深度研究输出"
+        },
+        {
+          "view": "crawlers",
+          "title": "爬虫 Agent 管理"
+        },
+        {
+          "view": "sources",
+          "title": "数据源注册中心"
+        },
+        {
+          "view": "jobs",
+          "title": "爬虫任务记录"
+        },
+        {
+          "view": "settings",
+          "title": "数据与设置"
+        },
+        {
+          "view": "dashboard",
+          "title": "GEO 运营总览"
+        }
+      ],
+      "refreshPassed": true,
+      "sessionRestorePassed": true,
+      "researchCards": 20,
+      "logoutPassed": true
+    }
+  },
+  "deployment": {
+    "taskDefinition": "geo-intelligence-api:32",
+    "rolloutState": "COMPLETED",
+    "runningCount": 1,
+    "pendingCount": 0,
+    "imageDigest": "sha256:1c4c077ffb3d5187cb37a0974a94dc8c82f3542d72450f02736ebc1f4ebd23e9",
+    "newContainerErrors": 0
+  },
+  "scan": {
+    "status": {
+      "status": "COMPLETE",
+      "description": "The scan was completed successfully."
+    },
+    "severityCounts": {},
+    "imageId": {
+      "imageDigest": "sha256:1c4c077ffb3d5187cb37a0974a94dc8c82f3542d72450f02736ebc1f4ebd23e9",
+      "imageTag": "20260914130915-2d5967f"
+    }
+  },
+  "publicationPreservation": {
+    "unchanged": true,
+    "publishedArticleCount": 24,
+    "permanentRedirectCount": 11,
+    "health": [
+      {
+        "path": "/",
+        "status": 200
+      },
+      {
+        "path": "/api/health",
+        "status": 200
+      },
+      {
+        "path": "/sitemap.xml",
+        "status": 200
+      }
+    ]
+  },
+  "diagnosticAdministratorRemoved": true
+}
