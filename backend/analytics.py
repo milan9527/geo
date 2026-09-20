@@ -3,6 +3,7 @@ from __future__ import annotations
 import base64
 import hashlib
 import math
+import re
 from collections.abc import Iterable
 
 
@@ -29,11 +30,20 @@ HLL_PRECISION = 10
 HLL_REGISTER_COUNT = 1 << HLL_PRECISION
 
 
+def is_diagnostic(user_agent: str) -> bool:
+    return bool(re.search(r"aperture|geo[- /]?(?:audit|test|verify)|lighthouse|headlesschrome",
+                          user_agent, re.I))
+
+
 def identify_visitor(user_agent: str) -> tuple[str, str | None]:
     normalized = user_agent.lower()
     for name, patterns in AGENT_PATTERNS.items():
         if any(pattern in normalized for pattern in patterns):
             return "agent", name
+    if is_diagnostic(user_agent):
+        return "agent", "Diagnostic client"
+    if not normalized or re.search(r"bot|spider|crawler|curl/|wget/|python|httpx|go-http-client|node-fetch", normalized):
+        return "agent", "Automated client"
     return "human", None
 
 

@@ -54,9 +54,10 @@ def main() -> None:
             402,
         ),
         record("/styles.css", "Mozilla/5.0", "198.51.100.10"),
+        record("/article/diagnostic", "Aperture-Growth-Verification", "198.51.100.11"),
     ]
     encoded = "\n".join(json.dumps(item) for item in source).encode()
-    assert len(lambda_function.records_from_body(gzip.compress(encoded))) == 5
+    assert len(lambda_function.records_from_body(gzip.compress(encoded))) == 6
     lambda_function.hash_secret = lambda: b"unit-test-secret"
     aggregates = lambda_function.aggregate_records(source)
     assert len(aggregates) == 3

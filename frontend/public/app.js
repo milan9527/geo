@@ -182,6 +182,7 @@ async function renderCategory(slug) {
 }
 
 function renderSection(section) {
+  const code = section.code ? `<pre class="article-code"><code>${String(section.code).replace(/[&<>"']/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[character]))}</code></pre>` : "";
   const paragraphs = (section.paragraphs || []).map((text) => `<p>${text}</p>`).join("");
   const stat = section.stat
     ? `<div class="article-stat"><strong>${section.stat.value}</strong><span>${section.stat.label}</span></div>`
@@ -197,7 +198,7 @@ function renderSection(section) {
     <section class="article-section">
       ${section.number ? `<span class="section-number">${section.number}</span>` : ""}
       <h2>${section.heading}</h2>
-      ${paragraphs}${stat}${quote}${table}${bullets}
+      ${paragraphs}${stat}${quote}${table}${bullets}${code}
     </section>
   `;
 }
@@ -206,7 +207,7 @@ async function renderArticle(slug) {
   try {
     const article = await api(`/api/v1/articles/${encodeURIComponent(slug)}`);
     if (article.slug !== decodeURIComponent(slug)) {
-      history.replaceState({}, "", `/article/${encodeURIComponent(article.slug)}`);
+      history.replaceState({}, "", `/article/${encodeURIComponent(article.slug)}${location.search}${location.hash}`);
     }
     setMeta({
       title: article.seoTitle || `${article.title} · Aperture Intelligence`,
@@ -233,6 +234,7 @@ async function renderArticle(slug) {
           <div class="article-content">
             <p class="article-summary">${article.summary}</p>
             ${article.sections.map(renderSection).join("")}
+            <div class="reader-follow"><h2>继续关注工程实践</h2><p>用 RSS 阅读器订阅新文章，或把这篇文章分享给正在解决同类问题的人。</p><a href="/feed.xml" data-rss>订阅 RSS 更新</a><button type="button" data-share-article>复制文章链接</button></div>
           </div>
           <aside class="article-sidebar">
             <div class="sticky-sidebar">
@@ -306,6 +308,7 @@ function renderNotFound() {
 }
 
 async function renderRoute() {
+  window.apertureGrowth?.stopPage();
   window.scrollTo(0, 0);
   updateNavActive();
   $("#primaryNav").classList.remove("open");
@@ -316,6 +319,7 @@ async function renderRoute() {
   else if (path === "/methodology") renderMethodology();
   else renderNotFound();
   $("#app").focus({ preventScroll: true });
+  window.apertureGrowth?.startPage();
 }
 
 async function runSearch(term) {
@@ -330,7 +334,7 @@ async function runSearch(term) {
 function initEvents() {
   document.addEventListener("click", (event) => {
     const link = event.target.closest("[data-link]");
-    if (link && link.origin === location.origin) {
+    if (link && link.origin === location.origin && !event.metaKey && !event.ctrlKey && !event.shiftKey && event.button === 0) {
       event.preventDefault();
       const destinationSlug = link.pathname.match(/^\/article\/([^/]+)/)?.[1];
       api("/api/v1/track", {
@@ -345,7 +349,7 @@ function initEvents() {
           },
         }),
       }).catch(() => {});
-      navigate(link.pathname);
+      navigate(`${link.pathname}${link.search}${link.hash}`);
       $("#searchOverlay").classList.remove("open");
     }
     const machine = event.target.closest("[data-machine-url]");
@@ -401,6 +405,7 @@ function closeSearch() {
 async function init() {
   const serverRendered = document.body.dataset.ssr === "true";
   initEvents();
+  if (serverRendered) window.apertureGrowth?.startPage();
   try {
     [state.site, state.categories, state.articles] = await Promise.all([
       api("/api/v1/site"),

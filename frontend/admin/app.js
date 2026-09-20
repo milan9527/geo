@@ -248,6 +248,27 @@ function renderChart(daily) {
   `;
 }
 
+function renderGrowthFunnel(data) {
+  if (!data) return "";
+  const s = data.summary;
+  return `<section class="panel ab-panel">
+    <div class="panel-header"><div><p>READERS &amp; CHANNELS</p><h2>读者与引流渠道</h2></div><span>2026-09-20 起采集</span></div>
+    <div class="ab-grid">
+      <div><span>浏览会话</span><strong>${fmt(s.sessions)}</strong><small>${fmt(s.pageViews)} 次页面浏览</small></div>
+      <div><span>参与阅读</span><strong>${fmt(s.engagedReads)}</strong><small>前台 30 秒且到达正文一半</small></div>
+      <div><span>回访会话</span><strong>${fmt(s.returningSessions)}</strong><small>距上次活动超过 30 分钟</small></div>
+      <div><span>RSS 点击</span><strong>${fmt(s.rssClicks)}</strong><small>不等于订阅 · 相关阅读点击 ${fmt(s.relatedClicks)}</small></div>
+    </div>
+    <p class="growth-note">浏览器上报的近似值，已过滤已知机器人和测试。禁用脚本、存储或拦截统计会影响计数。</p>
+    <div class="table-scroll"><table class="growth-table"><thead><tr><th>来源 / 媒介</th><th>推广活动</th><th>会话</th><th>参与阅读</th><th>RSS 点击</th></tr></thead><tbody>
+      ${data.channels.length ? data.channels.map((row) => `<tr>
+        <td>${escapeHtml(row.source === "direct_or_unknown" ? "直接或来源未知" : row.source)} / ${escapeHtml(row.medium)}</td>
+        <td>${escapeHtml(row.campaign || "—")}</td><td>${fmt(row.sessions)}</td><td>${fmt(row.engagedReads)}</td><td>${fmt(row.rssClicks)}</td>
+      </tr>`).join("") : '<tr><td colspan="5">尚未收到有效读者事件；测试访问不会计入。</td></tr>'}
+    </tbody></table></div>
+  </section>`;
+}
+
 function renderDashboard() {
   const data = state.metrics;
   const summary = data.summary;
@@ -270,9 +291,10 @@ function renderDashboard() {
     <section class="metric-grid">
       ${metricCard("i-users", "teal", "Agent 独立访问", fmt(summary.agentViews), data.growth.agent, `占总流量 ${summary.agentShare}%`)}
       ${metricCard("i-citation", "purple", "AI 内容引用", fmt(summary.citations), data.growth.citations, `引用率 ${summary.citationRate}%`)}
-      ${metricCard("i-trend", "blue", "人类独立访问", fmt(summary.humanViews), data.growth.human, `${fmt(summary.humanRequests || 0)} 次页面请求`)}
+      ${metricCard("i-trend", "blue", "浏览器特征访问估计", fmt(summary.humanViews), data.growth.human, `${fmt(summary.humanRequests || 0)} 次请求 · 历史值可能含脚本`)}
       ${metricCard("i-wallet", "amber", "x402 测试网结算", money(summary.revenue), data.growth.revenue, `${fmt(ab.internalPayments)} 笔内部 · ${fmt(ab.externalPayments)} 笔外部`)}
     </section>
+    ${renderGrowthFunnel(data.growthFunnel)}
     <section class="panel ab-panel">
       <div class="panel-header"><div><p>GEO + X402 EXPERIMENT</p><h2>Agent 内容 A/B 实测</h2></div><span>${data.startDate} 至 ${data.endDate}</span></div>
       <div class="ab-grid">

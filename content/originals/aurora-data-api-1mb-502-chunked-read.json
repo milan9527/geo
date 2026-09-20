@@ -1,0 +1,65 @@
+{
+  "slug": "aurora-data-api-1mb-502-chunked-read",
+  "category_slug": "cloud",
+  "title": "Aurora Data API 超过 1 MiB 导致后台 502：本站复现与分块读取修复",
+  "dek": "登录成功后列表仍返回502？本站用实际字节测量定位 Data API 限制，以分块读取和一致快照保留完整审核记录，并给出可复用的测试方法。",
+  "summary": "一次真实故障揭示了固定条数分页的边界：20条记录也可能超过传输上限。本文给出测量口径、8192字符分块、双游标与事务快照的实现，以及完整性和线上验证结果。",
+  "author": "Aperture 研究编辑部",
+  "author_role": "工程实践",
+  "read_minutes": 10,
+  "published_at": "2026-09-20",
+  "updated_at": "2026-09-20",
+  "status": "published",
+  "hero_style": "cloud",
+  "authority_score": 95,
+  "citation_count": 6,
+  "access_model": "open",
+  "agent_price": 0.002,
+  "featured": false,
+  "keywords": "[\"Aurora Data API\", \"502\", \"PostgreSQL\", \"分块读取\", \"工程实践\"]",
+  "body_json": "[{\"type\": \"analysis\", \"heading\": \"登录成功，为什么研究列表仍然返回 502？\", \"paragraphs\": [\"2026年9月14日，Aperture 后台能够完成登录，但研究列表接口返回502，页面显示数据加载失败。当时十个初始化请求中，失败的是研究列表，此前修复的统计接口正常。这个边界很重要：账号验证与研究查询是两条不同路径，重新登录不能解决查询返回量超限。[S1]\", \"生产日志把问题定位到研究列表查询与 Aurora Data API 的返回大小限制。最近20条完整研究记录的查询 JSON 合计1,094,895字节，其中不断增长的全库去重审核资料增加了单条记录体积。故障发生时即使列表条数没有增加，传输的数据仍可能继续增长。[S1]\", \"本文复盘该次故障，代码与测试固定引用9月14日已公开的仓库版本。我们没有把一次修复的延迟测量当作其他环境的性能承诺，也没有把后端502一概归因于 Data API。定位仍应从具体失败请求及上游错误开始。\"]}, {\"type\": \"analysis\", \"heading\": \"返回行数有限，不代表返回字节数有限\", \"paragraphs\": [\"AWS 文档将 Database response exceeded size limit 对应的结果集限制写为1 MiB。1 MiB等于1,048,576字节，本站当时的查询 JSON 字节数已经超过这个量级。这个数字是本次查询结果的测量值，不是浏览器页面大小，也不是一条文章正文的长度。[S1][S4]\", \"AWS 建议让每次 Data API 调用只返回限制内的数据，必要时通过多次 ExecuteStatement 与 LIMIT 获取结果。普通按行分页可以减少很多列表的响应，但如果一行中包含很大的审核 JSON，即使 LIMIT 1，也不能保证单次返回安全。AWS 还分别说明每行64 KB的限制，因此应同时考虑单行与总响应。[S4]\", \"本站需要完整保留去重证据，简单截断审核字段会使后台看不到完整判断依据。最终方案先将查询行序列化为 JSON，再按字符切块，每次读取少量块，在应用层按顺序还原原记录。列表仍然返回最近20条完整研究记录。[S1][S2]\"]}, {\"type\": \"analysis\", \"heading\": \"先用隔离数据库量出问题，再验证读取方案\", \"paragraphs\": [\"以下 SQL 是复现超大逻辑字段的最小构造，可在隔离 PostgreSQL 数据库运行。repeat产生的内容只是测试数据；本地 PostgreSQL可以处理该字段，这段 SQL本身不会模拟云端 Data API 网关，也不会在本地自动产生502。要复现传输错误，必须让实际 Data API调用返回该字段。[S3][S4]\"], \"code\": \"SELECT octet_length(repeat('x', 1100000)) AS payload_bytes;\\nSELECT repeat('x', 1100000) AS oversized_payload;\"}, {\"type\": \"analysis\", \"heading\": \"把记录排序和分块游标放在一起\", \"paragraphs\": [\"read_research_rows 的实现先用 row_to_json(source)::text 序列化每一行，再用稳定排序得到 row_no；每行按8192字符切块，每次最多取8块。外层游标同时保存 row_no和chunk_no，从上次返回的块之后继续读取。仅记录行号会遗漏同一行的后续块，仅记录块号则无法区分多行。[S2]\", \"调用者必须提供可信的查询及唯一、稳定的排序键。研究列表以时间和ID确定顺序，避免同一时间戳下记录位置不确定。应用依次连接同一行的片段，再解析完整 JSON；最后一页也必须把未输出的最后一行写入结果。[S1][S2]\", \"8192是字符数，不是承诺每块只有8192字节。中文、emoji和转义会影响实际编码体积，本站用保守的块大小及每页块数留下余量，并在测试中包含这些输入。生产使用时仍应检查序列化开销、服务限制和未来字段变化。[S2][S3]\"]}, {\"type\": \"analysis\", \"heading\": \"跨多次读取，需要同一个数据库快照\", \"paragraphs\": [\"把一条响应拆成多次查询后，如果两次查询之间有新研究写入，行排序可能改变，甚至前后片段属于不同版本。PostgreSQL 的 Repeatable Read 为事务内的读取提供一致快照；本站将列表、详情及关联证据读取放在同一只读、可重复读事务中。[S1][S5]\", \"该读取函数不自行开启或结束事务，调用方负责事务边界。Psycopg 文档说明，默认情况下数据库操作会启动事务，连接上下文会在正常退出时提交、异常时回滚；因此事务隔离设置的位置需要正确，不能先执行查询再假定后面的隔离设置能改变已经读到的快照。[S2][S6]\", \"下面展示调用形状，conn必须是该请求独占、尚未执行其他查询的连接。order_by与SQL均来自应用代码，不应把用户输入直接拼入这两个参数。[S2]\"], \"code\": \"from backend.research import read_research_rows\\n\\nconn.execute('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY')\\nrows = read_research_rows(\\n    conn,\\n    'SELECT id, summary FROM research_runs ORDER BY id DESC LIMIT 20',\\n    order_by='id DESC',\\n)\"}, {\"type\": \"analysis\", \"heading\": \"验证完整性，比只检查状态码更有用\", \"paragraphs\": [\"本站的回归测试覆盖四组边界：旧查询结果超过容量限制；最新20条仍然完整且顺序稳定；单条超大审核和证据中的中文、emoji、引号及换行准确还原；空列表、详情不存在及读取期间有并发写入的行为符合预期。[S1][S3]\", \"测试使用真实 PostgreSQL，并通过测试连接包装检查结果体积。它可以发现读取遗漏与不一致，却不能替代线上网关验证。部署后另用浏览器验证登录、十个初始化请求、七个后台视图、三个研究详情、刷新恢复和退出登录。[S1][S3]\", \"运行仓库测试需要安装项目依赖并准备可创建、删除测试 schema 的隔离 PostgreSQL。测试会清理其自己的 schema，不应把下面的连接变量指向生产环境；连接地址由使用者按本地配置填写。[S3]\"], \"code\": \"RESEARCH_TEST_DATABASE_URL='postgresql://USER:PASSWORD@127.0.0.1:55432/TEST_DATABASE' \\\\\\n  .venv/bin/python scripts/test_admin_research.py -v\"}, {\"type\": \"analysis\", \"heading\": \"修复结果与使用边界\", \"paragraphs\": [\"当次修复后，生产数据库读取返回20条完整研究记录，应用层完整列表为1,337,245字节，直接测量约1.65秒；浏览器十个初始化接口全部返回200。这个应用层列表大小与故障时的查询 JSON 是不同阶段、不同快照的测量，不能用二者相除计算压缩率或性能提升。[S1]\", \"分块处理解决的是单次传输限制，没有消除大字段的网络与解析成本。数据继续增长时，多次序列化查询也可能增加数据库负担。若列表使用者只需要概要，可以另设计按需加载详情；是否调整交互应由产品需求决定，不能在用户需要审核证据时偷偷丢弃字段。\", \"对类似故障，排查顺序可以固定为：定位失败接口和上游错误，测量真实返回体积，区分单行与总量限制，选择分页或分块方案，再验证完整性、一致性和线上行为。只有这些证据吻合时，才把此次处理方式迁移到另一个系统。\"]}]",
+  "sources": [
+    {
+      "publisher": "Aperture Intelligence",
+      "title": "本站后台数据加载失败修复记录（2026-09-14）",
+      "url": "https://github.com/milan9527/geo/blob/34b646e1f34d74c740020df4d9f59dd770449646/reports/admin-data-load-2026-09-14.md",
+      "published_at": "2026-09-14",
+      "source_type": "本站代码与复盘"
+    },
+    {
+      "publisher": "Aperture Intelligence",
+      "title": "分块读取研究记录：read_research_rows 实现",
+      "url": "https://github.com/milan9527/geo/blob/34b646e1f34d74c740020df4d9f59dd770449646/backend/research.py",
+      "published_at": "2026-09-14",
+      "source_type": "本站代码与复盘"
+    },
+    {
+      "publisher": "Aperture Intelligence",
+      "title": "研究列表和详情的 PostgreSQL 回归测试",
+      "url": "https://github.com/milan9527/geo/blob/34b646e1f34d74c740020df4d9f59dd770449646/scripts/test_admin_research.py",
+      "published_at": "2026-09-14",
+      "source_type": "本站代码与复盘"
+    },
+    {
+      "publisher": "Amazon Web Services",
+      "title": "Troubleshooting Amazon RDS Data API",
+      "url": "https://docs.aws.amazon.com/AmazonRDS/latest/AuroraUserGuide/data-api.troubleshooting.html",
+      "published_at": "",
+      "source_type": "官方文档"
+    },
+    {
+      "publisher": "PostgreSQL Global Development Group",
+      "title": "Transaction Isolation",
+      "url": "https://www.postgresql.org/docs/current/transaction-iso.html",
+      "published_at": "",
+      "source_type": "官方文档"
+    },
+    {
+      "publisher": "Psycopg",
+      "title": "Transactions management",
+      "url": "https://www.psycopg.org/psycopg3/docs/basic/transactions.html",
+      "published_at": "",
+      "source_type": "官方文档"
+    }
+  ]
+}

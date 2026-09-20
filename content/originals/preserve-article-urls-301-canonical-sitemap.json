@@ -1,0 +1,65 @@
+{
+  "slug": "preserve-article-urls-301-canonical-sitemap",
+  "category_slug": "agent",
+  "title": "旧文章网址如何保留：本站 301、canonical 与 sitemap 修复实录",
+  "dek": "去重后旧文章变成404怎么办？本站13个旧网址的处理案例，说明如何审核内容对应关系、持久保存301，并验证canonical、sitemap和浏览器导航。",
+  "summary": "旧链接的价值在于仍能帮助读者找到对应内容。本文复盘11个永久重定向与2篇原址恢复的实际处理，给出HTTP检查命令、数据库保护方法及抓取与收录的边界。",
+  "author": "Aperture 研究编辑部",
+  "author_role": "工程实践",
+  "read_minutes": 10,
+  "published_at": "2026-09-20",
+  "updated_at": "2026-09-20",
+  "status": "published",
+  "hero_style": "agent",
+  "authority_score": 94,
+  "citation_count": 6,
+  "access_model": "open",
+  "agent_price": 0.002,
+  "featured": false,
+  "keywords": "[\"301重定向\", \"canonical\", \"sitemap\", \"旧网址\", \"工程实践\"]",
+  "body_json": "[{\"type\": \"analysis\", \"heading\": \"文章去重之后，旧链接仍然有人访问\", \"paragraphs\": [\"清理重复内容时，稿件数量可能减少，但搜索引擎、收藏夹和外站文章中的旧链接不会跟着消失。Aperture在2026年9月14日处理了一批已经被发现的旧地址：13个地址中，11个建立永久重定向，2篇独立文章在原址恢复。当时原有22个公开地址和首次发布时间均保留，修复后公开文章为24篇。[S1]\", \"这个案例的目标是保留旧入口的内容意义：重复稿由相关、覆盖充分的文章承接，独立内容补审后恢复。它没有证明搜索排名已经提高，也没有承诺搜索引擎会在特定日期完成收录。本文复盘9月14日那一批处理，后续新发现的旧链接需要另行审核，不把一次修复视为永久清零。\"]}, {\"type\": \"analysis\", \"heading\": \"先判断内容关系，再选择网址动作\", \"paragraphs\": [\"一个网址返回404，仅说明当前没有可用资源，不能单独说明应当恢复哪篇稿件。处理前应检查旧稿正文、历史发布状态、来源证据和现有目录。只有确认已有页面覆盖其核心问题与有效内容时，才适合将旧网址永久指向该页。\", \"Google 的迁移指南要求准备旧、新网址映射，并指出不要把大量旧网址重定向到无关目的地，例如首页，这可能被当作 soft 404。这个原则同样能指导文章合并：读者从具体文章链接进入，承接页面应当回答原来的问题。[S3]\", \"本站当次先做全文比较，再把需要保留的有效信息补入承接文章并复核。无法由现有内容替代的欧洲央行历史利率稿和纳指历史观测稿，经来源与引用修订后恢复原址。相关处理被记录为审核结果，而不是只在边缘层写一条临时规则。[S1]\"]}, {\"type\": \"analysis\", \"heading\": \"301、canonical 与 sitemap 分别解决什么\", \"paragraphs\": [\"301 是服务器告诉客户端资源已经永久迁移的HTTP响应，目标写在Location头中。MDN同时提示，不同请求方法在跟随301时可能有改为GET的行为，因此这个案例针对公开内容的GET和HEAD入口；支付或写操作不能照搬一个普通网页跳转规则。[S5]\", \"canonical 是当前页面表达首选规范网址的信号，并不会替浏览器把一个已经404的旧地址变成正常页面。Google 将永久重定向和 rel=canonical 列为较强的规范化信号，将 sitemap 包含关系列为较弱信号；这些手段可以相互配合，但最终搜索引擎仍可能根据其他信号选择规范页。[S4]\", \"本站让旧网页301到具体承接文章，承接文章返回200并指向自身canonical，sitemap只列保留的公开规范页。Google 的 sitemap 指南建议列出希望在搜索结果出现的规范网址；提交地图是发现方式，不能保证所有条目被抓取或收录。[S1][S6]\"], \"headers\": [\"组件\", \"本案例中的作用\", \"不能替代的工作\"], \"rows\": [[\"301 + Location\", \"把旧访问引导到相关承接文章\", \"不能代替正文覆盖和质量审核\"], [\"自指 canonical\", \"明确承接页的首选网址\", \"不能修复一个无法访问的旧入口\"], [\"sitemap\", \"列出当前可发现的规范公开页\", \"不能保证索引、排名或点击\"]]}, {\"type\": \"analysis\", \"heading\": \"映射需要持久保存，也需要防止后续任务破坏\", \"paragraphs\": [\"本站把 source_slug、原文章ID、目标文章ID、双方内容哈希和审核记录保存在 article_redirects 表中。网页、文章JSON及Agent入口读取同一份映射，减少不同入口指向不同内容的机会。[S1][S2]\", \"数据库保护同时约束后续变更：已被映射的旧稿不能随意删掉、改名或重新发布，目标文章也不能被删除或撤回。这样定时采集和编辑操作不会在下一轮把旧入口再次变成404，或把已经合并的重复内容重新公开。[S1][S2]\", \"建立映射前还有两个不同的检查：一是目标目前确实公开可读；二是审核时比较过的正文和来源在提交时没有改变。本站在事务内锁定相关表、复查目录和内容哈希后写入，这些检查用于阻止过期审核被提交。[S1] 实施同类流程时，建议在事务外完成模型审核，避免数据库锁等待长时间网络调用。\"]}, {\"type\": \"analysis\", \"heading\": \"把直接访问、机器接口和站内导航分开验证\", \"paragraphs\": [\"只在浏览器中看到一个正常标题，无法证明服务器真正发出了301。前端应用可能只换了内容却没有更新地址，CDN也可能继续返回旧缓存。先检查HTTP状态与Location，再检查最终页内容和canonical，最后验证JavaScript开启后的站内导航。[S1]\", \"下面是当次实际映射中的一个示例。第一条命令观察旧网址的状态和Location；第二条跟随跳转确认终点；第三条查看目标HTML里的规范地址。命令面向公开只读页面，不包含任何后台凭据。[S1]\"], \"code\": \"curl -I 'https://aperture.zhangwangshu.com/article/agent-research-20260903-2103-396'\\ncurl -L -o /dev/null -w '%{http_code} %{url_effective}\\\\n' \\\\\\n  'https://aperture.zhangwangshu.com/article/agent-research-20260903-2103-396'\\ncurl -s 'https://aperture.zhangwangshu.com/article/agent-research-20260905-0003-599' \\\\\\n  | rg 'rel=\\\"canonical\\\"'\"}, {\"type\": \"analysis\", \"heading\": \"不要让推广参数或缓存掩盖问题\", \"paragraphs\": [\"对于正常的文章GET访问，带UTM参数的旧链接仍应到达对应内容；推广参数用于来源统计，而规范地址通常保留不含推广参数的文章路径。实施时应分别核对带参数、不带参数、末尾斜杠及直接目标访问，避免出现循环跳转或无关中间页。这里列的是应执行的检查项，不把某一次测试结果扩展为所有变体永远正确。\", \"缓存刷新只负责让客户端尽快看到新的响应，不会替搜索引擎立即更新索引。Google迁移指南提醒，在重新抓取及重新编入索引期间可能出现波动，并建议保留重定向足够长时间。本站的页面保护目标是让有效旧入口持续存在，不把重定向当成几天后即可删除的临时补丁。[S3]\", \"机器接口还应保留其自身语义。例如开放JSON与付费接口不能混为一谈；即使它们引用同一文章，也要验证路径、访问条件和最终响应。本文案例中的统一映射是统一内容身份，并不是取消各入口的访问要求。[S1][S2]\"]}, {\"type\": \"analysis\", \"heading\": \"当次修复的验收结果，以及它没有证明的事\", \"paragraphs\": [\"9月14日的验证记录显示，11个旧网址的GET和HEAD返回301，24篇公开文章返回200并有单一H1及正确canonical；文章sitemap包含24篇，未包含重定向来源。浏览器还验证了脚本开启或关闭、旧链接站内导航、地址更新及后退前进。[S1]\", \"这组结果证明当时的路径与渲染行为符合修复目标，不证明全部文章已经收录。Google Search Console中的页面索引状态、查询展示及点击需要另行查看；日志中的Googlebot或Bingbot访问也只是抓取证据。\", \"维护上可以把“最近仍被请求的404旧地址”做成固定检查清单。每发现一个入口，先回到正文覆盖和发布历史，再决定恢复、相关301或保持真实404。这样网页数量、搜索可用性和内容去重就不再相互冲突：合并的是重复表达，保留的是读者仍然需要的入口。\"]}]",
+  "sources": [
+    {
+      "publisher": "Aperture Intelligence",
+      "title": "本站2026-09-14旧网址修复记录",
+      "url": "https://github.com/milan9527/geo/blob/34b646e1f34d74c740020df4d9f59dd770449646/reports/legacy-url-repair-2026-09-14.md",
+      "published_at": "2026-09-14",
+      "source_type": "本站代码与复盘"
+    },
+    {
+      "publisher": "Aperture Intelligence",
+      "title": "持久文章重定向及数据库保护实现",
+      "url": "https://github.com/milan9527/geo/blob/34b646e1f34d74c740020df4d9f59dd770449646/backend/article_redirects.py",
+      "published_at": "2026-09-14",
+      "source_type": "本站代码与复盘"
+    },
+    {
+      "publisher": "Google Search Central",
+      "title": "Site moves with URL changes",
+      "url": "https://developers.google.com/search/docs/crawling-indexing/site-move-with-url-changes",
+      "published_at": "",
+      "source_type": "官方文档"
+    },
+    {
+      "publisher": "Google Search Central",
+      "title": "How to specify a canonical URL",
+      "url": "https://developers.google.com/search/docs/crawling-indexing/consolidate-duplicate-urls",
+      "published_at": "",
+      "source_type": "官方文档"
+    },
+    {
+      "publisher": "MDN Web Docs",
+      "title": "301 Moved Permanently",
+      "url": "https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Status/301",
+      "published_at": "",
+      "source_type": "官方文档"
+    },
+    {
+      "publisher": "Google Search Central",
+      "title": "Build and submit a sitemap",
+      "url": "https://developers.google.com/search/docs/crawling-indexing/sitemaps/build-sitemap",
+      "published_at": "",
+      "source_type": "官方文档"
+    }
+  ]
+}

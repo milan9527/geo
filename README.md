@@ -7,6 +7,17 @@
 或通过 [RSS 订阅](https://aperture.zhangwangshu.com/feed.xml)获取新发布的研究。
 引用文章时，请链接到该文章的固定网址，方便读者查阅正文与来源。
 
+## 工程实践
+
+- [Aurora Data API 超过 1 MiB 导致后台 502：复现与分块读取修复](https://aperture.zhangwangshu.com/article/aurora-data-api-1mb-502-chunked-read?utm_source=github&utm_medium=repository&utm_campaign=data_api_1mb)：包含实际故障测量、完整性测试和事务快照处理。
+- [旧文章网址如何保留：301、canonical 与 sitemap 修复实录](https://aperture.zhangwangshu.com/article/preserve-article-urls-301-canonical-sitemap?utm_source=github&utm_medium=repository&utm_campaign=permanent_urls)：包含真实映射案例、HTTP 检查命令和永久链接保护。
+
+管理后台的“读者与引流渠道”自 2026-09-20 起显示匿名浏览会话、参与阅读、
+回访、RSS 和相关阅读点击。来源由 UTM 或外部来源域名确定，在同一会话内保留。
+这些是浏览器上报的近似指标，RSS 点击不等于订阅；历史 CloudFront 估计可能包含脚本。
+测试浏览可使用含 `Aperture` 的 User-Agent，或在浏览器地址添加 `aperture_test=1`；
+后者在当前标签页内持续禁用新增读者事件。采集器对已识别的诊断请求不再计数。
+
 ## 架构
 
 ```text

@@ -29,6 +29,10 @@ def read(path):
 def validate(directory):
     baseline = {a["id"]: a for a in read(directory / "snapshot.json")["articles"]}
     plan = read(directory / "plan.json")
+    if plan.get("operation", "manual_editorial_url_repair") not in {
+        "manual_editorial_url_repair", "manual_original_publication",
+    }:
+        raise ValueError("Unsupported reviewed publication operation")
     revisions = {i: read(directory / "revisions" / f"{i}.json") for i in plan["revise"]}
     redirects = {int(k): int(v) for k, v in plan["redirects"].items()}
     assert not set(revisions) & set(redirects), "A URL cannot be restored and redirected"
@@ -86,7 +90,8 @@ def apply(directory, validated):
         "redirects": redirect_reviews,
     }, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
     now = utc_now()
-    result = {"planHash": plan_hash, "appliedAt": now, "redirects": redirects,
+    operation = plan.get("operation", "manual_editorial_url_repair")
+    result = {"planHash": plan_hash, "operation": operation, "appliedAt": now, "redirects": redirects,
               "restored": [i for i in revisions if baseline[i]["status"] != "published"],
               "revisedPublished": [i for i in revisions if baseline[i]["status"] == "published"],
               "persistedHashes": {}, "researchRunIds": {}}
@@ -119,7 +124,7 @@ def apply(directory, validated):
                 "completeArticle": True, "unsupportedClaims": [], "citationIssues": [], "causalityRisks": [],
                 "qualityReview": qualities[i], "reviewedContentHash": article["content_hash"],
                 "semanticDeduplication": {"approved": True, "policyVersion": DEDUPE_POLICY_VERSION,
-                    "reason": "legacy_url_repair", "catalogIds": sorted(set(final) - {i}),
+                    "reason": operation, "catalogIds": sorted(set(final) - {i}),
                     "pairReviews": [p for p in pairs.values() if i in (p["a"], p["b"])]},
             }
             conn.execute(
@@ -146,7 +151,7 @@ def apply(directory, validated):
                 (agent["agent_id"], article["category_slug"], article["title"], now, now,
                  os.environ["BEDROCK_MODEL_ID"], article["summary"], i,
                  json.dumps(audit, ensure_ascii=False),
-                 json.dumps({"operation": "manual_editorial_url_repair", "legacyRepairPlan": plan_hash})),
+                 json.dumps({"operation": operation, "legacyRepairPlan": plan_hash})),
             ).fetchone()
             result["researchRunIds"][i] = run["id"]
             for e in article["evidence"]:

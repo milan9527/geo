@@ -20,6 +20,7 @@ try:
         hll_add,
         hll_merge,
         identify_visitor,
+        is_diagnostic,
     )
     from data_api import DataApiConnection
 except ImportError:
@@ -30,6 +31,7 @@ except ImportError:
         hll_add,
         hll_merge,
         identify_visitor,
+        is_diagnostic,
     )
     from backend.data_api import DataApiConnection
 
@@ -172,6 +174,8 @@ def aggregate_records(records: list[dict[str, Any]]) -> dict[tuple[str, ...], di
         user_agent = str(
             field(record, "cs(User-Agent)", "userAgent", "user_agent", default="")
         )
+        if is_diagnostic(unquote_plus(user_agent)):
+            continue
         visitor_type, agent_name = identify_visitor(user_agent)
         if path_group == "agent_api":
             visitor_type = "agent"

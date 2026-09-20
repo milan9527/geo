@@ -443,6 +443,12 @@ main { min-height: 70vh; }
 .article-byline i { width: 3px; height: 3px; background: #617984; border-radius: 50%; }
 .article-layout { width: min(1120px, calc(100% - 48px)); display: grid; grid-template-columns: minmax(0, 760px) 260px; gap: 80px; margin: 0 auto; padding: 72px 0 90px; }
 .article-content { min-width: 0; }
+.article-code { overflow-x: auto; padding: 20px; background: #152820; color: #e3eee7; border-radius: 6px; font: 12px/1.7 ui-monospace, monospace; white-space: pre; }
+.reader-follow { margin-top: 36px; padding: 24px; border: 1px solid #dfe5e2; border-radius: 8px; background: #f4f7f5; }
+.reader-follow h2 { margin: 0 0 10px; font-size: 20px; }
+.reader-follow p { color: #53655e; line-height: 1.8; }
+.reader-follow a, .reader-follow button { display: inline-block; margin: 8px 16px 0 0; color: #146b57; font: inherit; cursor: pointer; }
+.reader-follow button { border: 0; padding: 0; background: transparent; text-decoration: underline; }
 .article-summary { margin: 0 0 50px; padding: 27px 30px; color: #34413e; font-family: Georgia, "Songti SC", serif; font-size: 18px; line-height: 1.75; background: #f1f5f2; border-left: 3px solid var(--teal); }
 .article-section { margin-top: 52px; }
 .article-section:first-of-type { margin-top: 0; }

@@ -34,11 +34,13 @@ from .analytics import (
     hll_count,
     hll_merge,
     identify_visitor,
+    is_diagnostic,
 )
 from .database import USE_AURORA_DATA_API, connection, init_db, utc_now
 from .homepage import HOME_DESCRIPTION, HOME_TITLE, render_home
 from .article_redirects import REDIRECT_PROTECTION_MESSAGE, redirect_target
 from .metrics import load_metrics_rows
+from .growth import GROWTH_EVENTS, clean_metadata, growth_summary
 from .research import read_research_rows
 from .publication_protection import PUBLISHED_PROTECTION_MESSAGE, REVIEW_REQUIRED_MESSAGE
 from .seo import search_description, search_title
@@ -1490,7 +1492,8 @@ class ApiHandler(BaseHTTPRequestHandler):
     <div class="search-results" id="searchResults"></div>
   </div></div>
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
-  <script src="/app.js?v=20260904-1"></script>
+  <script src="/growth.js?v=20260920-1"></script>
+  <script src="/app.js?v=20260920-1"></script>
 </body>
 </html>"""
 
@@ -1592,7 +1595,9 @@ class ApiHandler(BaseHTTPRequestHandler):
                     )
                 )
             section_parts.append(
-                f'<section class="article-section">{number}<h2>{heading}</h2>{paragraphs}{stat}{quote_html}{table}{bullets}</section>'
+                f'<section class="article-section">{number}<h2>{heading}</h2>{paragraphs}{stat}{quote_html}{table}{bullets}'
+                + (f'<pre class="article-code"><code>{html.escape(str(section["code"]))}</code></pre>' if section.get("code") else "")
+                + '</section>'
             )
         source_items = "".join(
             '<li><a href="{url}" rel="noreferrer" target="_blank"><span>{publisher} · {kind}</span><strong>{title}</strong><small>{date}</small></a></li>'.format(
@@ -1624,7 +1629,9 @@ class ApiHandler(BaseHTTPRequestHandler):
     <div class="article-byline"><span><a href="/authors/research-desk"><b>{html.escape(str(article["author"]))}</b></a> · {html.escape(str(article["authorRole"]))}</span><i></i><time datetime="{html.escape(str(article["publishedAt"]), quote=True)}">{html.escape(str(article["publishedAt"]))}</time><i></i><span>{int(article["readMinutes"])} 分钟阅读</span></div>
   </div></header>
   <div class="article-layout">
-    <div class="article-content"><p class="article-summary">{html.escape(str(article["summary"]))}</p>{''.join(section_parts)}</div>
+    <div class="article-content"><p class="article-summary">{html.escape(str(article["summary"]))}</p>{''.join(section_parts)}
+      <div class="reader-follow"><h2>继续关注工程实践</h2><p>用 RSS 阅读器订阅新文章，或把这篇文章分享给正在解决同类问题的人。</p><a href="/feed.xml" data-rss>订阅 RSS 更新</a><button type="button" data-share-article>复制文章链接</button></div>
+    </div>
     <aside class="article-sidebar"><div class="sticky-sidebar">
       <div class="article-facts"><strong>RESEARCH PROFILE</strong><div class="fact-row"><span>内容权威度</span><b>{int(article["authorityScore"])} / 100</b></div><div class="fact-row"><span>证据来源</span><b>{len(article["sources"])} 个</b></div><div class="fact-row"><span>最后更新</span><b>{html.escape(str(article["updatedAt"]))}</b></div></div>
       <div class="machine-card"><div class="machine-card-header">AGENT-READY CONTENT</div><p>开放的结构化版本包含声明、证据来源和内容许可信息。</p><a href="/agent/v1/articles/{escaped_slug}">读取 Agent JSON</a></div>
@@ -2237,10 +2244,15 @@ The open article and JSON-LD representation may be quoted with a link and clear 
         if not target:
             return False
         location = f"{PUBLIC_BASE_URL}{prefix}{quote(target, safe='')}{suffix}"
+        query = urlparse(self.path).query
+        if query:
+            location += "?" + query
         self._text(
             "", HTTPStatus.MOVED_PERMANENTLY,
             content_type="text/plain; charset=utf-8",
-            extra_headers={"Location": location, "Cache-Control": "public, max-age=300"},
+            # The CDN omits query strings from its cache key. A cached Location
+            # would leak one campaign's parameters into another visitor's URL.
+            extra_headers={"Location": location, "Cache-Control": "private, no-store"},
         )
         return True
 
@@ -2513,7 +2525,7 @@ The open article and JSON-LD representation may be quoted with a link and clear 
             "citation",
             "machine_link_copy",
             "smoke_test",
-        }:
+        } | GROWTH_EVENTS:
             self._json(
                 {"error": "Unsupported public event type"},
                 HTTPStatus.BAD_REQUEST,
@@ -2521,11 +2533,34 @@ The open article and JSON-LD representation may be quoted with a link and clear 
             return
         slug = payload.get("articleSlug")
         visitor_type, agent_name = identify_visitor(self.headers.get("User-Agent", ""))
+        if is_diagnostic(self.headers.get("User-Agent", "")):
+            self._json({"ok": True, "ignored": True})
+            return
+        metadata = payload.get("metadata", {})
+        if event_type in GROWTH_EVENTS:
+            origin = self.headers.get("Origin", "")
+            if origin and origin != PUBLIC_BASE_URL and origin != f"http://{self.headers.get('Host', '')}":
+                self._json({"error": "Invalid event origin"}, HTTPStatus.FORBIDDEN)
+                return
+            if visitor_type != "human":
+                self._json({"ok": True, "ignored": True})
+                return
+            try:
+                metadata = clean_metadata(metadata)
+            except ValueError as error:
+                self._json({"error": str(error)}, HTTPStatus.BAD_REQUEST)
+                return
+            if event_type in {"engaged_read", "related_click"} and not slug:
+                self._json({"error": "Article required"}, HTTPStatus.BAD_REQUEST)
+                return
         with connection() as conn:
             article_id = None
             if slug:
-                row = conn.execute("SELECT id FROM articles WHERE slug = %s", (slug,)).fetchone()
+                row = conn.execute("SELECT id, status FROM articles WHERE slug = %s", (slug,)).fetchone()
                 article_id = row["id"] if row else None
+                if event_type in GROWTH_EVENTS and (not row or row["status"] != "published"):
+                    self._json({"error": "Published article required"}, HTTPStatus.BAD_REQUEST)
+                    return
             conn.execute(
                 """
                 INSERT INTO traffic_events(event_type, visitor_type, agent_name, article_id, occurred_at, metadata)
@@ -2537,7 +2572,7 @@ The open article and JSON-LD representation may be quoted with a link and clear 
                     agent_name,
                     article_id,
                     utc_now(),
-                    json.dumps(payload.get("metadata", {}), ensure_ascii=False),
+                    json.dumps(metadata, ensure_ascii=False),
                 ),
             )
         self._json({"ok": True}, HTTPStatus.CREATED)
@@ -2890,6 +2925,7 @@ The open article and JSON-LD representation may be quoted with a link and clear 
                 "growth": {key: growth(key) for key in ("human", "agent", "citations", "revenue")},
                 "daily": daily,
                 "agentSources": sources,
+                "growthFunnel": growth_summary(business_events, start, end),
                 "abTest": {
                     "variantAViews": int(current_access["variantA"]),
                     "variantBViews": int(current_access["variantB"]),
