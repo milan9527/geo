@@ -133,7 +133,8 @@ def apply(directory, validated):
                    WHERE id=%s""",
                 (article["title"], article["dek"], article["summary"], article["body_json"],
                  article["keywords"], article["read_minutes"], now, qualities[i]["score"],
-                 len(article["sources"]), i),
+                 (article.get("citation_count", 0) if operation == "manual_original_publication"
+                  else len(article["sources"])), i),
             )
             conn.execute("DELETE FROM sources WHERE article_id=%s", (i,))
             for source in article["sources"]:

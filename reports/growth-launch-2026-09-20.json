@@ -1,0 +1,157 @@
+{
+  "date": "2026-09-20",
+  "preservation": {
+    "publishedBefore": 32,
+    "publishedAfter": 35,
+    "oldUrlsAndFirstPublicationDatesPreserved": true,
+    "unchangedBodiesAndSources": 29,
+    "reviewedExpandedArticles": [
+      58,
+      117,
+      223
+    ],
+    "restored": [
+      142
+    ],
+    "newOriginals": [
+      229,
+      230
+    ],
+    "temporaryAdminRemoved": true
+  },
+  "newArticleUrls": [
+    "https://aperture.zhangwangshu.com/article/aurora-data-api-1mb-502-chunked-read",
+    "https://aperture.zhangwangshu.com/article/preserve-article-urls-301-canonical-sitemap"
+  ],
+  "legacyRepair": {
+    "redirects": {
+      "48": 58,
+      "78": 117,
+      "82": 116,
+      "92": 116,
+      "103": 116,
+      "115": 116,
+      "145": 117,
+      "54": 223
+    },
+    "restored": [
+      142
+    ],
+    "revisedPublished": [
+      58,
+      117,
+      223
+    ],
+    "planHash": "e1acd247bca8f5d522e5e9f04898e8f8a23da7f4b1ae88a7d02a2a65e0806262"
+  },
+  "originalPublication": {
+    "articleIds": [
+      229,
+      230
+    ],
+    "planHash": "1f46aef78e2498b8f38ba3ff96bc3176152cb152d2a492af19a8f226bc4a0ea7",
+    "qualityScores": {
+      "229": 95,
+      "230": 94
+    }
+  },
+  "verification": {
+    "publishedHttp200": 35,
+    "redirectCount": 19,
+    "redirectChecks": 152,
+    "sitemapArticles": 35,
+    "adminVerified": true,
+    "temporaryAdminRemoved": true,
+    "growthEventsBefore": 0,
+    "growthEventsAfter": 0,
+    "tests": {
+      "growth": 5,
+      "metrics": 5,
+      "protection": 9,
+      "seo": 7,
+      "editorial": 12
+    },
+    "browser": {
+      "events": [
+        "page_view",
+        "engaged_read",
+        "rss_click",
+        "related_click",
+        "page_view"
+      ],
+      "mobileNoOverflow": true,
+      "attributionPersistsOnNavigation": true,
+      "errors": [],
+      "funnel": {
+        "summary": {
+          "sessions": 1,
+          "returningSessions": 0,
+          "pageViews": 2,
+          "engagedReads": 1,
+          "rssClicks": 1,
+          "relatedClicks": 1
+        },
+        "channels": [
+          {
+            "source": "juejin",
+            "medium": "community",
+            "campaign": "data_api_1mb",
+            "sessions": 1,
+            "returningSessions": 0,
+            "pageViews": 2,
+            "engagedReads": 1,
+            "rssClicks": 1,
+            "relatedClicks": 1
+          }
+        ],
+        "definition": "浏览器上报的近似会话；30 分钟无活动后新建。参与阅读需前台停留 30 秒且到达正文一半。RSS 点击不等于订阅。"
+      },
+      "diagnosticExcluded": true,
+      "diagnosticPersistsOnNavigation": true
+    }
+  },
+  "indexing": {
+    "submitted": true,
+    "reason": "reviewed_case_studies_and_legacy_url_recovery",
+    "urlCount": 19,
+    "urls": [
+      "https://aperture.zhangwangshu.com/article/agent-research-20260903-0930-220",
+      "https://aperture.zhangwangshu.com/article/agent-research-20260903-2052-395",
+      "https://aperture.zhangwangshu.com/article/agent-research-20260904-0736-491",
+      "https://aperture.zhangwangshu.com/article/agent-research-20260904-1943-573",
+      "https://aperture.zhangwangshu.com/article/ai-research-20260906-0610-804",
+      "https://aperture.zhangwangshu.com/article/aurora-data-api-1mb-502-chunked-read",
+      "https://aperture.zhangwangshu.com/article/cloud-research-20260903-0906-151",
+      "https://aperture.zhangwangshu.com/article/cloud-research-20260903-0909-170",
+      "https://aperture.zhangwangshu.com/article/commerce-research-20260903-0927-212",
+      "https://aperture.zhangwangshu.com/article/commerce-research-20260905-0004-600",
+      "https://aperture.zhangwangshu.com/article/commerce-research-20260906-1204-843",
+      "https://aperture.zhangwangshu.com/article/finance-research-20260903-0907-167",
+      "https://aperture.zhangwangshu.com/article/finance-research-20260917-0212-1232",
+      "https://aperture.zhangwangshu.com/article/preserve-article-urls-301-canonical-sitemap",
+      "https://aperture.zhangwangshu.com/category/agent",
+      "https://aperture.zhangwangshu.com/category/ai",
+      "https://aperture.zhangwangshu.com/category/cloud",
+      "https://aperture.zhangwangshu.com/category/commerce",
+      "https://aperture.zhangwangshu.com/category/finance"
+    ],
+    "indexnowStatus": 200,
+    "invalidationId": "I1DS4C6LDGRZ1PV9FC4MIMN6TX"
+  },
+  "deployment": {
+    "apiTaskDefinition": 33,
+    "apiImage": "20260920085036-6a7c9cd",
+    "finalPublicAssets": {
+      "app.js": "f537e0ed09856afed4aa208035746cf509fb831760b015dce12d4876af8e9b6b",
+      "growth.js": "3d839405884523e518a5bee5fd371752de26221e7b2f5f8cad72d44de1ff75b2"
+    }
+  },
+  "distribution": {
+    "preparedDrafts": 4,
+    "externalPlatformsPublished": [],
+    "pendingAccess": [
+      "掘金/知乎发布账号",
+      "Google Search Console/Bing Webmaster搜索表现数据"
+    ]
+  }
+}

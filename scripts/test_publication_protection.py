@@ -170,7 +170,8 @@ class PublicationProtectionTests(unittest.TestCase):
                             response = client.getresponse()
                             self.assertEqual(response.status, 301)
                             self.assertEqual(response.getheader("Location"),
-                                             self.app.PUBLIC_BASE_URL + prefix + "existing" + suffix)
+                                             self.app.PUBLIC_BASE_URL + prefix + "existing" + suffix + query)
+                            self.assertIn("no-store", response.getheader("Cache-Control"))
                             self.assertEqual(response.read(), b"")
                         finally:
                             client.close()

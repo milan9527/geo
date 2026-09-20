@@ -103,5 +103,5 @@
       }).catch(() => {});
     }
   });
-  window.apertureGrowth = { startPage, stopPage };
+  window.apertureGrowth = { startPage, stopPage, disabled };
 })();

@@ -337,7 +337,7 @@ function initEvents() {
     if (link && link.origin === location.origin && !event.metaKey && !event.ctrlKey && !event.shiftKey && event.button === 0) {
       event.preventDefault();
       const destinationSlug = link.pathname.match(/^\/article\/([^/]+)/)?.[1];
-      api("/api/v1/track", {
+      if (!window.apertureGrowth?.disabled()) api("/api/v1/track", {
         method: "POST",
         keepalive: true,
         body: JSON.stringify({
@@ -355,7 +355,7 @@ function initEvents() {
     const machine = event.target.closest("[data-machine-url]");
     if (machine) {
       navigator.clipboard.writeText(machine.dataset.machineUrl).then(() => showToast("Agent API 地址已复制"));
-      api("/api/v1/track", {
+      if (!window.apertureGrowth?.disabled()) api("/api/v1/track", {
         method: "POST",
         keepalive: true,
         body: JSON.stringify({
