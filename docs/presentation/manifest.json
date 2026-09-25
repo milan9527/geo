@@ -1,0 +1,119 @@
+{
+  "title": "Aperture Intelligence \u2014 English Technical Overview",
+  "language": "en",
+  "snapshotDate": "2026-09-25",
+  "slides": [
+    {
+      "slide": 1,
+      "title": "Aperture Intelligence",
+      "screenshots": [
+        "public-home-en.png"
+      ]
+    },
+    {
+      "slide": 2,
+      "title": "One system, three useful outcomes",
+      "screenshots": []
+    },
+    {
+      "slide": 3,
+      "title": "A browsable research publication",
+      "screenshots": [
+        "public-category-en.png"
+      ]
+    },
+    {
+      "slide": 4,
+      "title": "English by default, Chinese alongside",
+      "screenshots": [
+        "public-article-en.png"
+      ]
+    },
+    {
+      "slide": 5,
+      "title": "Discovery continues inside the site",
+      "screenshots": [
+        "public-search-en.png"
+      ]
+    },
+    {
+      "slide": 6,
+      "title": "Aperture on AWS",
+      "screenshots": []
+    },
+    {
+      "slide": 7,
+      "title": "Research runs asynchronously",
+      "screenshots": []
+    },
+    {
+      "slide": 8,
+      "title": "Review before every new publication",
+      "screenshots": []
+    },
+    {
+      "slide": 9,
+      "title": "New content must not erase old URLs",
+      "screenshots": []
+    },
+    {
+      "slide": 10,
+      "title": "An English console for daily operations",
+      "screenshots": [
+        "admin-dashboard-en.png"
+      ]
+    },
+    {
+      "slide": 11,
+      "title": "Published content uses reviewed English editions",
+      "screenshots": [
+        "admin-content-en.png",
+        "admin-article-en.png"
+      ]
+    },
+    {
+      "slide": 12,
+      "title": "Sources and schedules remain inspectable",
+      "screenshots": [
+        "admin-crawlers-en.png",
+        "admin-sources-en.png"
+      ]
+    },
+    {
+      "slide": 13,
+      "title": "Agent access with x402",
+      "screenshots": []
+    },
+    {
+      "slide": 14,
+      "title": "Measure observed behavior and expose limits",
+      "screenshots": [
+        "admin-settings-en.png"
+      ]
+    },
+    {
+      "slide": 15,
+      "title": "A small application with explicit boundaries",
+      "screenshots": []
+    },
+    {
+      "slide": 16,
+      "title": "Run the application locally",
+      "screenshots": [
+        "admin-login-en.png"
+      ]
+    },
+    {
+      "slide": 17,
+      "title": "Release into an existing AWS environment",
+      "screenshots": []
+    },
+    {
+      "slide": 18,
+      "title": "Verified behavior, with evidence you can inspect",
+      "screenshots": []
+    }
+  ],
+  "sourceScreenshotManifest": "../screenshots/manifest.json",
+  "notes": "Native editable slide text; diagrams also supplied as editable draw.io. Screenshots are actual UI captures."
+}

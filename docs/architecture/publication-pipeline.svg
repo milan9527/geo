@@ -1,0 +1,48 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="760" viewBox="0 0 1440 760">
+<defs><marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth"><path d="M0,0 L0,6 L9,3 z" fill="#56697A"/></marker></defs>
+<rect x="0" y="0" width="1440" height="760" rx="0" fill="#F4F7F9" stroke="#F4F7F9" stroke-width="1.5"/>
+<text fill="#152A36" font-family="Arial, sans-serif" font-size="34" font-weight="700" text-anchor="start"><tspan x="48" y="64.0">Review before every new publication</tspan></text>
+<text fill="#56697A" font-family="Arial, sans-serif" font-size="20" font-weight="400" text-anchor="start"><tspan x="48" y="106.0">Scheduled runs and manual reviews share the same publication safeguards</tspan></text>
+<rect x="48" y="205" width="210" height="145" rx="12" fill="#FFFFFF" stroke="#D9E2E8" stroke-width="1.5"/>
+<rect x="48" y="221" width="5" height="113" rx="0" fill="#2478B8" stroke="#2478B8" stroke-width="1.5"/>
+<text fill="#152A36" font-family="Arial, sans-serif" font-size="21" font-weight="700" text-anchor="start"><tspan x="68" y="242.0">01  Evidence</tspan></text>
+<text fill="#56697A" font-family="Arial, sans-serif" font-size="19" font-weight="400" text-anchor="start"><tspan x="68" y="274.25">Registered sources</tspan><tspan x="68" y="298.0">Archived excerpts</tspan></text>
+<polyline points="258,278 274,278" fill="none" stroke="#56697A" stroke-width="2" marker-end="url(#arrow)"/>
+<rect x="274" y="205" width="210" height="145" rx="12" fill="#FFFFFF" stroke="#D9E2E8" stroke-width="1.5"/>
+<rect x="274" y="221" width="5" height="113" rx="0" fill="#7760C0" stroke="#7760C0" stroke-width="1.5"/>
+<text fill="#152A36" font-family="Arial, sans-serif" font-size="21" font-weight="700" text-anchor="start"><tspan x="294" y="242.0">02  Draft</tspan></text>
+<text fill="#56697A" font-family="Arial, sans-serif" font-size="19" font-weight="400" text-anchor="start"><tspan x="294" y="274.25">Generate research</tspan><tspan x="294" y="298.0">Revise as needed</tspan></text>
+<polyline points="484,278 500,278" fill="none" stroke="#56697A" stroke-width="2" marker-end="url(#arrow)"/>
+<rect x="500" y="205" width="210" height="145" rx="12" fill="#FFFFFF" stroke="#D9E2E8" stroke-width="1.5"/>
+<rect x="500" y="221" width="5" height="113" rx="0" fill="#0E9384" stroke="#0E9384" stroke-width="1.5"/>
+<text fill="#152A36" font-family="Arial, sans-serif" font-size="21" font-weight="700" text-anchor="start"><tspan x="520" y="242.0">03  Quality</tspan></text>
+<text fill="#56697A" font-family="Arial, sans-serif" font-size="19" font-weight="400" text-anchor="start"><tspan x="520" y="274.25">Facts + citations</tspan><tspan x="520" y="298.0">Independent audit</tspan></text>
+<polyline points="710,278 726,278" fill="none" stroke="#56697A" stroke-width="2" marker-end="url(#arrow)"/>
+<rect x="726" y="205" width="210" height="145" rx="12" fill="#FFFFFF" stroke="#D9E2E8" stroke-width="1.5"/>
+<rect x="726" y="221" width="5" height="113" rx="0" fill="#0E9384" stroke="#0E9384" stroke-width="1.5"/>
+<text fill="#152A36" font-family="Arial, sans-serif" font-size="21" font-weight="700" text-anchor="start"><tspan x="746" y="242.0">04  Deduplicate</tspan></text>
+<text fill="#56697A" font-family="Arial, sans-serif" font-size="19" font-weight="400" text-anchor="start"><tspan x="746" y="274.25">Full public corpus</tspan><tspan x="746" y="298.0">Core overlap</tspan></text>
+<polyline points="936,278 952,278" fill="none" stroke="#56697A" stroke-width="2" marker-end="url(#arrow)"/>
+<rect x="952" y="205" width="210" height="145" rx="12" fill="#FFFFFF" stroke="#D9E2E8" stroke-width="1.5"/>
+<rect x="952" y="221" width="5" height="113" rx="0" fill="#0E9384" stroke="#0E9384" stroke-width="1.5"/>
+<text fill="#152A36" font-family="Arial, sans-serif" font-size="21" font-weight="700" text-anchor="start"><tspan x="972" y="242.0">05  English</tspan></text>
+<text fill="#56697A" font-family="Arial, sans-serif" font-size="19" font-weight="400" text-anchor="start"><tspan x="972" y="274.25">Full translation</tspan><tspan x="972" y="298.0">Separate review</tspan></text>
+<polyline points="1162,278 1178,278" fill="none" stroke="#56697A" stroke-width="2" marker-end="url(#arrow)"/>
+<rect x="1178" y="205" width="210" height="145" rx="12" fill="#FFFFFF" stroke="#D9E2E8" stroke-width="1.5"/>
+<rect x="1178" y="221" width="5" height="113" rx="0" fill="#2478B8" stroke="#2478B8" stroke-width="1.5"/>
+<text fill="#152A36" font-family="Arial, sans-serif" font-size="21" font-weight="700" text-anchor="start"><tspan x="1198" y="242.0">06  Commit</tspan></text>
+<text fill="#56697A" font-family="Arial, sans-serif" font-size="19" font-weight="400" text-anchor="start"><tspan x="1198" y="274.25">Recheck versions</tspan><tspan x="1198" y="298.0">Database guards</tspan></text>
+<rect x="48" y="490" width="600" height="150" rx="12" fill="#FFFFFF" stroke="#D9E2E8" stroke-width="1.5"/>
+<rect x="48" y="506" width="5" height="118" rx="0" fill="#B74444" stroke="#B74444" stroke-width="1.5"/>
+<text fill="#152A36" font-family="Arial, sans-serif" font-size="24" font-weight="700" text-anchor="start"><tspan x="68" y="530.0">Keep under review</tspan></text>
+<text fill="#56697A" font-family="Arial, sans-serif" font-size="19" font-weight="400" text-anchor="start"><tspan x="68" y="563.0">Insufficient evidence, duplicate content, uncertain results,</tspan><tspan x="68" y="586.75">failed translation, or changed inputs block publication.</tspan></text>
+<polyline points="605,350 605,410 347,410 347,490" fill="none" stroke="#56697A" stroke-width="2" marker-end="url(#arrow)"/>
+<polyline points="831,350 831,435 430,435 430,490" fill="none" stroke="#56697A" stroke-width="2" marker-end="url(#arrow)"/>
+<polyline points="1057,350 1057,460 510,460 510,490" fill="none" stroke="#56697A" stroke-width="2" marker-end="url(#arrow)"/>
+<rect x="780" y="490" width="608" height="150" rx="12" fill="#FFFFFF" stroke="#D9E2E8" stroke-width="1.5"/>
+<rect x="780" y="506" width="5" height="118" rx="0" fill="#0E9384" stroke="#0E9384" stroke-width="1.5"/>
+<text fill="#152A36" font-family="Arial, sans-serif" font-size="24" font-weight="700" text-anchor="start"><tspan x="800" y="530.0">Publish both editions</tspan></text>
+<text fill="#56697A" font-family="Arial, sans-serif" font-size="19" font-weight="400" text-anchor="start"><tspan x="800" y="563.0">English: /article/{slug}     Chinese: /zh/article/{slug}</tspan><tspan x="800" y="586.75">Refresh discovery files and notify IndexNow.</tspan></text>
+<polyline points="1283,350 1283,490" fill="none" stroke="#56697A" stroke-width="2" marker-end="url(#arrow)"/>
+<text fill="#56697A" font-family="Arial, sans-serif" font-size="21" font-weight="400" text-anchor="start"><tspan x="48" y="709.0">Existing published URLs remain protected. New content cannot replace or unpublish an older page.</tspan></text>
+</svg>

@@ -1,0 +1,67 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="850" viewBox="0 0 1440 850">
+<defs><marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth"><path d="M0,0 L0,6 L9,3 z" fill="#56697A"/></marker></defs>
+<rect x="0" y="0" width="1440" height="850" rx="0" fill="#F4F7F9" stroke="#F4F7F9" stroke-width="1.5"/>
+<text fill="#152A36" font-family="Arial, sans-serif" font-size="34" font-weight="700" text-anchor="start"><tspan x="48" y="64.0">Aperture on AWS</tspan></text>
+<text fill="#56697A" font-family="Arial, sans-serif" font-size="20" font-weight="400" text-anchor="start"><tspan x="48" y="106.0">Scheduled research, reviewed bilingual publication, and public delivery</tspan></text>
+<text fill="#0E9384" font-family="Arial, sans-serif" font-size="18" font-weight="700" text-anchor="start"><tspan x="48" y="153.0">RESEARCH &amp; PUBLICATION</tspan></text>
+<rect x="48" y="185" width="220" height="140" rx="12" fill="#FFFFFF" stroke="#D9E2E8" stroke-width="1.5"/>
+<rect x="48" y="201" width="5" height="108" rx="0" fill="#C96917" stroke="#C96917" stroke-width="1.5"/>
+<text fill="#152A36" font-family="Arial, sans-serif" font-size="22" font-weight="700" text-anchor="start"><tspan x="68" y="223.0">EventBridge</tspan><tspan x="68" y="250.5">Scheduler</tspan></text>
+<text fill="#56697A" font-family="Arial, sans-serif" font-size="19" font-weight="400" text-anchor="start"><tspan x="68" y="283.0">UTC schedules</tspan></text>
+<rect x="306" y="185" width="170" height="140" rx="12" fill="#FFFFFF" stroke="#D9E2E8" stroke-width="1.5"/>
+<rect x="306" y="201" width="5" height="108" rx="0" fill="#C96917" stroke="#C96917" stroke-width="1.5"/>
+<text fill="#152A36" font-family="Arial, sans-serif" font-size="22" font-weight="700" text-anchor="start"><tspan x="326" y="223.0">Lambda</tspan><tspan x="326" y="250.5">bridge</tspan></text>
+<text fill="#56697A" font-family="Arial, sans-serif" font-size="19" font-weight="400" text-anchor="start"><tspan x="326" y="283.0">Async dispatch</tspan></text>
+<rect x="514" y="165" width="325" height="180" rx="12" fill="#FFFFFF" stroke="#D9E2E8" stroke-width="1.5"/>
+<rect x="514" y="181" width="5" height="148" rx="0" fill="#7760C0" stroke="#7760C0" stroke-width="1.5"/>
+<text fill="#152A36" font-family="Arial, sans-serif" font-size="22" font-weight="700" text-anchor="start"><tspan x="534" y="203.0">AgentCore Runtime</tspan></text>
+<text fill="#56697A" font-family="Arial, sans-serif" font-size="19" font-weight="400" text-anchor="start"><tspan x="534" y="235.5">Codex SDK + Bedrock</tspan><tspan x="534" y="259.25">Browser + Code Interpreter</tspan><tspan x="534" y="283.0">Evidence collection</tspan></text>
+<rect x="877" y="185" width="225" height="140" rx="12" fill="#FFFFFF" stroke="#D9E2E8" stroke-width="1.5"/>
+<rect x="877" y="201" width="5" height="108" rx="0" fill="#0E9384" stroke="#0E9384" stroke-width="1.5"/>
+<text fill="#152A36" font-family="Arial, sans-serif" font-size="20" font-weight="700" text-anchor="start"><tspan x="897" y="221.0">Review + publish</tspan></text>
+<text fill="#56697A" font-family="Arial, sans-serif" font-size="19" font-weight="400" text-anchor="start"><tspan x="897" y="253.0">Quality + dedup</tspan><tspan x="897" y="276.75">English review</tspan></text>
+<rect x="1155" y="360" width="237" height="175" rx="12" fill="#FFFFFF" stroke="#D9E2E8" stroke-width="1.5"/>
+<rect x="1155" y="376" width="5" height="143" rx="0" fill="#2478B8" stroke="#2478B8" stroke-width="1.5"/>
+<text fill="#152A36" font-family="Arial, sans-serif" font-size="22" font-weight="700" text-anchor="start"><tspan x="1175" y="398.0">Aurora</tspan><tspan x="1175" y="425.5">PostgreSQL</tspan></text>
+<text fill="#56697A" font-family="Arial, sans-serif" font-size="19" font-weight="400" text-anchor="start"><tspan x="1175" y="458.0">Data API</tspan><tspan x="1175" y="481.75">Content + operations</tspan></text>
+<polyline points="268,255 306,255" fill="none" stroke="#56697A" stroke-width="2" marker-end="url(#arrow)"/>
+<polyline points="476,255 514,255" fill="none" stroke="#56697A" stroke-width="2" marker-end="url(#arrow)"/>
+<polyline points="839,255 877,255" fill="none" stroke="#56697A" stroke-width="2" marker-end="url(#arrow)"/>
+<polyline points="1102,255 1273,255 1273,360" fill="none" stroke="#56697A" stroke-width="2" marker-end="url(#arrow)"/>
+<text fill="#0E9384" font-family="Arial, sans-serif" font-size="18" font-weight="700" text-anchor="start"><tspan x="48" y="380.0">SERVING &amp; DISCOVERY</tspan></text>
+<rect x="48" y="415" width="220" height="125" rx="12" fill="#FFFFFF" stroke="#D9E2E8" stroke-width="1.5"/>
+<rect x="48" y="431" width="5" height="93" rx="0" fill="#0E9384" stroke="#0E9384" stroke-width="1.5"/>
+<text fill="#152A36" font-family="Arial, sans-serif" font-size="21" font-weight="700" text-anchor="start"><tspan x="68" y="452.0">Readers &amp; agents</tspan></text>
+<text fill="#56697A" font-family="Arial, sans-serif" font-size="19" font-weight="400" text-anchor="start"><tspan x="68" y="484.25">English + Chinese</tspan></text>
+<rect x="306" y="415" width="200" height="125" rx="12" fill="#FFFFFF" stroke="#D9E2E8" stroke-width="1.5"/>
+<rect x="306" y="431" width="5" height="93" rx="0" fill="#7760C0" stroke="#7760C0" stroke-width="1.5"/>
+<text fill="#152A36" font-family="Arial, sans-serif" font-size="22" font-weight="700" text-anchor="start"><tspan x="326" y="453.0">CloudFront</tspan></text>
+<text fill="#56697A" font-family="Arial, sans-serif" font-size="19" font-weight="400" text-anchor="start"><tspan x="326" y="485.5">Public + admin</tspan></text>
+<rect x="544" y="415" width="305" height="125" rx="12" fill="#FFFFFF" stroke="#D9E2E8" stroke-width="1.5"/>
+<rect x="544" y="431" width="5" height="93" rx="0" fill="#C96917" stroke="#C96917" stroke-width="1.5"/>
+<text fill="#152A36" font-family="Arial, sans-serif" font-size="22" font-weight="700" text-anchor="start"><tspan x="564" y="453.0">ALB + ECS Fargate</tspan></text>
+<text fill="#56697A" font-family="Arial, sans-serif" font-size="19" font-weight="400" text-anchor="start"><tspan x="564" y="485.5">Python SSR + JSON APIs</tspan><tspan x="564" y="509.25">Authentication + x402</tspan></text>
+<polyline points="268,477 306,477" fill="none" stroke="#56697A" stroke-width="2" marker-end="url(#arrow)"/>
+<polyline points="506,477 544,477" fill="none" stroke="#56697A" stroke-width="2" marker-end="url(#arrow)"/>
+<polyline points="849,477 1155,477" fill="none" stroke="#56697A" stroke-width="2" marker-end="url(#arrow)"/>
+<text fill="#56697A" font-family="Arial, sans-serif" font-size="18" font-weight="400" text-anchor="start"><tspan x="914" y="457.0">Database access</tspan></text>
+<rect x="306" y="640" width="200" height="125" rx="12" fill="#FFFFFF" stroke="#D9E2E8" stroke-width="1.5"/>
+<rect x="306" y="656" width="5" height="93" rx="0" fill="#2478B8" stroke="#2478B8" stroke-width="1.5"/>
+<text fill="#152A36" font-family="Arial, sans-serif" font-size="22" font-weight="700" text-anchor="start"><tspan x="326" y="678.0">Private S3</tspan></text>
+<text fill="#56697A" font-family="Arial, sans-serif" font-size="19" font-weight="400" text-anchor="start"><tspan x="326" y="710.5">Two frontend</tspan><tspan x="326" y="734.25">buckets</tspan></text>
+<rect x="544" y="640" width="295" height="135" rx="12" fill="#FFFFFF" stroke="#D9E2E8" stroke-width="1.5"/>
+<rect x="544" y="656" width="5" height="103" rx="0" fill="#2478B8" stroke="#2478B8" stroke-width="1.5"/>
+<text fill="#152A36" font-family="Arial, sans-serif" font-size="22" font-weight="700" text-anchor="start"><tspan x="564" y="678.0">Traffic pipeline</tspan></text>
+<text fill="#56697A" font-family="Arial, sans-serif" font-size="19" font-weight="400" text-anchor="start"><tspan x="564" y="710.5">Edge logs / S3 / SQS</tspan><tspan x="564" y="734.25">Lambda aggregation</tspan></text>
+<rect x="910" y="640" width="260" height="135" rx="12" fill="#FFFFFF" stroke="#D9E2E8" stroke-width="1.5"/>
+<rect x="910" y="656" width="5" height="103" rx="0" fill="#0E9384" stroke="#0E9384" stroke-width="1.5"/>
+<text fill="#152A36" font-family="Arial, sans-serif" font-size="22" font-weight="700" text-anchor="start"><tspan x="930" y="678.0">Indexing Lambda</tspan></text>
+<text fill="#56697A" font-family="Arial, sans-serif" font-size="19" font-weight="400" text-anchor="start"><tspan x="930" y="710.5">Cache invalidation</tspan><tspan x="930" y="734.25">Bilingual IndexNow</tspan></text>
+<polyline points="400,540 400,640" fill="none" stroke="#56697A" stroke-width="2" marker-end="url(#arrow)"/>
+<text fill="#56697A" font-family="Arial, sans-serif" font-size="17" font-weight="400" text-anchor="start"><tspan x="308" y="605.0">Assets</tspan></text>
+<polyline points="470,540 470,590 690,590 690,640" fill="none" stroke="#56697A" stroke-width="2" marker-end="url(#arrow)"/>
+<polyline points="839,690 873,690 873,575 1210,575 1210,535" fill="none" stroke="#56697A" stroke-width="2" marker-end="url(#arrow)"/>
+<polyline points="990,325 990,350 1420,350 1420,707 1170,707" fill="none" stroke="#56697A" stroke-width="2" marker-end="url(#arrow)"/>
+<text fill="#56697A" font-family="Arial, sans-serif" font-size="18" font-weight="400" text-anchor="start"><tspan x="1183" y="633.0">After</tspan><tspan x="1183" y="655.5">publication</tspan></text>
+<text fill="#56697A" font-family="Arial, sans-serif" font-size="18" font-weight="400" text-anchor="start"><tspan x="48" y="821.0">Public research stays accessible. x402 demonstrates Base Sepolia testnet USDC payments.</tspan></text>
+</svg>

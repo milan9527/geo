@@ -1,40 +1,17 @@
-# 已发布页面保护与新稿审核
+# Published-page protection and review of new articles
 
-按最新要求，保留现有正常发布页面。新稿在发布前完成证据审核与全文去重，
-已发布页面不再因数量控制、后续审核或重复判断而删除、下架。
+Dated snapshot: **2026-09-10**. This English summary was rewritten from the historical report; later releases may supersede its state.
 
-本次核对时共17篇公开文章。原有15篇继续公开；定时任务另有两篇待审核稿通过复核后发布：
+The new policy preserves existing published pages. Future quality or duplicate checks cannot routinely delete, withdraw or rename them. Corrections can be made at the original URL with the required review.
 
-| 文章ID | 审核分数 | 全文比对范围 | 结果 |
-| --- | ---: | ---: | --- |
-| 210 | 99 | 当时全部15篇已发布文章 | 自动发布 |
-| 202 | 98 | 当时全部16篇已发布文章 | 自动发布 |
+Database guards enforce this across the admin API, scheduled jobs and maintenance scripts. Direct publish/bulk-publish controls were removed; APIs reject status changes that bypass review. Existing URLs take precedence over a newer duplicate even when the candidate has a higher score or more background. The old per-category-count withdrawal script was disabled, and old batch plans must be regenerated under `2026-09-10-preserve-published`.
 
-部署前快照中的全部16篇文章，其发布状态、网址及正文内容指纹在保护启用后保持不变。
+At verification there were seventeen public articles: the original fifteen plus two newly approved scheduled drafts. All sixteen articles in the deployment snapshot retained their status, URL and content fingerprints.
 
-实施规则：
+Twelve batch-review tests, six protection/admin HTTP tests and thirteen scheduled-publication tests passed. Browser checks passed, and all 28 sitemap URLs passed 84 desktop/mobile Googlebot and Bingbot requests. The sitemap's seventeen articles matched the database.
 
-- 数据库阻止删除已发布文章、将其改为草稿或待审核，以及修改其网址。
-  这项保护同时覆盖后台、定时任务和维护脚本；内容纠错可在原网址进行。
-- 后台移除“立即发布”和“批量发布”入口，API也拒绝绕过审核直接修改发布状态。
-  选中已发布文章时，删除和退回审核按钮不可用。
-- 新稿继续通过质量审核及与全部已发布文章的逐对全文比对，重复、不确定或证据不充分的稿件不发布。
-- 批量审核以已有公开网址为优先。即使新稿分数更高或覆盖更多内容，也不会取代旧网址、再发布一篇重复稿。
-- 后续复核可以记录旧文问题，但保持其发布状态。已发布文章仍纳入新稿的完整去重范围。
-- 按“每类固定篇数”下架文章的旧脚本已禁用。旧版发布计划须按
-  `2026-09-10-preserve-published` 规则重新生成后才能应用。
+Evidence: [database protection](publication-protection-2026-09-10.json), [admin browser](publication-protection-admin-2026-09-10.json), [admin deployment](publication-protection-admin-deployment-2026-09-10.json), [search checks](search-audit-after-publication-protection-2026-09-10.json).
 
-验证结果：
+[Structured evidence](publication-protection-2026-09-10.json).
 
-- 12项批量审核/去重测试、6项发布保护与后台HTTP测试通过。
-- 13项定时发布测试在启用数据库保护后通过，包含合格发布、重复拦截、并发发布和内容变化检查。
-- 后台浏览器验证通过，线上HTML、JavaScript与测试文件校验一致。
-- 28个站点地图页面、84次Googlebot桌面/智能手机版及Bingbot检查全部通过，
-  站点地图中的17篇文章与数据库公开集合一致。
-
-详细证据：
-
-- [发布状态、内容指纹与数据库保护](publication-protection-2026-09-10.json)
-- [后台浏览器检查](publication-protection-admin-2026-09-10.json)
-- [后台部署校验](publication-protection-admin-deployment-2026-09-10.json)
-- [全站搜索检查](search-audit-after-publication-protection-2026-09-10.json)
+[Original reference in Git history](https://github.com/milan9527/geo/blob/a2de0e830f363177b0138409d93aebc512de4237/reports/publication-protection-2026-09-10.md) · [Report index](README.md)

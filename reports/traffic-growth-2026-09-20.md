@@ -1,118 +1,15 @@
-# 流量诊断与两周引流计划 · 2026-09-20
+# Traffic diagnosis and two-week growth plan
 
-本次按“增加真人技术读者”评估。网站具备正常访问、抓取和发布的基础，但观察到的读者访问很少，尚未看到稳定的站外导流。优先投入可复现的原创案例、相关社区传播与渠道统计。
+Dated snapshot: **2026-09-20**. This English summary was rewritten from the historical report; later releases may supersede its state.
 
-这是一次只读线上检查及本地报告整理。本次没有调整发布规则、修改线上文章、恢复旧页面或向外站发帖。下面的执行计划均为待办。
+This read-only inspection found a small observed reader base and no stable attributable referral channel. All 32 public articles and discovery files were accessible; categories linked to the full catalogue, and eleven existing redirects still worked. During September 13–19, 38 of 42 scheduled tasks completed. Publication had grown from 24 to 32 articles, so the system was not generally stopped.
 
-## 已确认的情况
+The audit read 116 processed CloudFront log objects containing 336 records. For September 15–19, after diagnostic and bot filtering, it identified four browser-like successful content requests and 54 Google/Bing requests verified against official IP ranges. Browser-like requests are not identity-confirmed people. Of those crawler requests, 45 targeted home/discovery files; nine targeted article/Agent routes, with two 200s, one 301 and six 404s.
 
-检查时间为 2026-09-20 UTC。最近完整一周按 9 月 13—19 日统计；另列出 9 月 15—19 日，以避开 9 月 14 日修复验证造成的大量测试请求。
+No external Referer domain or effective promotion campaign was observed in this sample. Missing referrers do not prove zero search clicks. Earlier peaks contained many diagnostic requests. No authorized Search Console/Bing performance data was available, so indexed totals, impressions, rankings and penalties could not be inferred.
 
-| 检查项 | 结果 | 含义 |
-| --- | --- | --- |
-| 当前公开文章 | 32 篇，全部 HTTP 200，单个 H1、自指 canonical、无 noindex | 当前公开文章可以访问和抓取；不代表全部已收录 |
-| 发现入口 | 首页、robots、两个 sitemap、RSS 正常；文章 sitemap 含全部 32 篇 | 未发现当前文章漏入 sitemap |
-| 站内链接 | 首页链接最近 30 篇，5 个非空分类合计覆盖全部 32 篇 | 当前文章都有分类入口 |
-| 既有旧网址修复 | 11 个永久重定向仍返回 301 | 上次建立的映射仍然有效 |
-| 自动采集 | 9 月 13—19 日运行 42 次，38 次完成、4 次失败 | 自动流程仍在运行，但有个别任务故障 |
-| 公开文章增长 | 从 9 月 14 日的 24 篇增至 32 篇 | 审核合格的内容继续发布；其中包含旧草稿获批 |
-| 统计管道 | 已汇总至 9 月 20 日 08:00 UTC，日志队列及死信队列为空 | 没有发现统计堆积 |
+The proposed plan prioritized repairing nine additional legacy addresses, publishing reproducible Data API and permanent-URL case studies, adding reader/channel measurement and sharing useful answers in relevant technical communities. Content usefulness was a hypothesis to test, not a confirmed search-engine judgment. Backlink advisories alone did not explain all low traffic.
 
-### 最近的访问构成
+The later [implementation report](growth-launch-2026-09-20.md) records which actions actually shipped. External drafts and review dates are a plan, not evidence of posts or scheduled reminders. Preserve existing pages and retain review/deduplication gates throughout growth work.
 
-读取了 116 个已处理的 CloudFront 日志对象，共 336 条原始记录。下面只统计网站内容及发现入口相关的 GET 请求。排除已识别的测试、脚本和机器人后，再用浏览器 User-Agent、HTML 路径及成功状态筛选“浏览器特征页面访问”。它仍是近似指标，不能当作已确认的真人 UV。
-
-Google、Bing 身份同时使用官方公布的 IP 范围验证，未仅凭 User-Agent 判断。
-
-| UTC 日期 | 浏览器特征的成功页面请求 | 已验证 Google/Bing 请求 |
-| --- | ---: | ---: |
-| 9 月 15 日 | 3 | 9 |
-| 9 月 16 日 | 0 | 9 |
-| 9 月 17 日 | 1 | 15 |
-| 9 月 18 日 | 0 | 10 |
-| 9 月 19 日 | 0 | 11 |
-| 合计 | **4** | **54** |
-
-这 54 次搜索爬虫请求中，45 次访问首页或发现文件；另外 9 次访问文章或 Agent 内容地址，结果为 2 次 200、1 次 301、6 次 404。搜索引擎仍在发现本站，但文章抓取量很小。
-
-本次读取的日志没有记录到外部 Referer 域名，仅有缺失来源或站内来源。不能据此断言搜索点击绝对为零，因为浏览器及应用可能不传来源。唯一发现的 UTM 是此前自测使用的 `legacy-verification`，没有看到可归因的推广活动。
-
-9 月 14 日的 98 次相关请求中，65 次是已识别的诊断请求。因此，之前较高的请求数不能直接视为读者高峰。后台现有“human”分类主要排除已知机器人，一些 curl 和诊断脚本仍可能被计入，需要与真实读者指标区分。
-
-本次没有 Google Search Console、Bing Webmaster 的已授权搜索表现数据，不能确认已收录篇数、搜索展示量、点击量、排名变化或受到搜索处罚。
-
-## 为什么流量少
-
-1. **尚未形成稳定的读者来源。** 日志没有观察到明确的外站导流，也没有有效推广活动的渠道标记。持续发文目前没有形成可观察的传播渠道。
-2. **内容对具体问题的帮助需要增强。** 抽查文章 201、223、226、227、228，多为发布记录汇总、条件性判断及未来验证建议。对搜索某个具体报错、选型条件或实现方法的读者，实测过程、数据和复现步骤更值得尝试。这是内容改进假设，并非已证实的搜索引擎质量判定。
-3. **还存在未处理的历史地址。** 爬虫仍在请求此前批次之外的旧地址并收到 404。这会损失这些入口的可用性，但不能据此解释全部低流量。
-4. **先前统计包含测试活动。** 部分“下降”是诊断请求减少；目前没有足够证据证明曾有一批稳定读者随后流失。
-
-Bing 的“缺少高质量域名外链”提示只能说明其外链报告中的不足，不能证明它是低流量的唯一原因。GitHub README 与仓库 Website 已有本站链接，检查时带有 `nofollow`；这些链接可供访问，但不能保证排名提升。更新 sitemap 或重复提交网址也不会自动产生独立网站的引用。
-
-## 两周执行安排
-
-保留当前正常发布及永久链接保护，继续全库去重和质量审核。新原创内容也必须通过相同审核。
-
-| 时间 | 具体动作 | 验收方式 |
-| --- | --- | --- |
-| 第 1—2 天 | 处理下表中的旧网址；取得 Google/Bing 最近 28 天按页面、查询词划分的展示和点击数据；建立测试请求过滤与渠道记录 | 旧网址逐一确认恢复或相关 301；建立可比较的流量基线 |
-| 第 3—5 天 | 完成并审核第一篇 Data API 502 实测案例，包含复现材料、修复方案、限制及验证结果 | 读者能用给出的步骤重现问题；文章 200、自指 canonical、进入 sitemap |
-| 第 6—7 天 | 在掘金发布有完整技术内容的改编稿，在相关知乎问题或工程社区提供一次具体解答；附相关原文链接 | 每个渠道使用不同 UTM；核对实际到站访问和读者问题 |
-| 第 8—10 天 | 根据反馈完成第二篇案例；在文章末尾增加相关实践文章和 RSS 入口，并记录点击 | 有真实读者可继续阅读的路径；事件采集经验证后再计入报表 |
-| 第 11—14 天 | 继续 2—4 次与主题相关的分享或答疑；有充分材料时完成第三篇；复盘渠道与查询词 | 比较各渠道浏览器访问、参与阅读、返回访问和反馈，决定下一轮投入 |
-
-外站发布与联系他人需要用户明确授权。本次未执行这些动作。两周用于验证内容和渠道，不承诺收录时间或访客数量。
-
-### 三篇优先选题
-
-| 拟定标题 | 读者问题 | 本站已有的一手材料 |
-| --- | --- | --- |
-| Aurora Data API 超过 1 MB 导致后台 502：复现与分块读取修复 | 登录成功后后台数据为何加载失败，分页为何仍可能超限 | [实际修复记录](admin-data-load-2026-09-14.md)：查询 JSON 为 1,094,895 字节；分块读取、只读快照、4 项回归测试及浏览器验证 |
-| 旧文章网址如何保留：301、canonical 与 sitemap 实战 | 去重后如何保留已被搜索引擎发现的入口 | [旧网址修复记录](legacy-url-repair-2026-09-14.md)：13 个地址的审核、11 个映射及 2 篇恢复；需要明确区分本次新发现的待办 |
-| 自动发布如何避免重复文章：全库比较、复核与永久链接保护 | 如何让定时任务发布新内容，同时保护旧页面 | 实际审核流水线、去重记录及页面保护机制；挑选可公开的案例演示 |
-
-这些是基于现有材料的选题，尚未验证关键词搜索量。先面向 Agent、云工程开发者建立明确用途。每篇都要有具体问题、证据、步骤和适用边界；不把建议做的实验写成已经完成的实验。
-
-第一篇的社区介绍可围绕这个事实展开：
-
-> 后台登录正常，研究列表却返回 502。排查发现，最近 20 条记录的查询 JSON 已超过 Aurora Data API 的 1 MB 限制。我们保留完整审核记录，用分块读取和一致性快照修复，并验证了单条超大记录、中文及并发读取。文章给出问题复现、代码位置与测试结果。
-
-此文案是待发布文章的介绍草稿，应在正文完成并获批后使用。关联数据是本站当时的测量值，不是对其他部署性能的承诺。
-
-### 渠道和衡量方法
-
-起步使用一个技术内容平台和一个相关问答或工程社区即可。分享应围绕读者正在解决的问题展开，引用对应原文。高质量外链来自独立作者对可用资料的引用，避免购买链接或批量灌水。
-
-文章发布后，为不同来源添加参数，例如：
-
-```text
-?utm_source=juejin&utm_medium=community&utm_campaign=data_api_1mb
-?utm_source=zhihu&utm_medium=answer&utm_campaign=data_api_1mb
-```
-
-保留不含推广参数的规范网址。当前日志可以记录查询参数，但后台尚未提供完整的推广活动、阅读参与度和订阅归因报表；实施并验证事件统计后才能报告这些指标。RSS 点击可作为兴趣信号，不能等同于成功订阅。
-
-复盘时按顺序判断：有无到站访问；有无继续阅读或具体反馈；是否出现返回访问；搜索展示及点击是否变化。没有展示时，结合收录状态、查询需求和页面内容排查；有展示没点击时，查看实际排名、查询词与标题匹配；有访问但没有后续行为时，检查正文是否兑现标题承诺。
-
-## 技术待办清单
-
-以下 9 个历史 slug 当前对应数据库中的 `review` 内容，公开文章地址仍返回 404。它们不属于上次已验证正常的 11 个永久映射。日志不能单独确定每个地址过去首次发布及撤回的时间；本次没有删除任何页面。
-
-| 文章 ID | 历史 slug | 本次观察 |
-| --- | --- | --- |
-| 48 | `cloud-research-20260903-0906-151` | 9 月 17 日 Bing 请求文章地址 404 |
-| 54 | `finance-research-20260903-0907-167` | 9 月 17 日 Bing 请求文章地址 404 |
-| 82 | `agent-research-20260903-0930-220` | 9 月 17 日 Bing 请求 Agent 地址 404 |
-| 92 | `agent-research-20260903-2052-395` | 9 月 17 日 Bing 请求 Agent 地址 404 |
-| 115 | `agent-research-20260904-1943-573` | 9 月 18 日 Bing 请求 Agent 地址 404 |
-| 145 | `commerce-research-20260906-1204-843` | 9 月 17 日 Bing 请求文章地址 404 |
-| 142 | `ai-research-20260906-0610-804` | 9 月 20 日部分日志中 Bing 请求文章地址 404 |
-| 103 | `agent-research-20260904-0736-491` | 其他客户端请求文章地址 404 |
-| 78 | `commerce-research-20260903-0927-212` | 其他客户端多次请求付费 Agent 地址 404 |
-
-处理时逐篇核对原内容及发布历史：独立且合格的文章恢复原址；实质重复且有对应内容时建立准确 301，覆盖相应 HTML/API 入口；不能为消除 404 一律跳转首页，也不能直接发布未审核内容。付费接口还需独立核对访问及产品语义。
-
-另外，最近一周 4 次采集失败中，3 次为 `market-signal` 的上游模型返回不存在，1 次为 `render-scout` 页面导航使浏览器执行上下文失效。应维护这些任务，但近期 38 次任务成功及公开文章增长说明自动发布整体仍在工作。
-
-检查依据保存在本地 `.review-runs/2026-09-20-growth/`，包括日志聚合、页面检查、任务及发布状态快照。报告和聚合结果不包含原始访客 IP 或凭据。
+[Original reference in Git history](https://github.com/milan9527/geo/blob/a2de0e830f363177b0138409d93aebc512de4237/reports/traffic-growth-2026-09-20.md) · [Report index](README.md)

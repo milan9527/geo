@@ -1,71 +1,15 @@
-# 近期流量检查（2026-09-14）
+# Traffic review and historical 404s
 
-检查基准：2026-09-14 02:52 UTC 的数据库快照，随后核对日志及页面。9 月 14 日尚未结束，因此日趋势比较采用截至
-9 月 13 日的完整日期。依据为 Aurora 聚合统计、270 个已处理 CloudFront 日志对象
-中的 4,852 条原始请求记录，以及公开页面检查；没有登录 Google Search Console
-或 Bing Webmaster Tools。
+Dated snapshot: **2026-09-14**. This English summary was rewritten from the historical report; later releases may supersede its state.
 
-## 主要结论
+The inspection used a September 14 02:52 UTC database snapshot and 270 processed CloudFront log objects containing 4,852 requests. No authenticated Google/Bing search-console report was accessed.
 
-之前的流量高峰包含大量本环境的测试与运维请求；最近的读者基数本来就很小，
-尚无带搜索引擎来源信息的流量证据。历史下架页面的旧网址仍返回 404，
-并继续被真实搜索爬虫访问。当前统计管道、公开页面和自动发布均有正常运行的证据。
+Earlier peaks included substantial maintenance traffic: 572 of 746 content requests on September 9 and 236 of 298 on September 10 came from the inspection environment. These requests did not establish reader growth. For September 11–13, 42 requests matched official Google/Bing crawler IP ranges; ten returned 404. Thirteen historical article addresses pointed to retained `review` records and were no longer public under the earlier policy.
 
-## 日趋势
+User-Agent classification and HLL visitor estimates are approximate; unknown scripts can appear human, and daily unique estimates cannot simply be summed. Referrer evidence did not demonstrate a stable external traffic source, but missing referrers do not prove zero organic clicks.
 
-以下“内容请求”沿用后台统计范围，包含首页、文章、分类、研究方法、发现入口
-及文章机器接口的 GET 请求；不等于读者人数，也包含失败请求。
+The log pipeline and queues were healthy. Public discovery files, home and a recent article returned 200 with valid metadata. The snapshot contained 22 public articles, all linked from home and included in the article sitemap. Automatic publication still produced approved content despite individual task failures and review rejections.
 
-| 日期（UTC） | 内容请求 | 来自当前检查环境 IP | 后台“人类访客”估计 | Google/Bing 官方爬虫 IP 请求 | 其中 404 |
-| --- | ---: | ---: | ---: | ---: | ---: |
-| 09-09 | 746 | 572 | 18 | 34 | 4 |
-| 09-10 | 298 | 236 | 12 | 39 | 5 |
-| 09-11 | 35 | 0 | 3 | 20 | 4 |
-| 09-12 | 27 | 0 | 6 | 12 | 4 |
-| 09-13 | 26 | 3 | 5 | 10 | 2 |
+The recommended order was diagnostic filtering, reviewed legacy URL handling and useful original content informed by actual search performance. The [same-day repair](legacy-url-repair-2026-09-14.md) subsequently resolved all thirteen historical addresses. Counts here remain the earlier snapshot.
 
-- 9 月 9 日和 10 日分别约 76.7% 和 79.2% 的内容请求来自当前检查环境 IP，
-  与此前的批量页面检查相符。这些访问不能作为新增读者或自然搜索增长的依据。
-- 后台根据 User-Agent 区分人类与已知爬虫，独立访客采用 HLL 估计。
-  未识别的脚本也可能被计入“人类”，同一个访客也可能跨日出现，不能将每日估计简单相加。
-- 此前部分检查模拟 Googlebot/Bingbot User-Agent，因此表中另用官方公布的
-  Googlebot/Bingbot IP 范围验证真实搜索抓取；未匹配官方范围不等于断言恶意伪装。
-
-## 搜索入口与历史网址
-
-- 9 月 11–13 日共确认 Google/Bing 官方爬虫 IP 请求 42 次，其中 10 次返回 404。
-- 9 月 11 日以来的失败请求涉及 13 个文章网址；对应稿件全部仍在数据库中，
-  状态为 `review`，公开路由因此返回 404。这是历史下架留下的旧入口问题。
-- 已统计的内容请求中，9 月 11 日至检查时共有 89 次没有 Referer，
-  3 次来自本站内部页面，没有记录到 Google、Bing 或 GitHub 的 Referer。
-  浏览器可能不发送来源头，因此这不能证明自然搜索点击绝对为零。
-- 无 Search Console 的展示、点击、索引和关键词数据，不能仅凭访问日志判定
-  未收录、排名低或点击率低各占多少，也不能据此宣称受到搜索惩罚。
-
-## 运行状态
-
-- 日志聚合更新到 9 月 14 日 02:18:57 UTC；主队列及死信队列均无积压，
-  聚合 Lambda 为 Active / Successful。
-- 已统计公开内容请求在最近完整三天未出现 5xx；9 月 13 日修复的是后台统计接口。
-- 本次首页、robots.txt、两份 sitemap、最新发布文章及健康检查均返回 200。
-  首页和文章允许索引、canonical 正确，并有 H1。
-- 当前 22 篇文章已发布；首页首屏有全部 22 篇的链接，文章 sitemap 同样列出 22 篇，
-  主 sitemap 共 33 个网址。
-- 自动发布仍有产出：9 月 13 日 04:16 UTC 发布了一篇通过复核的云计算文章。
-  部分任务因重复、判重不确定或质量门槛而保留待审核；9 月 10–13 日的 24 次定时执行中，
-  另有 5 次任务失败。
-  这些事实不等于发布系统整体停机。
-
-## 建议顺序
-
-1. 将本环境检查、监控和已识别自动化请求从读者增长口径中单独列出，
-   并区分浏览量、访客估计、真实搜索抓取和搜索带来的点击。
-2. 审核旧网址的处理方式：可修复内容在原网址更正；确属重复、且有对应承接文章的
-   页面才考虑准确的 301。保留现有已发布页面，不批量删除或把全部旧网址转到首页。
-3. 结合 Search Console 的真实展示与点击数据选择下一批选题：
-   优先补充具体问题的原创解答、可复现比较和有证据的独立研究，并获取相关站点的真实引用。
-
-本次为检查与报告，没有更改页面发布状态、旧网址处理规则、统计口径或定时任务。
-
-后续处理：同日 03:23 UTC 已修复上述 13 个旧网址，详见
-[旧网址修复记录](legacy-url-repair-2026-09-14.md)。本报告的流量和页面数量仍采用检查时的快照。
+[Original reference in Git history](https://github.com/milan9527/geo/blob/a2de0e830f363177b0138409d93aebc512de4237/reports/traffic-review-2026-09-14.md) · [Report index](README.md)

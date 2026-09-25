@@ -1,21 +1,17 @@
-# 中英文版本上线验证（2026-09-25）
+# English and Chinese launch verification
 
-公开站默认英文：[英文首页](https://aperture.zhangwangshu.com/)；[中文首页](https://aperture.zhangwangshu.com/zh/)。原路径继续有效，中文版本使用 `/zh/` 前缀，两种语言可以在同一页面之间切换。
+Dated snapshot: **2026-09-25**. This English summary was rewritten from the historical report; later releases may supersede its state.
 
-41 篇已发布文章已补齐完整英文译稿，全部通过结构检查和独立翻译复核。原文、发布状态和原网址均未改变，19 条旧网址永久跳转继续有效，中文旧路径也跳转到对应中文文章。
+English became the default at existing public URLs; Chinese editions use `/zh/`. All 41 published articles received complete English editions passing structural validation and independent translation review. Original content, publication status, URLs and nineteen permanent redirect mappings were preserved.
 
-后台默认英文，可切换中文并记住选择，切换后保持登录。已发布文章按所选语言显示，代码块保持原样；180 篇未发布稿及原始研究证据保留原文，原始记录可展开查看，不进行拆词替换。浏览器语言包仅包含界面文字，不包含未审核稿件。
+The admin console defaults to English, remembers a language choice and retains the login session when switching. Published articles use reviewed editions; the 180 unpublished drafts and original evidence remained in their source language. Public UI bundles contain interface labels, not unpublished manuscript metadata.
 
-以后定时生成的文章必须依次通过质量审核、全文去重、完整英文翻译及独立译稿复核，才能自动发布。缺少译稿、译稿不合格或不对应当前原稿时，文章保留待审核。数据库也已开启同一限制。6 个定时任务保持启用，自动发布开关保持开启。
+Future publication requires evidence quality, full-catalogue deduplication, complete English translation and independent translation approval. The database enforces a matching approved revision. Six schedules and automatic publication remained enabled.
 
-验证结果：
+Verification covered 104 bilingual URLs, reciprocal hreflang, unique H1s, canonical metadata, search, RSS, legacy redirects and genuine 404s. Admin views and desktop/mobile switching passed. Seventy-seven automated regressions plus notifier and traffic checks passed. IndexNow accepted 104 URLs with HTTP 200; this did not establish indexing.
 
-- 104 个中英文页面逐页检查通过：200 响应、唯一 H1、正确 canonical 和互相关联的 hreflang。英文页面无可见漏译。
-- 英文搜索、中英文 RSS、19 条旧网址的两种语言跳转及真正的 404 均通过检查。
-- 后台登录、7 个主要视图、桌面及手机语言切换通过浏览器验证；临时测试账户全部清理。
-- 77 项自动化回归测试通过，另通过索引通知器和流量分类专项检查。
-- 中英文站点地图已更新；104 个网址已提交 IndexNow，返回 HTTP 200。此结果表示通知被接受，不表示搜索引擎已经完成收录。Google 可继续读取原有站点地图地址。
+The launch deployed API task definition 37 and runtime version 50. The [subsequent coverage review](functional-coverage-2026-09-25.md) advanced the API to task definition 38. See [publication maintenance](../docs/bilingual-publication.md).
 
-最终 API 为 ECS 任务定义 37，AgentCore Runtime 为版本 50（READY，自动发布开启）。部署镜像扫描完成，前后台静态资源与仓库文件一致。
+[Structured evidence](bilingual-launch-2026-09-25.json).
 
-实现和维护说明见 [双语发布文档](../docs/bilingual-publication.md)，逐页检查及部署摘要见 [验证数据](bilingual-launch-2026-09-25.json)。
+[Original reference in Git history](https://github.com/milan9527/geo/blob/a2de0e830f363177b0138409d93aebc512de4237/reports/bilingual-launch-2026-09-25.md) · [Report index](README.md)

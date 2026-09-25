@@ -1,65 +1,15 @@
-# 首页 Google 索引排查与修复
+# Google homepage indexing investigation
 
-检查网址：https://aperture.zhangwangshu.com/
+Dated snapshot: **2026-09-10**. This English summary was rewritten from the historical report; later releases may supersede its state.
 
-用户提供的 Search Console 报告显示：上次抓取时间为2026年9月9日11:48:12，
-Googlebot 智能手机版抓取成功，允许抓取和索引，Google选择的规范网址与首页一致。
-因此没有证据表明这次未收录由 robots 禁止、noindex 或规范网址冲突导致。
-“已抓取 — 尚未编入索引”仍表示 Google 尚未选择收录；这些字段没有提供具体原因。
+The supplied Search Console snapshot recorded a successful smartphone Googlebot fetch on September 9 at 11:48:12, crawling/indexing allowed and a matching canonical. “Crawled — currently not indexed” did not identify a robots, noindex or canonical conflict, nor did it establish the specific reason for non-indexing.
 
-## 当前发现
+The initial homepage HTML lacked article links and summaries; JavaScript loaded them later. The deployed fix server-rendered fifteen unique published articles with matching ItemList data. Home lists up to thirty articles; complete categories provide discovery for the remainder. Publication notifications invalidate home, article, category, sitemap and RSS caches.
 
-修复前首页初始 HTML 只有首页介绍，没有任何文章链接或摘要；文章由 JavaScript 加载。
-分类页已提供文章 HTML 链接，但首页的文章发现和内容展示仍依赖后续渲染。
-这是一项可改善的问题，不能据此认定为 Google 未收录的唯一原因。
+CloudFront's exact `/` route was directed to ECS, `/index.html` retained a 301, and unknown pages retained real 404s. API task definition 28 and public assets were deployed. Both sitemap files were valid HTTP 200 XML; the reported temporary processing error was not reproduced during the audit.
 
-两份站点地图均返回 HTTP 200 和可解析 XML，主地图包含26个页面，其中15篇文章。
-以手机 Googlebot、桌面 Googlebot及普通浏览器请求均成功，没有复现“临时处理错误”。
-当前检查不能排除历史上或其他网络位置的临时故障。
-“未检测到引荐来源网页”是 Search Console 的发现报告信息，本身不是索引禁止指令。
+IndexNow acceptance did not prove indexing, and Google does not use IndexNow. No authorized Search Console account action was performed. The proposed follow-up was to check sitemap status, run a live URL test for server-rendered article links, then request indexing through the owner's account.
 
-## 已部署
+Evidence: [before audit](search-audit-2026-09-10-before.json), [before responses](search-responses-2026-09-10-before.json), [after audit](search-audit-2026-09-10.json), [browser checks](home-browser-2026-09-10.json), [deployment](home-deployment-2026-09-10.json).
 
-2026-09-10 02:03 UTC 前完成公开站部署与缓存刷新：
-
-- 首页改为服务器渲染，直接输出15篇公开文章的标题、摘要、链接和匹配的 ItemList。
-  共有16个文章链接，其中首席研究在导读和卡片中各出现一次，对应15个不同网址。
-- 首页只读取已发布内容，最多展示30篇；分类页提供各领域全部已发布文章。
-- 手机、桌面和爬虫获取同一份内容；JavaScript 导航回首页时复用服务器 HTML。
-- 发布或下架文章时，索引通知任务同时刷新首页、文章、分类、站点地图与 RSS 缓存。
-- CloudFront 的精确 `/` 路由转发至 ECS；`/index.html` 保留301重定向，
-  未知页面保留真实404。公开站分发已 Deployed，后端任务版本28部署完成。
-
-## 验证
-
-| 项目 | 结果 |
-| --- | --- |
-| 全站页面 | 26个网址 |
-| Googlebot桌面、智能手机版和Bingbot | 78次页面检查全部通过 |
-| 路由、站点地图、元数据唯一性与链接覆盖检查 | 23项全部通过 |
-| 首页及分类 HTML 链接 | 覆盖全部15篇公开文章，没有待审核文章链接 |
-| 桌面、手机，启用/禁用JavaScript | 4种浏览器场景通过 |
-| 首页→文章→首页导航 | 桌面、手机均通过 |
-| 公共API请求失败 | 首页内容和普通文章链接仍可用 |
-| 本地检查 | 首页内容/转义、搜索元数据、缓存失效检查及语法检查通过 |
-| IndexNow通知 | 26个网址，HTTP 200 |
-
-IndexNow受理不等于已收录，Google不使用IndexNow。本站没有配置 Search Console 授权，
-本次没有代用户在 Google 后台提交站点地图或请求编入索引，也没有获取 Google 已索引数量。
-
-## Search Console 后续操作
-
-1. 在“站点地图”重新提交或检查 `https://aperture.zhangwangshu.com/sitemap.xml` 的读取状态。
-2. 检查首页，运行“测试实际网址”（实时测试），在返回的 HTML 中确认文章标题和链接已经出现。
-3. 测试正常后点击“请求编入索引”，随后观察 Google 下一次抓取及索引状态。
-
-用户提供的抓取时间早于此次首页修复，旧报告不会立即反映新页面。
-请求编入索引可以通知 Google 重新处理页面，但最终是否收录和处理时间由 Google 决定。
-
-证据文件：
-
-- [修复前审计](search-audit-2026-09-10-before.json)
-- [修复前原始HTTP响应](search-responses-2026-09-10-before.json)
-- [修复后全站审计与IndexNow结果](search-audit-2026-09-10.json)
-- [浏览器验证](home-browser-2026-09-10.json)
-- [线上部署与文件校验](home-deployment-2026-09-10.json)
+[Original reference in Git history](https://github.com/milan9527/geo/blob/a2de0e830f363177b0138409d93aebc512de4237/reports/google-home-indexing-2026-09-10.md) · [Report index](README.md)

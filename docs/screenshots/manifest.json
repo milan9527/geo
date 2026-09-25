@@ -1,0 +1,108 @@
+{
+  "language": "en",
+  "screenshots": [
+    {
+      "file": "public-home-en.png",
+      "caption": "English research homepage",
+      "url": "https://aperture.zhangwangshu.com/",
+      "capturedAt": "2026-09-25T15:52:45.564271+00:00",
+      "sha256": "9c82935557e6fe5977e2b59f7b633f66ce8d0698df785d212acc014dccbd8096",
+      "capture": "Actual English UI; normal controls only; no replaced text or synthetic data.",
+      "region": "viewport"
+    },
+    {
+      "file": "public-category-en.png",
+      "caption": "Complete Agent technology category",
+      "url": "https://aperture.zhangwangshu.com/category/agent",
+      "capturedAt": "2026-09-25T15:52:46.877701+00:00",
+      "sha256": "79c9a3a456597de54df40d13a65d209be5a951831785ba0f2f1eb043b05869a0",
+      "capture": "Actual English UI; normal controls only; no replaced text or synthetic data.",
+      "region": "viewport"
+    },
+    {
+      "file": "public-article-en.png",
+      "caption": "Published English engineering article",
+      "url": "https://aperture.zhangwangshu.com/article/aurora-data-api-1mb-502-chunked-read",
+      "capturedAt": "2026-09-25T15:52:48.294136+00:00",
+      "sha256": "b08b4f5c737fbd1d49442ec86e42bb4b5f4f3d271e99a1670d9d01bbce40ab11",
+      "capture": "Actual English UI; normal controls only; no replaced text or synthetic data.",
+      "region": "viewport"
+    },
+    {
+      "file": "public-search-en.png",
+      "caption": "English search results",
+      "url": "https://aperture.zhangwangshu.com/article/aurora-data-api-1mb-502-chunked-read",
+      "capturedAt": "2026-09-25T15:52:50.124050+00:00",
+      "sha256": "7f5b26abe1945566035dcd6b64f522a8366c1ed682807946fcb62236beb24c46",
+      "capture": "Actual English UI; normal controls only; no replaced text or synthetic data.",
+      "region": ".search-panel"
+    },
+    {
+      "file": "admin-login-en.png",
+      "caption": "English admin login; no credentials shown",
+      "url": "https://deu7vkdd3jf5.cloudfront.net/",
+      "capturedAt": "2026-09-25T15:52:51.037042+00:00",
+      "sha256": "0732eb337e9e5044a32b15ba3ef6b1b82153ae48c95b82ef2cf1d79473f78e5e",
+      "capture": "Actual English UI; normal controls only; no replaced text or synthetic data.",
+      "region": "viewport"
+    },
+    {
+      "file": "admin-dashboard-en.png",
+      "caption": "Live English overview and x402 testnet metrics",
+      "url": "https://deu7vkdd3jf5.cloudfront.net/",
+      "capturedAt": "2026-09-25T15:53:00.786607+00:00",
+      "sha256": "093560b814192255af7864fa53049d3d42bb48485ad7d8804a412ed401827f08",
+      "capture": "Actual English UI; normal controls only; no replaced text or synthetic data.",
+      "region": "viewport"
+    },
+    {
+      "file": "admin-content-en.png",
+      "caption": "Published content filter in the English console",
+      "url": "https://deu7vkdd3jf5.cloudfront.net/",
+      "capturedAt": "2026-09-25T15:53:01.288526+00:00",
+      "sha256": "acdd79ad787df8fca98fdb332325313b29fd9e66a1bc20e6e41c07c64fde7b1b",
+      "capture": "Actual English UI; normal controls only; no replaced text or synthetic data.",
+      "region": "viewport"
+    },
+    {
+      "file": "admin-article-en.png",
+      "caption": "Reviewed English article detail",
+      "url": "https://deu7vkdd3jf5.cloudfront.net/",
+      "capturedAt": "2026-09-25T15:53:02.673807+00:00",
+      "sha256": "96189fd17a4a748177c3645c1e06719c59fa1194eddbc18cede53770b8a2ab55",
+      "capture": "Actual English UI; normal controls only; no replaced text or synthetic data.",
+      "region": ".detail-modal"
+    },
+    {
+      "file": "admin-crawlers-en.png",
+      "caption": "Live crawler agents and UTC schedules",
+      "url": "https://deu7vkdd3jf5.cloudfront.net/",
+      "capturedAt": "2026-09-25T15:53:03.425214+00:00",
+      "sha256": "fe9d18e56d6efb13673fcb62c50649035688ba6e96f136fceaec89a5f2b496bd",
+      "capture": "Actual English UI; normal controls only; no replaced text or synthetic data.",
+      "region": "viewport"
+    },
+    {
+      "file": "admin-sources-en.png",
+      "caption": "English source registry",
+      "url": "https://deu7vkdd3jf5.cloudfront.net/",
+      "capturedAt": "2026-09-25T15:53:03.870613+00:00",
+      "sha256": "fddd2e69a1fa5739776c3d57820c7e01441ade4cf1118a4a9c0b04e42e2fcb8c",
+      "capture": "Actual English UI; normal controls only; no replaced text or synthetic data.",
+      "region": "viewport"
+    },
+    {
+      "file": "admin-settings-en.png",
+      "caption": "English settings with explicit feature limits",
+      "url": "https://deu7vkdd3jf5.cloudfront.net/",
+      "capturedAt": "2026-09-25T15:53:04.273522+00:00",
+      "sha256": "30769c4262026a5eba1e165b930fb5a67e19d966417b87d6e68f72600766a04d",
+      "capture": "Actual English UI; normal controls only; no replaced text or synthetic data.",
+      "region": "viewport"
+    }
+  ],
+  "browserErrors": [],
+  "temporaryAdminRemoved": true,
+  "contentMutations": false,
+  "paymentsExecuted": false
+}

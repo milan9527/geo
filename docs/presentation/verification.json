@@ -1,0 +1,18 @@
+{
+  "englishProjectMarkdownFiles": 30,
+  "preservedChineseEditorialDrafts": 4,
+  "localDocumentationLinksChecked": 143,
+  "editableDiagramPages": 3,
+  "englishDiagramLabels": 64,
+  "realEnglishScreenshots": 11,
+  "screenshotHashesMatch": true,
+  "allScreenshotsEmbeddedUnmodified": true,
+  "powerPointSlides": 18,
+  "renderedPdfPages": 18,
+  "nativeTextBoxesFoundInRenderedPdf": 145,
+  "slideShapesWithinCanvas": true,
+  "temporaryCaptureAdminRemoved": true,
+  "productionContentMutations": false,
+  "paymentsExecuted": false,
+  "validationScope": "Documentation artifacts only; earlier application results remain dated in their reports."
+}

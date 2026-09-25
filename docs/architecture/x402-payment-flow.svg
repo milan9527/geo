@@ -1,0 +1,34 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="880" viewBox="0 0 1440 880">
+<defs><marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth"><path d="M0,0 L0,6 L9,3 z" fill="#56697A"/></marker></defs>
+<rect x="0" y="0" width="1440" height="880" rx="0" fill="#F4F7F9" stroke="#F4F7F9" stroke-width="1.5"/>
+<text fill="#152A36" font-family="Arial, sans-serif" font-size="34" font-weight="700" text-anchor="start"><tspan x="48" y="64.0">Agent access with x402</tspan></text>
+<text fill="#56697A" font-family="Arial, sans-serif" font-size="20" font-weight="400" text-anchor="start"><tspan x="48" y="106.0">Seller-side sequence • Base Sepolia (eip155:84532) • default price: 0.002 testnet USDC</tspan></text>
+<rect x="80" y="155" width="300" height="110" rx="12" fill="#FFFFFF" stroke="#D9E2E8" stroke-width="1.5"/>
+<rect x="80" y="171" width="5" height="78" rx="0" fill="#7760C0" stroke="#7760C0" stroke-width="1.5"/>
+<text fill="#152A36" font-family="Arial, sans-serif" font-size="24" font-weight="700" text-anchor="start"><tspan x="100" y="195.0">Buyer agent</tspan></text>
+<text fill="#56697A" font-family="Arial, sans-serif" font-size="19" font-weight="400" text-anchor="start"><tspan x="100" y="228.0">Wallet + spending budget</tspan></text>
+<rect x="570" y="155" width="300" height="110" rx="12" fill="#FFFFFF" stroke="#D9E2E8" stroke-width="1.5"/>
+<rect x="570" y="171" width="5" height="78" rx="0" fill="#C96917" stroke="#C96917" stroke-width="1.5"/>
+<text fill="#152A36" font-family="Arial, sans-serif" font-size="24" font-weight="700" text-anchor="start"><tspan x="590" y="195.0">Aperture seller</tspan></text>
+<text fill="#56697A" font-family="Arial, sans-serif" font-size="19" font-weight="400" text-anchor="start"><tspan x="590" y="228.0">ECS API + x402 middleware</tspan></text>
+<rect x="1060" y="155" width="300" height="110" rx="12" fill="#FFFFFF" stroke="#D9E2E8" stroke-width="1.5"/>
+<rect x="1060" y="171" width="5" height="78" rx="0" fill="#0E9384" stroke="#0E9384" stroke-width="1.5"/>
+<text fill="#152A36" font-family="Arial, sans-serif" font-size="24" font-weight="700" text-anchor="start"><tspan x="1080" y="195.0">External facilitator</tspan></text>
+<text fill="#56697A" font-family="Arial, sans-serif" font-size="19" font-weight="400" text-anchor="start"><tspan x="1080" y="228.0">Verification + settlement</tspan></text>
+<polyline points="230,270 230,805" fill="none" stroke="#56697A" stroke-width="2" stroke-dasharray="7 6" marker-end="url(#arrow)"/>
+<polyline points="720,270 720,805" fill="none" stroke="#56697A" stroke-width="2" stroke-dasharray="7 6" marker-end="url(#arrow)"/>
+<polyline points="1210,270 1210,805" fill="none" stroke="#56697A" stroke-width="2" stroke-dasharray="7 6" marker-end="url(#arrow)"/>
+<text fill="#152A36" font-family="Arial, sans-serif" font-size="21" font-weight="700" text-anchor="start"><tspan x="265" y="312.0">1   GET paid resource</tspan></text>
+<polyline points="230,325 720,325" fill="none" stroke="#56697A" stroke-width="2" marker-end="url(#arrow)"/>
+<text fill="#152A36" font-family="Arial, sans-serif" font-size="21" font-weight="700" text-anchor="start"><tspan x="270" y="392.0">2   HTTP 402 + PAYMENT-REQUIRED</tspan></text>
+<polyline points="720,405 230,405" fill="none" stroke="#56697A" stroke-width="2" marker-end="url(#arrow)"/>
+<text fill="#152A36" font-family="Arial, sans-serif" font-size="21" font-weight="700" text-anchor="start"><tspan x="265" y="477.0">3   Signed retry + PAYMENT-SIGNATURE</tspan></text>
+<polyline points="230,490 720,490" fill="none" stroke="#56697A" stroke-width="2" marker-end="url(#arrow)"/>
+<text fill="#152A36" font-family="Arial, sans-serif" font-size="21" font-weight="700" text-anchor="start"><tspan x="760" y="562.0">4   Verify and settle</tspan></text>
+<polyline points="720,575 1210,575" fill="none" stroke="#56697A" stroke-width="2" marker-end="url(#arrow)"/>
+<text fill="#152A36" font-family="Arial, sans-serif" font-size="21" font-weight="700" text-anchor="start"><tspan x="760" y="647.0">5   Settlement result</tspan></text>
+<polyline points="1210,660 720,660" fill="none" stroke="#56697A" stroke-width="2" marker-end="url(#arrow)"/>
+<text fill="#152A36" font-family="Arial, sans-serif" font-size="21" font-weight="700" text-anchor="start"><tspan x="265" y="742.0">6   HTTP 200 + PAYMENT-RESPONSE</tspan></text>
+<polyline points="720,755 230,755" fill="none" stroke="#56697A" stroke-width="2" marker-end="url(#arrow)"/>
+<text fill="#56697A" font-family="Arial, sans-serif" font-size="19" font-weight="400" text-anchor="start"><tspan x="48" y="849.0">Failed payment does not unlock the paid response. Public HTML and the open JSON route remain accessible.</tspan></text>
+</svg>

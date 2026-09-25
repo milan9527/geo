@@ -1,42 +1,15 @@
-# 定时审核与自动发布
+# Scheduled review and automatic publication
 
-2026-09-09 已部署AgentCore Runtime版本47，状态READY；
-`RESEARCH_AUTO_PUBLISH=true`。远程健康检查确认质量分数门槛为90，
-使用`2026-09-09-v2-core-coverage`全文去重规则，6个定时计划均已启用。
+Dated snapshot: **2026-09-09**. This English summary was rewritten from the historical report; later releases may supersede its state.
 
-## 实际流程
+Runtime version 47 was READY with `RESEARCH_AUTO_PUBLISH=true`, six enabled schedules, a quality threshold of 90 and deduplication policy `2026-09-09-v2-core-coverage`.
 
-1. 采集证据、生成正文，必要时最多修订两轮，再做独立审核。
-2. 检查分数、正文完整性、事实与因果问题、至少5个不同来源地址、
-   3个来源机构、存档证据及引用编号。
-3. 与全站所有已发布文章逐一全文比对，不限分类或发布时间。
-   核心重复、包含关系、低置信度和模型异常均保留待审核。
-4. 发布前在数据库事务中重新核对正文、来源和已发布集合。
-   内容发生变化或其他任务抢先发布时，当前稿留待审核。
-5. 独立合格稿自动发布，随后更新缓存、站点地图并通知IndexNow。
-   审核和去重结果保存在研究记录的`verification_json`中。
+The pipeline collected evidence, generated and independently reviewed research, then compared the complete candidate against every published article across categories and dates. It required sufficient body content, citations, archived evidence, at least five source URLs and three source organizations. Duplicate, uncertain and failed comparisons retained the draft under review. The final transaction rechecked content, sources and the public catalogue before publishing and notifying the indexing worker.
 
-来源或标题相似只用于寻找待审核稿，不会直接覆盖已发布文章。
-Evidence Verifier复核待审核稿的最新研究版本；证据未变化的任务，
-也会重新检查其关联的待审核稿是否可以发布。
+Ten batch-deduplication checks, thirteen publication/database checks and five runtime-flow checks passed. A production Scheduler invocation completed task 1185 / research 935: the draft scored 98 but duplicated article 206 after all fifteen public-article comparisons, so it was not published. Two associated drafts also scored 98 and remained under review as duplicates.
 
-## 验证
+Deployments preserve automatic-publication configuration unless an explicit flag changes it. The later [bilingual launch](bilingual-launch-2026-09-25.md) added mandatory reviewed English editions.
 
-- 10项批量去重回归检查通过。
-- 13项质量门槛和真实PostgreSQL测试通过，覆盖跨类别完整遍历、
-  并发发布、审核期间修改内容、来源写入回滚和已发布稿保护。
-- 5项任务流程测试通过，验证质量合格后发布、重复稿拦截、
-  发布后通知及证据不变时重新审核。
-- 实际Bedrock模型再次确认文章170与136重复，置信度0.98。
-- 容器扫描完成，没有High或Critical发现。
-- 经生产Scheduler Lambda触发实测任务1185、研究记录935，已完成主任务：
-  新稿质量审核98分，全部质量检查通过；与15篇已发布文章逐一全文比对后，
-  确认与文章206重复，保留待审核，没有自动发布。
-- 同次任务滚动复核的两篇待审核稿208和209也均获得98分，
-  各自完成15对全文比对后确认重复，继续留待审核。
-- 管理后台已同步显示真实审核状态，部署后的脚本和缓存更新均已核对。
+[Structured evidence](automatic-publication-2026-09-09.json).
 
-部署脚本支持`--auto-publish`和`--no-auto-publish`；
-后续部署不指定开关时保留线上设置。
-
-详细运行数据见[验证记录](automatic-publication-2026-09-09.json)。
+[Original reference in Git history](https://github.com/milan9527/geo/blob/a2de0e830f363177b0138409d93aebc512de4237/reports/automatic-publication-2026-09-09.md) · [Report index](README.md)

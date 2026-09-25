@@ -1,105 +1,70 @@
-# AWS Resource Inventory
+# AWS environment and policies
 
-Provisioned on 2026-09-03 in `us-east-1`, account `632930644527`.
+This directory contains IAM policy examples and the resource inventory for the reference deployment in `us-east-1`, account `632930644527`. Replace account-specific ARNs, names and origins for another environment. The repository's release scripts update existing services; these files are not a complete infrastructure bootstrap.
 
-## Resource identifiers
+See [deployment instructions](../../docs/deployment.md) and the [editable architecture](../../docs/architecture/aperture-aws.drawio).
 
-- Aurora cluster: `arn:aws:rds:us-east-1:632930644527:cluster:geo-intelligence-demo`
-- Aurora writer: `geo-intelligence-demo-writer`
-- Bedrock profile: `arn:aws:bedrock:us-east-1:632930644527:application-inference-profile/8b2k32fwobdd`
-- AgentCore Runtime: `arn:aws:bedrock-agentcore:us-east-1:632930644527:runtime/geo_intelligence_agent-hyVRs073Db`
-- AgentCore Browser: `geo_intelligence_browser-MmjFQMhTTf`
-- AgentCore Code Interpreter: `geo_intelligence_code-7mOodJooC0`
-- ECR repository: `632930644527.dkr.ecr.us-east-1.amazonaws.com/geo-intelligence-agent`
-- IAM role: `arn:aws:iam::632930644527:role/geo-intelligence-agentcore-role`
-- Scheduler group: `arn:aws:scheduler:us-east-1:632930644527:schedule-group/geo-intelligence-crawlers`
-- Scheduler bridge: `arn:aws:lambda:us-east-1:632930644527:function:geo-intelligence-scheduler-bridge`
-- Scheduler DLQ: `arn:aws:sqs:us-east-1:632930644527:geo-intelligence-scheduler-dlq`
-- Scheduler role: `arn:aws:iam::632930644527:role/geo-intelligence-scheduler-role`
-- Bridge role: `arn:aws:iam::632930644527:role/geo-intelligence-scheduler-bridge-role`
+## Resource inventory
 
-## Web application deployment
+| Layer | Reference resource |
+| --- | --- |
+| Public website | <https://aperture.zhangwangshu.com/> |
+| Admin console | <https://deu7vkdd3jf5.cloudfront.net/> |
+| Public CloudFront | `E57TFN7Z03O69` |
+| Admin CloudFront | `E1OMOLTZCN9KUQ` |
+| Shared S3 OAC | `E2WLLGTAL5PGBQ` |
+| Public bucket | `geo-intelligence-public-632930644527-us-east-1` |
+| Admin bucket | `geo-intelligence-admin-632930644527-us-east-1` |
+| ECS cluster / service | `geo-intelligence` / `geo-intelligence-api` |
+| ALB | `geo-intelligence-alb-136542997.us-east-1.elb.amazonaws.com` |
+| API / runtime ECR repositories | `geo-intelligence-api` / `geo-intelligence-agent` |
+| Aurora cluster / writer | `geo-intelligence-demo` / `geo-intelligence-demo-writer` |
+| Bedrock application inference profile | `8b2k32fwobdd` |
+| AgentCore Runtime | `geo_intelligence_agent-hyVRs073Db` |
+| AgentCore Browser | `geo_intelligence_browser-MmjFQMhTTf` |
+| AgentCore Code Interpreter | `geo_intelligence_code-7mOodJooC0` |
+| Scheduler group | `geo-intelligence-crawlers` |
+| Scheduler bridge Lambda | `geo-intelligence-scheduler-bridge` |
+| Scheduler SQS DLQ | `geo-intelligence-scheduler-dlq` |
+| Indexing Lambda | `geo-intelligence-indexing-notifier` |
+| Traffic Lambda | `geo-intelligence-traffic-aggregator` |
 
-Application releases are deployed directly with AWS CLI service APIs. The deployment script does
-not call CloudFormation, CDK, or SAM:
+## Access and persistence
 
-- Public CloudFront: `E57TFN7Z03O69` / `d1tsbnft7iv51.cloudfront.net`
-- Admin CloudFront: `E1OMOLTZCN9KUQ` / `deu7vkdd3jf5.cloudfront.net`
-- Shared S3 OAC: `E2WLLGTAL5PGBQ`
-- Public bucket: `geo-intelligence-public-632930644527-us-east-1`
-- Admin bucket: `geo-intelligence-admin-632930644527-us-east-1`
-- ECS cluster/service: `geo-intelligence` / `geo-intelligence-api`
-- ALB: `geo-intelligence-alb-136542997.us-east-1.elb.amazonaws.com`
-- ECR repository: `632930644527.dkr.ecr.us-east-1.amazonaws.com/geo-intelligence-api`
-- Active task definition: `geo-intelligence-api:30`
+Both frontend buckets block public access and allow reads through CloudFront OAC. The ALB accepts origin traffic from the CloudFront origin-facing prefix list and checks a private origin header. ECS accepts port 8000 from the ALB security group.
 
-Both buckets block every form of public access and grant object reads only to their CloudFront
-distribution through OAC. The ALB security group accepts port 80 only from the AWS-managed
-CloudFront origin-facing prefix list, and its listener forwards requests only when the private
-origin verification header matches. ECS tasks accept port 8000 only from the ALB security group.
+Aurora PostgreSQL Serverless v2 is accessed through the Data API. The reference cluster has a 0.5–2 ACU range; its nonzero minimum prevents automatic pause. The database password stays in Secrets Manager. Configure resource and secret ARNs in ignored `.env.aws`; do not copy the secret value into the repository.
 
-The deployed backend image uses pinned Python 3.13 Alpine on ARM64, runs as UID `10001`, and its
-ECR scan completed with zero findings. The ECS service has one desired/running task and uses
-Aurora PostgreSQL 17.7 exclusively through the Data API.
+CloudFront routes server-rendered pages and APIs to ECS and static frontend assets to S3. API responses are uncached. x402 request and agent-attribution headers must reach the backend. Publication notifications invalidate affected English and Chinese content and discovery files. Edge logs flow through S3 and SQS to the traffic aggregator; raw-log S3 lifecycle retention is separate from database analytics cleanup.
 
-The resources were initially created before the direct-API deployment workflow was adopted. The
-legacy `geo-intelligence-web` stack is not used for releases or updates and remains only because
-deleting an active stack would also delete its live resources. Do not update or delete that stack.
-All application releases must use `scripts/deploy_web_ecs.sh`.
+## Releases and dated verification
 
-The Aurora password is AWS-managed in Secrets Manager. Do not export or copy the secret value into
-project files. Runtime and local AWS mode use the AWS credential chain plus the resource and Secret
-ARNs in the ignored `.env.aws` file.
+Use `scripts/deploy_web_ecs.sh` for web releases and `scripts/deploy_agent_runtime.sh` for runtime releases. They build ARM64 containers, scan images and update services through AWS APIs. Runtime images are deployed by immutable digest. The runtime runs as UID `10001`, listens on port 8080 and exposes `GET /ping` and `POST /invocations`.
 
-Aurora Serverless v2 is configured for `0.5–2 ACU`. Because the minimum is greater than zero, the
-writer remains available and does not enter Serverless v2 auto-pause.
+The **2026-09-25 verification snapshot** recorded API task definition `geo-intelligence-api:38`, AgentCore Runtime version `50` in READY state, automatic publication enabled and six enabled schedules. Both image scans completed with no High or Critical findings. These are dated observations, not permanent configuration values; release evidence is in the [functional coverage report](../../reports/functional-coverage-2026-09-25.md).
 
-## Runtime contract
+The legacy `geo-intelligence-web` CloudFormation stack still owns live resources but is no longer used for releases. **Do not update or delete that stack**: deletion can remove active infrastructure. Use the documented direct-API release workflow.
 
-The container is Linux ARM64, runs as UID `10001`, listens on port `8080`, and implements:
-
-- `GET /ping`
-- `POST /invocations`
-
-The ECR image is deployed by immutable digest. The deployed image scan completed with no Critical,
-High, or Medium findings.
-
-The active Runtime is version 47 and uses image digest
-`sha256:97dc87115aad70530e332e645853d1ff9ca9a275f64b53ac624d1121a5dcf0a3`.
-It runs Codex SDK through the Amazon Bedrock provider, AgentCore Code Interpreter, AgentCore
-Browser with Web Bot Auth, evidence remediation, and budgeted AgentCore Payments. Crawl source
-profiles are loaded from Aurora `data_sources` and `agent_source_assignments` on every invocation;
-the IAM-only `source_registry` action provides a read-only production verification path. The
-registry currently contains 86 sources, and each crawler rotates through at most eight open
-sources per invocation using assignment selection timestamps.
-
-CloudFront forwards the standard `PAYMENT-SIGNATURE`, legacy `X-PAYMENT`, and `X-Agent-Name`
-headers to ECS for x402 settlement and Agent traffic attribution. API cache TTL is zero.
-
-## Policy files
-
-- `agentcore-trust-policy.json`: AgentCore service trust
-- `agentcore-runtime-policy.json`: Bedrock, Aurora Data API, Secrets Manager, AgentCore tools, ECR
-  pull, CloudWatch Logs, X-Ray, and metrics permissions
-- `scheduler-trust-policy.json`: EventBridge Scheduler service trust
-- `scheduler-runtime-policy.json`: invoke the Lambda bridge and publish failed events to SQS
-- `lambda-trust-policy.json`: Lambda service trust
-- `scheduler-bridge-policy.json`: invoke the AgentCore DEFAULT endpoint and write Lambda logs
-- `ecs-api-runtime-policy.json`: API access plus schedule updates and Scheduler-only PassRole
-
-## Scheduler
-
-EventBridge Scheduler cannot use `InvokeAgentRuntime` as a universal AWS SDK target. The deployed
-flow therefore uses:
+## Scheduler behavior
 
 ```text
-Scheduler -> Lambda bridge -> AgentCore Runtime -> Aurora
+EventBridge Scheduler -> Lambda bridge -> asynchronous AgentCore task -> Aurora
 ```
 
-The one-time preflight created Aurora job `36`, completed a real AgentCore Code Interpreter session,
-deleted itself after completion, and left zero messages in the DLQ.
+The bridge has a 60-second timeout and waits for runtime acceptance. Research continues in AgentCore after Lambda returns. Lambda asynchronous retries are disabled to avoid duplicate crawls, model usage and payments. Scheduler delivery retries and its DLQ are configured independently.
 
-The Lambda bridge waits only for the Runtime acceptance response and has a 60-second timeout.
-AgentCore tracks the crawl with its native asynchronous task status and continues processing after
-Lambda returns. Lambda asynchronous retries remain disabled to avoid duplicate crawls, model usage,
-or x402 payments.
+`provision_eventbridge.py` upserts schedule definitions and contains deployment-specific ARNs. Review and adapt it before provisioning; do not use it as a routine release command that overwrites operator-edited schedules.
+
+## IAM files
+
+| File | Purpose |
+| --- | --- |
+| `agentcore-trust-policy.json` | AgentCore service trust |
+| `agentcore-runtime-policy.json` | Inference, Data API, secrets, tools, image pull and telemetry |
+| `scheduler-trust-policy.json` | Scheduler service trust |
+| `scheduler-runtime-policy.json` | Invoke the bridge and deliver failed events to SQS |
+| `lambda-trust-policy.json` | Lambda service trust |
+| `scheduler-bridge-policy.json` | Invoke the runtime DEFAULT endpoint and write logs |
+| `ecs-api-runtime-policy.json` | API resources, schedule updates and constrained PassRole |
+
+Grant only the resources needed by the target environment. Store credentials in AWS-managed secrets or the local credential chain, not policy examples or frontend assets.

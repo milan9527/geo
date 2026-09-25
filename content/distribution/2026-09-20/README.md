@@ -1,17 +1,21 @@
-# 两周站外传播安排
+# Two-week distribution plan
 
-本站两篇原创案例已经完成审核并发布。此目录包含两份掘金技术稿、两份知乎答疑稿，均带独立渠道参数。尚未取得掘金/知乎登录会话或发布接口，因此未向这些平台发布。
+Two original engineering case studies were reviewed and published on Aperture. This directory contains two Juejin articles and two Zhihu answer drafts with distinct campaign parameters. The drafts intentionally remain in Chinese for their intended publication channels; they are editorial source material, not project documentation.
 
-| 日期（UTC） | 动作 | 稿件 / 观察项 |
+No Juejin or Zhihu posts have been published by this workflow, and no external automatic publishing job has been created. Platform access and a relevant destination are required before using the drafts.
+
+| Timing | Action | Material / measurement |
 | --- | --- | --- |
-| 9 月 20 日 | 本站上线，GitHub 项目入口关联案例 | 两篇固定网址 |
-| 取得账号后第 1 天 | 掘金发布 Data API 案例 | `juejin-data_api_1mb.md` |
-| 第 2—3 天 | 在一个确实讨论 Data API、数据库返回超限的问题下答疑 | `zhihu-data-api.md`，先核对问题语境 |
-| 第 5—7 天 | 掘金发布旧网址处理案例 | `juejin-permanent_urls.md` |
-| 第 8—10 天 | 在一个确实讨论旧链接、去重或 301 的问题下答疑 | `zhihu-permanent-urls.md`，先核对问题语境 |
-| 第 11—14 天 | 根据真实评论补充 0—2 次回复，并选择下一篇实测选题 | 优先回答现有读者问题，不重复投放同一链接 |
-| 9 月 27 日、10 月 4 日 | 复盘统计 | 渠道会话、参与阅读、回访、RSS 点击；Google/Bing 查询展示和点击另需账号权限 |
+| September 20, 2026 | Publish the site case studies and link from GitHub | Permanent article URLs |
+| Day 1 after platform access | Publish the Data API case on Juejin | [Juejin draft](juejin-data_api_1mb.md) |
+| Days 2–3 | Answer a relevant Data API / oversized-result question | [Zhihu draft](zhihu-data-api.md) |
+| Days 5–7 | Publish the permanent-URL case on Juejin | [Juejin draft](juejin-permanent_urls.md) |
+| Days 8–10 | Answer a relevant URL, deduplication or 301 question | [Zhihu draft](zhihu-permanent-urls.md) |
+| Days 11–14 | Respond to actual reader questions and select the next measured case | Up to two useful follow-ups |
+| September 27 and October 4 | Review results; these are planned dates, not scheduled reminders | Sessions, engaged reads, return visits and RSS clicks |
 
-掘金稿的来源编号对应各自文末参考资料。发布时保留来源和原文链接；若平台支持原文网址字段，填写不带 UTM 的本站规范网址。知乎稿只有在问题相关时使用，不能作为批量评论模板。
+Preserve references and the original article link. If a platform supports an original-source field, use the canonical URL without UTM parameters. Use answer drafts only where the question matches the material; they are not bulk-comment templates.
 
-当前没有为上述外站动作建立自动发布任务。账号可用后才能执行实际发布，平台返回的稿件网址应记录在此表对应项中。两周后根据真实到站访问和反馈决定继续哪一个渠道；不以自测请求、爬虫访问或稿件提交次数代替读者增长。
+Record the real platform URL after publication. Assess reader arrivals and feedback, excluding diagnostics and crawler requests. RSS clicks do not prove subscription. Google/Bing query impressions and clicks require authorized search-console data. Continue a channel only when observed reader value justifies it.
+
+See the [implementation report](../../../reports/growth-launch-2026-09-20.md) for the published cases, attribution behavior and verification limits.
