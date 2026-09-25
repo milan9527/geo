@@ -1507,7 +1507,7 @@ class ApiHandler(BaseHTTPRequestHandler):
   </div></div>
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
   <script src="/locales.js?v=20260925-1"></script>
-  <script src="/i18n.js?v=20260925-1"></script>
+  <script src="/i18n.js?v=20260925-2"></script>
   <script src="/growth.js?v=20260925-1"></script>
   <script src="/app.js?v=20260925-1"></script>
 </body>
