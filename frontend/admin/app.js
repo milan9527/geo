@@ -291,7 +291,7 @@ function renderDashboard() {
           <input type="date" id="rangeStart" value="${state.customStart}" max="${todayIso()}" aria-label="统计开始日期" />
           <span>至</span>
           <input type="date" id="rangeEnd" value="${state.customEnd}" max="${todayIso()}" aria-label="统计结束日期" />
-          <button data-apply-custom-range>应用</button>
+          <button data-apply-custom-range>${I18N.lang === "en" ? "Apply" : "应用"}</button>
         </div>
       </div>
     </section>
