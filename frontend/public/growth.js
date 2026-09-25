@@ -65,8 +65,9 @@
     stopPage();
     if (disabled() || document.querySelector(".not-found")) return;
     const path = location.pathname.replace(/\/+$/, "") || "/";
+    const route = window.apertureI18n.strip(path);
     currentPage = { path, slug: document.querySelector(".article-page")
-      ? path.match(/^\/article\/([^/]+)$/)?.[1] : null };
+      ? route.match(/^\/article\/([^/]+)$/)?.[1] : null };
     track("page_view");
     if (!currentPage.slug) return;
     let activeSeconds = 0;
@@ -89,7 +90,7 @@
   }
   document.addEventListener("click", (event) => {
     const link = event.target.closest("a");
-    if (link?.getAttribute("href") === "/feed.xml") track("rss_click");
+    if (link?.getAttribute("href")?.match(/^\/(?:zh\/)?feed\.xml$/)) track("rss_click");
     if (link?.closest(".related-band") && currentPage?.slug) track("related_click");
     if (event.target.closest("[data-share-article]")) {
       const canonical = document.querySelector('link[rel="canonical"]')?.href || location.origin + location.pathname;

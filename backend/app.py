@@ -13,6 +13,7 @@ import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from http.cookies import SimpleCookie
+from email.utils import format_datetime
 from datetime import date, datetime, timedelta, timezone
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler
@@ -37,6 +38,9 @@ from .analytics import (
     is_diagnostic,
 )
 from .database import USE_AURORA_DATA_API, connection, init_db, utc_now
+from . import i18n
+i18n.connection_provider = lambda: connection()
+
 from .homepage import HOME_DESCRIPTION, HOME_TITLE, render_home
 from .article_redirects import REDIRECT_PROTECTION_MESSAGE, redirect_target
 from .metrics import load_metrics_rows
@@ -776,6 +780,7 @@ def submit_indexing(
 
 
 def public_article(row: dict, *, detailed: bool = False) -> dict:
+    row = i18n.article_row(row, detailed=detailed)
     result = {
         "id": row["id"],
         "slug": row["slug"],
@@ -847,6 +852,7 @@ class ApiHandler(BaseHTTPRequestHandler):
         parsed = urlparse(self.path)
         path = parsed.path.rstrip("/") or "/"
         query = parse_qs(parsed.query)
+        path = i18n.begin_request(path, query)
 
         if path == "/":
             self._home_page()
@@ -1030,7 +1036,8 @@ class ApiHandler(BaseHTTPRequestHandler):
             )
 
     def do_POST(self) -> None:  # noqa: N802
-        path = urlparse(self.path).path.rstrip("/")
+        parsed = urlparse(self.path)
+        path = i18n.begin_request(parsed.path.rstrip("/"), parse_qs(parsed.query))
         payload = self._read_json()
         if path == "/api/v1/track":
             self._track(payload)
@@ -1286,7 +1293,8 @@ class ApiHandler(BaseHTTPRequestHandler):
         )
 
     def do_PATCH(self) -> None:  # noqa: N802
-        path = urlparse(self.path).path.rstrip("/")
+        parsed = urlparse(self.path)
+        path = i18n.begin_request(parsed.path.rstrip("/"), parse_qs(parsed.query))
         payload = self._read_json()
         if not self._require_admin():
             return
@@ -1312,7 +1320,8 @@ class ApiHandler(BaseHTTPRequestHandler):
         self._json({"error": "Not found"}, HTTPStatus.NOT_FOUND)
 
     def do_DELETE(self) -> None:  # noqa: N802
-        path = urlparse(self.path).path.rstrip("/")
+        parsed = urlparse(self.path)
+        path = i18n.begin_request(parsed.path.rstrip("/"), parse_qs(parsed.query))
         if not self._require_admin():
             return
         source_match = re.fullmatch(r"/api/admin/data-sources/(\d+)", path)
@@ -1412,12 +1421,15 @@ class ApiHandler(BaseHTTPRequestHandler):
         robots: str = "index, follow, max-snippet:-1, max-image-preview:large",
         open_graph_type: str = "website",
     ) -> str:
-        escaped_title = html.escape(search_title(title))
-        escaped_description = html.escape(search_description(description), quote=True)
-        canonical = f"{PUBLIC_BASE_URL}{canonical_path}"
+        escaped_title = html.escape(search_title(i18n.text(title)))
+        escaped_description = html.escape(search_description(i18n.text(description)), quote=True)
+        canonical = f"{PUBLIC_BASE_URL}{i18n.path_for(canonical_path)}"
+        language_links = "".join(f'<link rel="alternate" hreflang="{lang}" href="{PUBLIC_BASE_URL}{i18n.path_for(canonical_path, locale)}" />' for lang, locale in (("en", "en"), ("zh-CN", "zh"), ("x-default", "en")))
+        other_locale = "zh" if i18n.language() == "en" else "en"
+        switch_path = i18n.path_for(canonical_path, other_locale)
         schema_tags = "".join(
             '<script type="application/ld+json" data-page-schema>{}</script>'.format(
-                json.dumps(schema, ensure_ascii=False, separators=(",", ":"))
+                json.dumps(i18n.schema(schema, PUBLIC_BASE_URL), ensure_ascii=False, separators=(",", ":"))
                 .replace("<", "\\u003c")
                 .replace(">", "\\u003e")
             )
@@ -1426,7 +1438,7 @@ class ApiHandler(BaseHTTPRequestHandler):
         alternate = (
             '<link rel="alternate" type="application/ld+json" href="{}" />'.format(
                 html.escape(
-                    f"{PUBLIC_BASE_URL}{alternate_json_path}", quote=True
+                    f"{PUBLIC_BASE_URL}{alternate_json_path}?lang={i18n.language()}", quote=True
                 )
             )
             if alternate_json_path
@@ -1442,9 +1454,10 @@ class ApiHandler(BaseHTTPRequestHandler):
   <meta name="robots" content="{html.escape(robots, quote=True)}" />
   <link rel="canonical" href="{html.escape(canonical, quote=True)}" />
   {alternate}
+  {language_links}
   <meta property="og:type" content="{html.escape(open_graph_type, quote=True)}" />
   <meta property="og:site_name" content="Aperture Intelligence" />
-  <meta property="og:locale" content="zh_CN" />
+  <meta property="og:locale" content="{'zh_CN' if i18n.language() == 'zh' else 'en_US'}" />
   <meta property="og:title" content="{escaped_title}" />
   <meta property="og:description" content="{escaped_description}" />
   <meta property="og:url" content="{html.escape(canonical, quote=True)}" />
@@ -1467,6 +1480,7 @@ class ApiHandler(BaseHTTPRequestHandler):
       </a>
       <nav class="primary-nav" id="primaryNav" aria-label="研究分类">{self._navigation_html()}</nav>
       <div class="header-actions">
+        <a class="language-switch" data-language-switch href="{switch_path}" hreflang="{other_locale}" lang="{other_locale}">{'中文' if other_locale == 'zh' else 'English'}</a>
         <span class="freshness"><i></i> 持续更新</span>
         <button class="search-button" id="searchButton" aria-label="搜索研究内容"><svg><use href="#icon-search"></use></svg></button>
         <button class="menu-button" id="menuButton" aria-label="打开导航"><svg><use href="#icon-menu"></use></svg></button>
@@ -1492,8 +1506,10 @@ class ApiHandler(BaseHTTPRequestHandler):
     <div class="search-results" id="searchResults"></div>
   </div></div>
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
-  <script src="/growth.js?v=20260920-1"></script>
-  <script src="/app.js?v=20260920-1"></script>
+  <script src="/locales.js?v=20260925-1"></script>
+  <script src="/i18n.js?v=20260925-1"></script>
+  <script src="/growth.js?v=20260925-1"></script>
+  <script src="/app.js?v=20260925-1"></script>
 </body>
 </html>"""
 
@@ -1527,7 +1543,7 @@ class ApiHandler(BaseHTTPRequestHandler):
                 """
             ).fetchall()
         main_html, schemas = render_home(
-            [dict(row) for row in articles], [dict(row) for row in categories], PUBLIC_BASE_URL
+            [i18n.article_row(row) for row in articles], [dict(row) for row in categories], PUBLIC_BASE_URL
         )
         self._html(
             self._page_shell(
@@ -2045,8 +2061,8 @@ class ApiHandler(BaseHTTPRequestHandler):
         with connection() as conn:
             articles = conn.execute(
                 """
-                SELECT slug, updated_at
-                FROM articles
+                SELECT a.slug, GREATEST(a.updated_at, COALESCE(t.updated_at,a.updated_at)) updated_at
+                FROM articles a LEFT JOIN article_translations t ON t.article_id=a.id AND t.locale='en'
                 WHERE status = 'published'
                 ORDER BY updated_at DESC
                 """
@@ -2091,20 +2107,19 @@ class ApiHandler(BaseHTTPRequestHandler):
             )
             for row in articles
         )
-        entries = "".join(
-            "<url><loc>{}</loc>{}</url>".format(
-                html.escape(location),
-                (
-                    f"<lastmod>{html.escape(lastmod)}</lastmod>"
-                    if lastmod
-                    else ""
-                ),
-            )
-            for location, lastmod in urls
-        )
+        entries = []
+        for location, lastmod in urls:
+            path = location[len(PUBLIC_BASE_URL):]
+            alternates = "".join(
+                f'<xhtml:link rel="alternate" hreflang="{lang}" href="{html.escape(PUBLIC_BASE_URL + i18n.path_for(path, locale), quote=True)}" />'
+                for lang, locale in (("en", "en"), ("zh-CN", "zh"), ("x-default", "en")))
+            for locale in ("en", "zh"):
+                modified = f"<lastmod>{html.escape(lastmod)}</lastmod>" if lastmod else ""
+                entries.append(f"<url><loc>{html.escape(PUBLIC_BASE_URL + i18n.path_for(path, locale))}</loc>{modified}{alternates}</url>")
+        entries = "".join(entries)
         self._xml(
             '<?xml version="1.0" encoding="UTF-8"?>'
-            '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'
+            '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:xhtml="http://www.w3.org/1999/xhtml">'
             f"{entries}</urlset>",
             extra_headers={"Cache-Control": "public, max-age=900"},
         )
@@ -2120,17 +2135,18 @@ class ApiHandler(BaseHTTPRequestHandler):
                 ORDER BY a.published_at DESC LIMIT 30
                 """
             ).fetchall()
+        rows = [i18n.article_row(row) for row in rows]
         items = "".join(
             "<item><title>{title}</title><link>{url}</link><guid isPermaLink=\"true\">{url}</guid>"
             "<description>{description}</description><category>{category}</category>"
             "<pubDate>{published}</pubDate></item>".format(
                 title=html.escape(str(row["title"])),
                 url=html.escape(
-                    f"{PUBLIC_BASE_URL}/article/{quote(str(row['slug']), safe='')}"
+                    PUBLIC_BASE_URL + i18n.path_for("/article/" + quote(str(row["slug"]), safe=""))
                 ),
                 description=html.escape(str(row["dek"])),
                 category=html.escape(str(row["category_name"])),
-                published=html.escape(str(row["published_at"])),
+                published=html.escape(format_datetime(datetime.fromisoformat(str(row["published_at"]).replace("Z", "+00:00")))),
             )
             for row in rows
         )
@@ -2138,9 +2154,9 @@ class ApiHandler(BaseHTTPRequestHandler):
             '<?xml version="1.0" encoding="UTF-8"?>'
             '<rss version="2.0"><channel>'
             "<title>Aperture Intelligence</title>"
-            f"<link>{html.escape(PUBLIC_BASE_URL)}/</link>"
-            "<description>AI、Agent、云计算、电商媒体与金融市场的深度研究</description>"
-            "<language>zh-CN</language>"
+            f"<link>{html.escape(PUBLIC_BASE_URL + i18n.path_for('/'))}</link>"
+            f"<description>{i18n.text('AI、Agent、云计算、电商媒体与金融市场的深度研究')}</description>"
+            f"<language>{'zh-CN' if i18n.language() == 'zh' else 'en'}</language>"
             f"{items}</channel></rss>",
             content_type="application/rss+xml; charset=utf-8",
             extra_headers={"Cache-Control": "public, max-age=900"},
@@ -2150,7 +2166,8 @@ class ApiHandler(BaseHTTPRequestHandler):
         self._text(
             f"""# Aperture Intelligence
 
-> 面向 AI 时代的技术与商业研究，覆盖 AI 行业、Agent 技术、云计算、电商与媒体、金融市场。
+> Evidence-based technology and business research covering AI, agents, cloud computing, commerce and financial markets.
+> English is the default. Chinese editions are available under /zh/.
 
 ## Canonical site
 - {PUBLIC_BASE_URL}/
@@ -2172,7 +2189,9 @@ class ApiHandler(BaseHTTPRequestHandler):
 ## Discovery
 - Sitemap: {PUBLIC_BASE_URL}/sitemap.xml
 - Article sitemap: {PUBLIC_BASE_URL}/sitemap-articles.xml
-- RSS: {PUBLIC_BASE_URL}/feed.xml
+- RSS (English): {PUBLIC_BASE_URL}/feed.xml
+- RSS (中文): {PUBLIC_BASE_URL}/zh/feed.xml
+- Chinese site: {PUBLIC_BASE_URL}/zh/
 
 ## Machine-readable content
 Each published article has a JSON-LD representation at:
@@ -2202,8 +2221,8 @@ The open article and JSON-LD representation may be quoted with a link and clear 
                     "name": row["name"],
                     "eyebrow": row["eyebrow"],
                     "description": row["description"],
-                    "seoTitle": search_title(f"{row['name']} · Aperture Intelligence"),
-                    "seoDescription": search_description(row["description"]),
+                    "seoTitle": search_title(i18n.text(f"{row['name']} · Aperture Intelligence")),
+                    "seoDescription": search_description(i18n.text(row["description"])),
                     "accent": row["accent"],
                     "articleCount": row["article_count"],
                 }
@@ -2243,6 +2262,8 @@ The open article and JSON-LD representation may be quoted with a link and clear 
             target = redirect_target(conn, unquote(slug))
         if not target:
             return False
+        if prefix == "/article/":
+            prefix = i18n.path_for(prefix)
         location = f"{PUBLIC_BASE_URL}{prefix}{quote(target, safe='')}{suffix}"
         query = urlparse(self.path).query
         if query:
@@ -2309,10 +2330,12 @@ The open article and JSON-LD representation may be quoted with a link and clear 
             sources = [
                 dict(source)
                 for source in conn.execute(
-                    "SELECT publisher, title, url, published_at, source_type FROM sources WHERE article_id = %s",
+                    "SELECT publisher, title, url, published_at, source_type FROM sources WHERE article_id = %s ORDER BY id",
                     (row["id"],),
                 ).fetchall()
             ]
+        row = i18n.article_row({**dict(row), "sources": sources}, detailed=True)
+        sources = row["sources"]
         agent_name = (
             identify_visitor(self.headers.get("User-Agent", ""))[1]
             or self.headers.get("X-Agent-Name")
@@ -2333,6 +2356,7 @@ The open article and JSON-LD representation may be quoted with a link and clear 
         payload = {
             "@context": "https://schema.org",
             "@type": "AnalysisNewsArticle",
+            "inLanguage": "zh-CN" if i18n.language() == "zh" else "en",
             "identifier": row["slug"],
             "headline": row["title"],
             "description": row["dek"],
@@ -2511,10 +2535,11 @@ The open article and JSON-LD representation may be quoted with a link and clear 
                        c.eyebrow category_eyebrow, c.accent category_accent
                 FROM articles a JOIN categories c ON c.id = a.category_id
                 WHERE a.status = 'published'
-                  AND (a.title LIKE %s OR a.dek LIKE %s OR a.summary LIKE %s OR a.keywords LIKE %s)
+                  AND (a.title ILIKE %s OR a.dek ILIKE %s OR a.summary ILIKE %s OR a.keywords ILIKE %s
+                       OR EXISTS(SELECT 1 FROM article_translations t WHERE t.article_id=a.id AND t.content_json ILIKE %s))
                 ORDER BY a.authority_score DESC LIMIT 20
                 """,
-                (pattern, pattern, pattern, pattern),
+                (pattern, pattern, pattern, pattern, pattern),
             ).fetchall()
         self._json([public_article(dict(row)) for row in rows])
 
@@ -4263,7 +4288,7 @@ The open article and JSON-LD representation may be quoted with a link and clear 
         *,
         extra_headers: dict[str, str] | None = None,
     ) -> None:
-        body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+        body = json.dumps(i18n.payload(payload), ensure_ascii=False).encode("utf-8")
         self.send_response(status)
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Content-Length", str(len(body)))
@@ -4286,7 +4311,7 @@ The open article and JSON-LD representation may be quoted with a link and clear 
         extra_headers: dict[str, str] | None = None,
     ) -> None:
         self._text(
-            payload,
+            i18n.markup(payload),
             status,
             content_type="text/html; charset=utf-8",
             extra_headers=extra_headers,

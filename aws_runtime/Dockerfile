@@ -21,6 +21,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY aws_runtime/app.py .
 COPY aws_runtime/crawler_tools.py .
 COPY aws_runtime/publication.py editorial_policy.py ./
+COPY backend/bilingual.py ./
 COPY --from=codex-builder /build/dist ./agent_runtime/dist
 COPY --from=codex-builder /build/node_modules ./agent_runtime/node_modules
 COPY --from=codex-builder /build/package.json ./agent_runtime/package.json

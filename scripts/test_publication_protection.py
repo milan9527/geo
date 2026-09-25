@@ -35,6 +35,8 @@ class PublicationProtectionTests(unittest.TestCase):
                 conn.execute(statement)
             ensure_publication_protection(conn)
             ensure_article_redirects(conn)
+            from backend.bilingual import ensure_schema
+            ensure_schema(conn)
             conn.execute("""INSERT INTO categories(slug,name,eyebrow,description,accent)
                             VALUES('agent','Agent 技术','AGENT','分类说明','teal')""")
         with patch("backend.database.init_db"):
@@ -67,7 +69,7 @@ class PublicationProtectionTests(unittest.TestCase):
     def setUp(self):
         # Never truncate production. Each test owns a disposable local schema.
         with self.connect() as conn:
-            conn.execute("TRUNCATE article_redirects, sources, articles RESTART IDENTITY")
+            conn.execute("TRUNCATE article_translations, article_redirects, sources, articles RESTART IDENTITY")
             for slug, status in [("existing", "published"), ("new-draft", "draft"), ("pending", "review")]:
                 conn.execute(
                     """INSERT INTO articles(
@@ -112,7 +114,7 @@ class PublicationProtectionTests(unittest.TestCase):
             conn.execute("UPDATE articles SET status='published' WHERE id=2")
             self.assertEqual(conn.execute("SELECT slug,status FROM articles WHERE id=2").fetchone(),
                              {"slug": "new-draft", "status": "published"})
-        status, page = self.request("GET", "/article/existing")
+        status, page = self.request("GET", "/zh/article/existing")
         self.assertEqual(status, 200)
         self.assertIn("修订后的研究标题", page)
         self.assertIn('/article/existing"', page)

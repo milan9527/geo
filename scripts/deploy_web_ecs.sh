@@ -336,6 +336,8 @@ PUBLIC_DISTRIBUTION_ETAG="$(
 )"
 SSR_PATHS='[
   "/",
+  "zh",
+  "zh/*",
   "article/*",
   "category/*",
   "methodology",

@@ -619,3 +619,5 @@ main { min-height: 70vh; }
   .search-overlay { padding: 20px 12px; }
   .search-panel { max-height: calc(100vh - 40px); }
 }
+
+.language-switch { font-size: 13px; white-space: nowrap; padding: 6px 9px; border: 1px solid #cbd5e1; border-radius: 5px; text-decoration: none; color: inherit; }

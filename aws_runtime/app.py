@@ -22,6 +22,10 @@ from bedrock_agentcore.runtime import BedrockAgentCoreApp
 from botocore.config import Config
 from botocore.exceptions import ClientError
 from editorial_policy import DEDUPE_POLICY_VERSION, build_pair_prompt
+try:
+    from bilingual import create_english
+except ImportError:
+    from backend.bilingual import create_english
 from publication import PublicationStore, content_identity, quality_gate, review_and_publish
 from crawler_tools import (
     build_codex_request,
@@ -347,10 +351,19 @@ def compare_publication_pair(candidate, existing):
     return result
 
 
+def prepare_english_publication(candidate):
+    edition = create_english(candidate)
+    publication_store.save_translation(candidate, edition)
+    return {"policy": edition["policy"], "sourceHash": edition["sourceHash"],
+            "contentHash": edition["contentHash"], "review": edition["review"],
+            "reviewedAt": edition["reviewedAt"]}
+
+
 def attempt_publication(article, verification):
     result = review_and_publish(
         publication_store, article["id"], article["contentHash"], verification["publicationGate"],
         compare_publication_pair, enabled=AUTO_PUBLISH_RESEARCH,
+        prepare_language=prepare_english_publication,
     )
     verification["semanticDeduplication"] = result
     if result["published"]:

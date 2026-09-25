@@ -1,3 +1,4 @@
+const I18N = window.apertureI18n;
 const API = location.origin;
 const todayIso = () => new Date().toISOString().slice(0, 10);
 const daysAgoIso = (days) => new Date(Date.now() - days * 86400000).toISOString().slice(0, 10);
@@ -31,7 +32,7 @@ const state = {
 };
 const $ = (selector, root = document) => root.querySelector(selector);
 const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
-const fmt = (value) => new Intl.NumberFormat("zh-CN").format(value || 0);
+const fmt = (value) => new Intl.NumberFormat(I18N.locale).format(value || 0);
 const money = (value) => `$${Number(value || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 6 })}`;
 const escapeHtml = (value) => String(value ?? "").replace(/[&<>"']/g, (character) => ({
   "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
@@ -93,7 +94,7 @@ function renderX402Event(event) {
 }
 
 async function api(path, options = {}) {
-  const response = await fetch(`${API}${path}`, {
+  const response = await fetch(`${API}${I18N.api(path)}`, {
     ...options,
     credentials: "same-origin",
     headers: { "Content-Type": "application/json", ...(options.headers || {}) },
@@ -123,7 +124,9 @@ function showLogin(message = "") {
   $("#loginError").textContent = message;
   const password = $('#loginForm [name="password"]');
   if (password) password.value = "";
-  setTimeout(() => $('#loginForm [name="username"]')?.focus(), 30);
+  if (!document.activeElement?.matches("input,textarea,select")) {
+    $('#loginForm [name="username"]')?.focus();
+  }
 }
 
 function showAdmin(user) {

@@ -36,6 +36,6 @@ function handler(event) {
       "cache-control": { value: "public, max-age=60" },
       "x-robots-tag": { value: "noindex, nofollow" }
     },
-    body: '<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="robots" content="noindex, nofollow"><title>页面未找到 · Aperture Intelligence</title><main><h1>页面未找到</h1><p>内容可能尚未发布、已经更新或移动。</p><a href="/">返回首页</a></main></html>'
+    body: '<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="robots" content="noindex, nofollow"><title>Page not found · Aperture Intelligence</title><main><h1>Page not found</h1><p>This page may not have been published yet, or its address may have changed.</p><a href="/">Return home</a></main></html>'
   };
 }

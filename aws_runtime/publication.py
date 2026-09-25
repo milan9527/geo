@@ -7,6 +7,11 @@ import json
 import re
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
+try:
+    from bilingual import save_english
+except ImportError:
+    from backend.bilingual import save_english
+
 from editorial_policy import DEDUPE_POLICY_VERSION, validate_pair
 
 
@@ -160,6 +165,23 @@ class PublicationStore:
                 "categorySlug": saved["category_slug"],
                 "action": "updated_existing_draft" if can_update else "created_review_draft"}
 
+    def save_translation(self, candidate, edition):
+        with self.transaction() as tx:
+            self.sql("SELECT id FROM articles WHERE id=:article_id FOR UPDATE",
+                     {"article_id": candidate["id"]}, transaction_id=tx)
+            current = self.article(candidate["id"], tx)
+            if state_identity(current) != state_identity(candidate):
+                raise ValueError("Article changed during translation review")
+            store = self
+            class Adapter:
+                def execute(self, statement, parameters):
+                    parts = statement.split("%s")
+                    named = {f"p{i}": value for i, value in enumerate(parameters)}
+                    sql = "".join(part + (f":p{i}" if i < len(parameters) else "")
+                                  for i, part in enumerate(parts))
+                    return store.sql(sql, named, transaction_id=tx)
+            save_english(Adapter(), current, edition)
+
     def commit_publication(self, candidate, public_articles):
         with self.transaction() as tx:
             # Model work happens before this short transaction. Every publisher
@@ -183,7 +205,7 @@ class PublicationStore:
             return bool(result), "published" if result else "candidate_not_pending"
 
 
-def review_and_publish(store, article_id, expected_hash, gate, compare, *, enabled, workers=4):
+def review_and_publish(store, article_id, expected_hash, gate, compare, *, enabled, workers=4, prepare_language=None):
     result = {"policyVersion": DEDUPE_POLICY_VERSION, "published": False,
               "comparedArticles": 0, "comparisons": [], "reason": "automatic_publication_disabled"}
     if not enabled:
@@ -221,6 +243,14 @@ def review_and_publish(store, article_id, expected_hash, gate, compare, *, enabl
                or (p["relation"] == "overlap_distinct" and not p["materialDifferences"])
                for p in result["comparisons"]):
             result["reason"] = "uncertain_comparison"
+            return result
+        if prepare_language is None:
+            result["reason"] = "bilingual_review_unavailable"
+            return result
+        try:
+            result["bilingualReview"] = prepare_language(candidate)
+        except Exception as error:
+            result.update(reason="bilingual_review_failed", error=f"{type(error).__name__}: {str(error)[:500]}")
             return result
         result["published"], result["reason"] = store.commit_publication(candidate, public)
     except Exception as error:

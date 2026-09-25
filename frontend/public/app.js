@@ -1,14 +1,15 @@
+const I18N = window.apertureI18n;
 const API = location.origin;
 const state = { categories: [], articles: [], site: null };
 
 const $ = (selector, root = document) => root.querySelector(selector);
 const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
-const formatNumber = (value) => new Intl.NumberFormat("zh-CN").format(value || 0);
+const formatNumber = (value) => new Intl.NumberFormat(I18N.locale).format(value || 0);
 const formatDate = (value) =>
-  new Intl.DateTimeFormat("zh-CN", { year: "numeric", month: "long", day: "numeric" }).format(new Date(value));
+  new Intl.DateTimeFormat(I18N.locale, { year: "numeric", month: "long", day: "numeric" }).format(new Date(value));
 
 async function api(path, options = {}) {
-  const response = await fetch(`${API}${path}`, {
+  const response = await fetch(`${API}${I18N.api(path)}`, {
     headers: { "Content-Type": "application/json", ...(options.headers || {}) },
     ...options,
   });
@@ -17,7 +18,7 @@ async function api(path, options = {}) {
 }
 
 function navigate(href) {
-  history.pushState({}, "", href);
+  history.pushState({}, "", I18N.path(href));
   renderRoute();
 }
 
@@ -73,13 +74,20 @@ function compactStory(article) {
 }
 
 function setMeta({ title, description, article, robots = "index, follow, max-snippet:-1, max-image-preview:large" }) {
+  title = I18N.text(title);
+  description = I18N.text(description);
   document.title = title;
   $('meta[name="description"]').setAttribute("content", description);
   $('meta[name="robots"]')?.setAttribute("content", robots);
   const canonical = $('link[rel="canonical"]');
   const publicOrigin = canonical ? new URL(canonical.href).origin : location.origin;
   const canonicalPath = location.pathname.replace(/\/+$/, "") || "/";
-  canonical?.setAttribute("href", `${publicOrigin}${canonicalPath}`);
+  canonical?.setAttribute("href", `${publicOrigin}${canonicalPath === "/zh" ? "/zh/" : canonicalPath}`);
+  for (const [code, locale] of [["en", "en"], ["zh-CN", "zh"], ["x-default", "en"]]) {
+    let alternate = document.querySelector(`link[hreflang="${code}"]`);
+    if (!alternate) { alternate = document.createElement("link"); alternate.rel = "alternate"; alternate.hreflang = code; document.head.append(alternate); }
+    alternate.href = publicOrigin + I18N.path(canonicalPath, locale);
+  }
   for (const [property, content] of Object.entries({
     "og:title": title,
     "og:description": description,
@@ -103,14 +111,15 @@ function setMeta({ title, description, article, robots = "index, follow, max-sni
     schema.textContent = JSON.stringify({
       "@context": "https://schema.org",
       "@type": "AnalysisNewsArticle",
+      inLanguage: I18N.lang === "en" ? "en" : "zh-CN",
       headline: article.title,
       description: article.dek,
       datePublished: article.publishedAt,
       dateModified: article.updatedAt,
       author: {
         "@type": "Organization",
-        name: "Aperture 研究编辑部",
-        url: `${publicOrigin}/authors/research-desk`,
+        name: I18N.text("Aperture 研究编辑部"),
+        url: publicOrigin + I18N.path("/authors/research-desk"),
       },
       about: article.keywords,
       citation: article.sources.map((source) => source.url),
@@ -132,7 +141,7 @@ function renderNav() {
 }
 
 function updateNavActive() {
-  const slug = location.pathname.match(/^\/category\/([^/]+)/)?.[1];
+  const slug = I18N.strip(location.pathname).match(/^\/category\/([^/]+)/)?.[1];
   $$("#primaryNav a").forEach((link) => {
     link.classList.toggle("active", link.getAttribute("href") === `/category/${slug}`);
   });
@@ -140,10 +149,10 @@ function updateNavActive() {
 
 async function renderHome() {
   // Reuse the same published content for direct visits and in-app navigation.
-  const response = await fetch("/", { headers: { Accept: "text/html" } });
+  const response = await fetch(I18N.path("/"), { headers: { Accept: "text/html" } });
   if (!response.ok) throw new Error(`Home ${response.status}`);
   const page = new DOMParser().parseFromString(await response.text(), "text/html");
-  if (location.pathname !== "/") return;
+  if (I18N.strip(location.pathname) !== "/") return;
   setMeta({
     title: page.title,
     description: $('meta[name="description"]', page).content,
@@ -312,12 +321,13 @@ async function renderRoute() {
   window.scrollTo(0, 0);
   updateNavActive();
   $("#primaryNav").classList.remove("open");
-  const path = location.pathname.replace(/\/+$/, "") || "/";
+  const path = I18N.strip(location.pathname).replace(/\/+$/, "") || "/";
   if (path === "/") await renderHome();
   else if (path.startsWith("/category/")) await renderCategory(path.split("/")[2]);
   else if (path.startsWith("/article/")) await renderArticle(path.split("/")[2]);
-  else if (path === "/methodology") renderMethodology();
+  else if (["/methodology", "/about", "/editorial-policy", "/corrections"].includes(path) || path.startsWith("/authors/")) { location.assign(I18N.path(path)); return; }
   else renderNotFound();
+  I18N.apply();
   $("#app").focus({ preventScroll: true });
   window.apertureGrowth?.startPage();
 }
@@ -336,7 +346,7 @@ function initEvents() {
     const link = event.target.closest("[data-link]");
     if (link && link.origin === location.origin && !event.metaKey && !event.ctrlKey && !event.shiftKey && event.button === 0) {
       event.preventDefault();
-      const destinationSlug = link.pathname.match(/^\/article\/([^/]+)/)?.[1];
+      const destinationSlug = I18N.strip(link.pathname).match(/^\/article\/([^/]+)/)?.[1];
       if (!window.apertureGrowth?.disabled()) api("/api/v1/track", {
         method: "POST",
         keepalive: true,
@@ -360,7 +370,7 @@ function initEvents() {
         keepalive: true,
         body: JSON.stringify({
           eventType: "machine_link_copy",
-          articleSlug: location.pathname.match(/^\/article\/([^/]+)/)?.[1],
+          articleSlug: I18N.strip(location.pathname).match(/^\/article\/([^/]+)/)?.[1],
           metadata: { target: machine.dataset.machineUrl },
         }),
       }).catch(() => {});

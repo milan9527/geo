@@ -144,7 +144,7 @@ class SqlPublicationTests(unittest.TestCase):
 
     def run_gate(self, article, compare=distinct, store=None):
         return review_and_publish(store or self.store, article["id"], article["contentHash"],
-                                  {"ready": True}, compare, enabled=True)
+                                  {"ready": True}, compare, enabled=True, prepare_language=lambda candidate: {"approved": True})
 
     def test_redirected_legacy_article_is_never_republished_or_overwritten(self):
         target = self.publish_existing()

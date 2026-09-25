@@ -33,6 +33,9 @@ def record(path: str, user_agent: str, ip: str, status: int = 200) -> dict:
 
 
 def main() -> None:
+    assert lambda_function.path_dimensions("/zh/article/stable") == ("article", "stable", "")
+    assert lambda_function.path_dimensions("/zh/") == ("home", "", "")
+    assert lambda_function.path_dimensions("/zh/feed.xml") == ("discovery", "", "")
     registers = empty_hll()
     for index in range(1000):
         hll_add(registers, f"visitor-{index}".encode())

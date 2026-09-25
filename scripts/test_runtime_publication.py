@@ -67,6 +67,7 @@ class RuntimePublicationTests(unittest.TestCase):
              patch.object(runtime, "generate_deep_research", return_value=(self.output, {})), \
              patch.object(runtime, "verify_research_output", return_value=self.audit), \
              patch.object(runtime, "compare_publication_pair", new=compare or Mock()), \
+             patch.object(runtime, "prepare_english_publication", return_value={"approved": True}), \
              patch.object(runtime, "submit_indexing", return_value=True) as notify:
             result = runtime.persist_research_output(
                 crawler={"id": 1, "name": "定时采集"}, job_id=1,

@@ -32,7 +32,7 @@ class AdminLoginTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.playwright = sync_playwright().start()
-        cls.browser = cls.playwright.chromium.launch(headless=True)
+        cls.browser = cls.playwright.chromium.launch(headless=True, args=["--no-proxy-server"])
 
     @classmethod
     def tearDownClass(cls):
@@ -41,6 +41,8 @@ class AdminLoginTests(unittest.TestCase):
 
     def setUp(self):
         self.context = self.browser.new_context()
+        if "bilingual" not in self._testMethodName:
+            self.context.add_init_script("localStorage.setItem('aperture-admin-language', 'zh')")
         self.page = self.context.new_page()
         self.authenticated = False
         self.login_status = 200
@@ -92,6 +94,20 @@ class AdminLoginTests(unittest.TestCase):
         expect(self.page.locator("#adminShell")).to_be_visible()
         expect(self.page.locator("#loginScreen")).to_be_hidden()
         expect(self.page.locator("#adminApp [role=alert]")).to_contain_text("登录会话仍然有效")
+
+    def test_default_english_and_bilingual_switch_keep_login_session(self):
+        self.page.goto("https://admin.test/")
+        expect(self.page.locator("html")).to_have_attribute("lang", "en")
+        expect(self.page.locator("#loginTitle")).to_have_text("Log in to the admin console")
+        self.login()
+        expect(self.page.locator("#adminShell")).to_be_visible()
+        self.page.locator("[data-language-picker]").select_option("zh")
+        expect(self.page.locator("html")).to_have_attribute("lang", "zh-CN")
+        expect(self.page.locator("#adminShell")).to_be_visible()
+        self.page.locator("[data-language-picker]").select_option("en")
+        expect(self.page.locator("html")).to_have_attribute("lang", "en")
+        expect(self.page.locator("#adminShell")).to_be_visible()
+        self.assertEqual(self.login_requests, 1)
 
     def test_successful_login_survives_502_and_retries_without_reauthentication(self):
         self.metrics_status = 502

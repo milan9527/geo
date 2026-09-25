@@ -31,12 +31,17 @@ def main() -> None:
         "https://aperture.zhangwangshu.com/article/valid-article",
         "https://aperture.zhangwangshu.com/category/agent",
         "https://aperture.zhangwangshu.com/category/ai",
+        "https://aperture.zhangwangshu.com/zh/article/valid-article",
+        "https://aperture.zhangwangshu.com/zh/category/agent",
+        "https://aperture.zhangwangshu.com/zh/category/ai",
     ]
     lambda_function.cloudfront.create_invalidation.return_value = {"Invalidation": {"Id": "TEST"}}
     lambda_function.invalidate(slugs, categories, "test")
     paths = lambda_function.cloudfront.create_invalidation.call_args.kwargs["InvalidationBatch"]["Paths"]
     assert "/" in paths["Items"]
     assert "/sitemap.xml" in paths["Items"]
+    assert "/zh/" in paths["Items"]
+    assert "/zh/feed.xml" in paths["Items"]
     assert paths["Quantity"] == len(set(paths["Items"]))
     print("Indexing notifier unit checks passed")
 

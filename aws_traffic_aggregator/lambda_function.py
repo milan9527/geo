@@ -93,6 +93,8 @@ def records_from_body(body: bytes) -> list[dict[str, Any]]:
 
 def path_dimensions(path: str) -> tuple[str, str, str] | None:
     clean_path = unquote(path.split("?", 1)[0])
+    if clean_path == "/zh" or clean_path.startswith("/zh/"):
+        clean_path = clean_path[3:] or "/"
     if clean_path == "/":
         return "home", "", ""
     if clean_path == "/methodology":

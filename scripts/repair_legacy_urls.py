@@ -14,6 +14,7 @@ from pathlib import Path
 import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from backend.bilingual import create_english, save_english, source_hash
 from backend.database import connection, utc_now
 from editorial_policy import DEDUPE_POLICY_VERSION
 from scripts.review_articles import (
@@ -95,6 +96,15 @@ def apply(directory, validated):
               "restored": [i for i in revisions if baseline[i]["status"] != "published"],
               "revisedPublished": [i for i in revisions if baseline[i]["status"] == "published"],
               "persistedHashes": {}, "researchRunIds": {}}
+    editions = {}
+    for i, article in revisions.items():
+        path = directory / "english" / f"{i}.json"
+        edition = read(path) if path.exists() else None
+        if not edition or edition["sourceHash"] != source_hash(article):
+            edition = create_english(article)
+            path.parent.mkdir(parents=True, exist_ok=True)
+            write_json(path, edition)
+        editions[i] = edition
     with connection() as conn:
         # Same lock order as automatic publication. No calls to a model/network
         # while these locks are held. Readers can continue to serve the site.
@@ -127,6 +137,8 @@ def apply(directory, validated):
                     "reason": operation, "catalogIds": sorted(set(final) - {i}),
                     "pairReviews": [p for p in pairs.values() if i in (p["a"], p["b"])]},
             }
+            save_english(conn, article, editions[i])
+            audit["bilingualReview"] = {k: v for k, v in editions[i].items() if k != "content"}
             conn.execute(
                 """UPDATE articles SET title=%s,dek=%s,summary=%s,body_json=%s,keywords=%s,
                    read_minutes=%s,updated_at=%s,status='published',authority_score=%s,citation_count=%s
