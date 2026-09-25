@@ -320,13 +320,13 @@ class AdminWorkflowTests(unittest.TestCase):
           state.metrics.abTest.recentEvents=[
             {articleSlug:'published',articleTitle:'历史中文标题',type:'x402_challenge',
              status:'challenge',agentName:'Test',occurredAt:'2026-09-25T00:00:00Z'},
-            {articleSlug:'draft',articleTitle:'待核验的原始研究',type:'x402_challenge',
+            {articleSlug:'draft',articleTitle:'研究摘要',type:'x402_challenge',
              status:'challenge',agentName:'Test',occurredAt:'2026-09-25T00:00:00Z'}];
           renderDashboard();
         }""")
         expect(self.page.locator(".event-row [data-original-language]")).to_have_text("Published research")
         expect(self.page.locator(".x402-event strong").first).to_have_text("Published research")
-        expect(self.page.locator(".x402-event strong").last).to_have_text("待核验的原始研究")
+        expect(self.page.locator(".x402-event strong").last).to_have_text("研究摘要")
         self.assertEqual(self.page.locator("#adminApp img").count(), 0)
 
 
