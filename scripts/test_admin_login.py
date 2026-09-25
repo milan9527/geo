@@ -169,6 +169,39 @@ class AdminLoginTests(unittest.TestCase):
         expect(self.page.locator(".metric-grid")).to_be_visible()
         self.assertEqual(self.login_requests, 1)
 
+    def delay_initial_session(self):
+        self.context.add_init_script("""(() => {
+            const original=window.fetch;
+            window.releaseInitialSession=null;
+            window.fetch=(url,options)=>String(url).includes('/api/admin/auth/me')
+              ? new Promise(resolve => { window.releaseInitialSession=()=>resolve(
+                  new Response(JSON.stringify({error:'Authentication required'}),{
+                    status:401,headers:{'Content-Type':'application/json'}})); })
+              : original(url,options);
+        })();""")
+
+    def test_slow_initial_session_does_not_erase_a_password_already_being_typed(self):
+        self.delay_initial_session()
+        self.page.goto("https://admin.test/")
+        self.page.locator('[name="username"]').fill("test-admin")
+        self.page.locator('[name="password"]').fill("test-password")
+        self.page.evaluate("window.releaseInitialSession()")
+        self.page.wait_for_timeout(100)
+        expect(self.page.locator('[name="password"]')).to_have_value("test-password")
+        self.page.locator("#loginButton").click()
+        expect(self.page.locator(".metric-grid")).to_be_visible()
+        self.assertEqual(self.login_requests, 1)
+
+    def test_late_initial_session_failure_cannot_undo_a_successful_login(self):
+        self.delay_initial_session()
+        self.login()
+        expect(self.page.locator(".metric-grid")).to_be_visible()
+        self.page.evaluate("window.releaseInitialSession()")
+        self.page.wait_for_timeout(100)
+        expect(self.page.locator("#adminShell")).to_be_visible()
+        expect(self.page.locator("#loginScreen")).to_be_hidden()
+        self.assertEqual(self.login_requests, 1)
+
 
 if __name__ == "__main__":
     unittest.main()

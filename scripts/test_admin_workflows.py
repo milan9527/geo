@@ -280,6 +280,8 @@ class AdminWorkflowTests(unittest.TestCase):
 
     def test_settings_failures_ranges_refresh_views_and_logout(self):
         self.start(view="settings")
+        expect(self.page.locator(".view-header")).to_contain_text("save preferences only")
+        expect(self.page.locator("#adminApp")).to_contain_text("Alert delivery is not configured")
         toggle = self.page.locator('[data-setting="automatic_json_ld"]')
         self.fail.add(("PATCH", "/api/admin/settings/automatic_json_ld"))
         toggle.click()

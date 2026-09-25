@@ -2,6 +2,7 @@ const I18N = window.apertureI18n;
 const API = location.origin;
 const todayIso = () => new Date().toISOString().slice(0, 10);
 const daysAgoIso = (days) => new Date(Date.now() - days * 86400000).toISOString().slice(0, 10);
+let authenticationVersion = 0;
 const state = {
   view: "dashboard",
   range: "30d",
@@ -121,13 +122,13 @@ function userInitials(user) {
   return source.replace(/\s+/g, "").slice(0, 2).toUpperCase();
 }
 
-function showLogin(message = "") {
+function showLogin(message = "", { preservePassword = false } = {}) {
   state.user = null;
   $("#adminShell").hidden = true;
   $("#loginScreen").hidden = false;
   $("#loginError").textContent = message;
   const password = $('#loginForm [name="password"]');
-  if (password) password.value = "";
+  if (password && !preservePassword) password.value = "";
   if (!document.activeElement?.matches("input,textarea,select")) {
     $('#loginForm [name="username"]')?.focus();
   }
@@ -144,6 +145,7 @@ function showAdmin(user) {
 
 async function login(event) {
   event.preventDefault();
+  authenticationVersion++;
   const button = $("#loginButton");
   const form = new FormData(event.currentTarget);
   $("#loginError").textContent = "";
@@ -962,7 +964,9 @@ function renderSettings() {
   $("#pageTitle").textContent = "数据与设置";
   $("#adminApp").innerHTML = `
     <section class="view-page">
-      <div class="view-header"><div><h2>平台配置</h2><p>管理数据采集、Agent 识别与机器访问策略。</p></div></div>
+      <div class="view-header"><div><h2>平台配置</h2><p>${I18N.lang === "en"
+        ? "These switches save preferences only; they do not yet change runtime behavior. Automatic publication is controlled separately by the deployed review policy."
+        : "以下开关目前只保存配置偏好，尚未控制实际运行行为。自动发布由已部署的审核策略独立控制。"}</p></div></div>
       <div class="settings-grid">
         <article class="setting-card"><h2>GEO 与访问识别</h2>
           <div class="setting-row"><div><strong>Agent User-Agent 识别</strong><span>记录常见 AI 爬虫与研究 Agent 来源</span></div><button class="toggle ${setting("agent_user_agent_detection", true) ? "on" : ""}" data-setting="agent_user_agent_detection"></button></div>
@@ -972,11 +976,11 @@ function renderSettings() {
         <article class="setting-card"><h2>支付与授权</h2>
           <div class="setting-row"><div><strong>x402 Agent 支付</strong><span>高价值内容支持机器按次购买</span></div><button class="toggle ${setting("x402_payments", true) ? "on" : ""}" data-setting="x402_payments"></button></div>
           <div class="setting-row"><div><strong>Stripe · Privy 钱包</strong><span>需要提供外部服务凭据后启用</span></div><span class="status-pill paused">未配置</span></div>
-          <div class="setting-row"><div><strong>支付失败告警</strong><span>结算成功率低于 95% 时触发</span></div><button class="toggle ${setting("payment_failure_alerts", true) ? "on" : ""}" data-setting="payment_failure_alerts"></button></div>
+          <div class="setting-row"><div><strong>支付失败告警</strong><span>${I18N.lang === "en" ? "Alert delivery is not configured" : "尚未配置告警发送"}</span></div><button class="toggle ${setting("payment_failure_alerts", true) ? "on" : ""}" data-setting="payment_failure_alerts"></button></div>
         </article>
         <article class="setting-card"><h2>数据库</h2>
           <div class="setting-row"><div><strong>Aurora PostgreSQL 17.7</strong><span>Serverless v2 · Data API</span></div><span class="status-pill running">已连接</span></div>
-          <div class="setting-row"><div><strong>分析数据保留</strong><span>当前统计保留周期</span></div><b>${setting("analytics_retention_days", 120)} 天</b></div>
+          <div class="setting-row"><div><strong>分析数据保留</strong><span>${I18N.lang === "en" ? "Saved preference; automatic cleanup is not enabled" : "已保存的偏好；尚未启用自动清理"}</span></div><b>${setting("analytics_retention_days", 120)} 天</b></div>
         </article>
         <article class="setting-card"><h2>推理与运行时</h2>
           <div class="setting-row"><div><strong>分析模型</strong><span>Amazon Bedrock 应用推理配置</span></div><b>GPT-6 Astra</b></div>
@@ -1334,15 +1338,18 @@ function exportContent() {
 async function init() {
   $("#loginForm").addEventListener("submit", login);
   bindEvents();
+  const initialVersion = authenticationVersion;
   try {
     const session = await api("/api/admin/auth/me");
+    if (initialVersion !== authenticationVersion) return;
     showAdmin(session.user);
   } catch (error) {
+    if (initialVersion !== authenticationVersion) return;
     if (error.status === 401) {
-      showLogin();
+      showLogin("", { preservePassword: true });
       return;
     }
-    showLogin("无法连接管理 API，请确认后端服务运行正常。");
+    showLogin("无法连接管理 API，请确认后端服务运行正常。", { preservePassword: true });
     return;
   }
   await loadAdminData();

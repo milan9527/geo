@@ -4,6 +4,10 @@ English is served at the existing public URLs. Chinese editions use `/zh/`, incl
 
 Public and admin APIs default to English; append `lang=zh` for Chinese. The admin interface defaults to English and remembers an explicit language choice in the browser. Source evidence and unpublished drafts retain their original language; publication produces a reviewed English edition of the complete article.
 
+Navigation loads the same server-rendered document used for direct visits, including the complete category catalogue and its metadata. The article list API supports `limit` (1–100, default 30) and `offset` (default 0). Categories are not limited by that API default. Search and catalogue reads exclude full bodies and use bounded Aurora result chunks within a consistent database snapshot.
+
+Agent A/B links and payment resource URLs carry the selected `lang`. Editable source registry names, notes and connector configuration retain their original values in either interface language, so editing another field cannot replace original data with a translation.
+
 ## Publication requirements
 
 The scheduled generator continues to produce a Chinese source article. Existing evidence/quality checks and whole-catalog semantic duplicate review run first. Only an independent article passing those gates proceeds to English translation and independent translation review. The review must confirm completeness and faithful meaning, score at least 90, and report no issues. Structural validation preserves paragraphs, table rows, citation markers, code and numeric fields.
@@ -25,3 +29,5 @@ The command saves a snapshot and individual translation/review records, resumes 
 UI dictionaries are checked in at `backend/locales/en.json` and bundled for both frontends. To translate new source labels, run `scripts/build_locales.py`, review the resulting wording, then verify both interfaces. Unpublished article metadata must never be embedded in public JavaScript bundles. Reviewed article editions are stored separately from UI labels.
 
 Regression checks include `scripts/test_bilingual.py`, scheduled publication tests, admin language/session browser tests, notifier tests and traffic classification tests. Database tests require an isolated PostgreSQL database through `PUBLICATION_TEST_DATABASE_URL`; never point that variable at production.
+
+See [functional verification](functional-verification.md) for the complete coverage and search submission procedure.
