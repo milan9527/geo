@@ -68,6 +68,7 @@ class TranslationTests(unittest.TestCase):
     def test_unpublished_text_and_original_evidence_are_not_fragment_translated(self):
         i18n.begin_request("/api/admin/articles", {})
         i18n.CACHE.set({"headers": {}, "slugs": {}})
+        self.assertEqual(i18n.text("尚未核实的新证据12个月"), "尚未核实的新证据12个月")
         draft = {"id": 1, "slug": "draft", "title": "研究标题尚未发布", "summary": "证据需要重新审核"}
         self.assertEqual(i18n.payload(draft), draft)
         research = {"output_article_id": 1, "verification": {"notes": "研究证据保持原文"},

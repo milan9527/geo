@@ -109,6 +109,24 @@ class AdminLoginTests(unittest.TestCase):
         expect(self.page.locator("#adminShell")).to_be_visible()
         self.assertEqual(self.login_requests, 1)
 
+    def test_bilingual_gate_and_original_log_keep_source_text(self):
+        self.authenticated = True
+        self.page.goto("https://admin.test/")
+        expect(self.page.locator("#adminShell")).to_be_visible()
+        result = self.page.evaluate("""() => publicationSummary({publicationGate:{ready:true},
+            semanticDeduplication:{reason:'bilingual_review_failed'}}, 'review')""")
+        self.assertEqual(result["title"], "Awaiting bilingual review")
+        original = "已自动发布研究；未来12个月的证据仍需审查 <script>bad()</script>"
+        self.page.evaluate("""message => {
+            state.jobs = [{id:1,agent_name:'Test Agent',agent_kind:'research',message,
+                status:'completed',started_at:'2026-09-25T00:00:00Z'}];
+            renderJobs();
+        }""", original)
+        expect(self.page.locator(".job-timeline")).to_contain_text("Research published after review")
+        self.page.locator(".original-record summary").click()
+        expect(self.page.locator(".original-record [data-original-language]")).to_have_text(original)
+        self.assertEqual(self.page.locator(".job-timeline script").count(), 0)
+
     def test_successful_login_survives_502_and_retries_without_reauthentication(self):
         self.metrics_status = 502
         self.login()

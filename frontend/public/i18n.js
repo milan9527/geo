@@ -9,7 +9,9 @@
   const text = value => {
     if (lang === "zh" || typeof value !== "string" || !/[\u3400-\u9fff]/.test(value)) return value;
     const key = value.trim();
-    return dictionary[key] ? value.replace(key, dictionary[key]) : value.replace(pattern, match => dictionary[match]);
+    if (dictionary[key]) return value.replace(key, dictionary[key]);
+    const translated = value.replace(pattern, match => dictionary[match]);
+    return /[\u3400-\u9fff]/.test(translated) ? value : translated;
   };
   const path = (value, locale = lang) => (locale === "zh" ? "/zh" : "") + strip(value);
   const api = value => value + (value.includes("?") ? "&" : "?") + "lang=" + lang;

@@ -56,7 +56,9 @@ def text(value):
     if stripped in labels():
         return value.replace(stripped, labels()[stripped])
     pattern = label_pattern()
-    return pattern.sub(lambda match: labels()[match.group()], value) if pattern else value
+    translated = pattern.sub(lambda match: labels()[match.group()], value) if pattern else value
+    # Unknown prose is source content, not a collection of UI label fragments.
+    return value if re.search(r"[\u3400-\u9fff]", translated) else translated
 
 
 def _cache():
