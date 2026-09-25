@@ -1,11 +1,106 @@
 # Aperture GEO Intelligence
 
-专业 GEO 内容平台 Demo，采用前台、管理后台、API 与数据库分离架构。
+Aperture 是一个演示 **Agent 生产高价值内容 → GEO 优化与分发 → Agent 按次付费获取数据**
+的内容平台。项目将行业数据采集、深度研究、AI 搜索可发现性和 x402 支付连接起来，
+帮助内容提供商探索 AI Agent 时代的数据分发与流量变现业务。
 
 公开研究网站：[Aperture GEO Intelligence](https://aperture.zhangwangshu.com/)。
 访问[研究方法](https://aperture.zhangwangshu.com/methodology)了解来源核验与引用规则，
 或通过 [RSS 订阅](https://aperture.zhangwangshu.com/feed.xml)获取新发布的研究。
 引用文章时，请链接到该文章的固定网址，方便读者查阅正文与来源。
+
+## 项目目的与商业价值
+
+互联网的核心商业逻辑之一是“流量就是钱”。随着机器人和 AI Agent 访问增长，
+数据的消费者从人扩展到能够自主检索、分析和调用工具的程序。
+[AIbase 关于机器人流量与付费抓取的报道](https://news.aibase.com/zh/news/28689)
+提供了这一趋势的背景；本项目探索内容提供商如何把这类访问转化为新的业务机会。
+
+企业原有的付费 API 通常面向已签约客户。通过公开可发现的内容入口和支持 x402 的
+机器付费端点，企业可以让长尾 Agent 在需要数据时直接发现、询价和购买，
+拓展按篇、按次的数据消费场景。自动支付要求买方 Agent 支持协议并配置钱包和预算，
+普通爬虫收到 HTTP 402 并不会自动付款。
+
+项目演示两个相互促进的方向：
+
+| 方向 | 项目实现 | 商业价值 |
+| --- | --- | --- |
+| GEO 优化 | Agent 抓取行业来源，核验证据、深度分析并生成研究报告；提供完整 SSR 正文、结构化数据和发现入口 | 提高内容被 AI 搜索发现、理解和引用的机会，带来品牌曝光与访问 |
+| Agent 流量变现 | 为专用机器端点配置 x402 定价，验证并结算买方支付后交付内容 | 将有价值的数据访问转化为按次交易，扩展原有付费 API 的长尾客户渠道 |
+
+金融机构可探索授权范围内的行业研究、经济指标解读和公司事件分析；电商、媒体、
+科技与其他行业可提供商品情报、趋势研究及专业知识数据。公开内容承担发现与引流，
+付费内容应提供清晰的增量价值，例如更及时的数据、结构化结果或专有分析。
+当前 Demo 同时保留免费文章和专用付费机器表示，用于验证完整流程；正式商业化时，
+需明确免费与付费产品的价值差异以及数据再分发许可。
+
+## AWS 架构总览
+
+架构图包含两页，使用 AWS 图标与配色，文字、节点和连线均可编辑。
+下载后可使用 diagrams.net / draw.io 打开；下方 PNG 可直接在 GitHub 预览。
+
+**[下载可编辑的 draw.io 架构图](docs/architecture/aperture-aws.drawio)**
+
+![Aperture AWS 架构总览：内容生产、GEO 分发、x402 支付与流量观测](docs/architecture/aws-overview.png)
+
+### 1. Agent 内容生产
+
+EventBridge Scheduler 按 UTC 计划触发 Lambda 桥接函数，异步调用 Bedrock AgentCore
+Runtime。Runtime 从 Aurora 读取数据源与任务配置，使用 Codex SDK 生成、执行和修复
+站点爬虫，结合 AgentCore Browser 处理动态网页、Code Interpreter 处理采集代码与数据。
+Amazon Bedrock 提供研究与分析所需的模型推理。
+
+采集结果经过来源追溯、证据核验、跨来源分析和全文去重，生成包含来源引用的研究报告。
+内容和任务结果通过 Aurora Data API 持久化；只有通过质量与去重门槛的内容才进入
+自动发布流程，其余保留供审核。生产链路详见
+[Agent Runtime 架构说明](agent_runtime/ARCHITECTURE.md)。
+
+### 2. GEO 内容服务与分发
+
+公开站和管理后台分别使用私有 S3 与 CloudFront OAC 提供静态资源。
+CloudFront 将 `/api/*`、`/agent/*` 和研究页面的 SSR 请求转发到 ALB 后的 ECS Fargate
+API，API 通过 Aurora Data API 读取内容、配置和业务事件。
+
+公开页面提供完整首屏 HTML、canonical 和 JSON-LD，并通过 sitemap、RSS 与 `llms.txt`
+提供内容发现入口。发布后的 Lambda 通知负责精确失效 CloudFront 缓存和提交 IndexNow，
+帮助搜索服务及时重新抓取。GEO 在这里是内容质量与技术可访问性的优化，
+不保证搜索收录、排名提升或 AI 引用。
+
+### 3. x402 支付与内容交付
+
+![x402 支付流程：Agent 获取报价、签名支付、链上结算与内容交付](docs/architecture/x402-payment-flow.png)
+
+1. 买方 Agent 请求 `/agent/v1/articles/{slug}/paid`，内容 API 返回 HTTP 402 和
+   `PAYMENT-REQUIRED`，声明价格、网络、币种及收款地址。
+2. 买方检查授权与预算，用钱包签名，并携带 `PAYMENT-SIGNATURE` 重试请求。
+3. ECS 中的 x402 服务通过外部 Facilitator 验证支付并提交结算，USDC 转入内容提供商
+   配置的 `payTo` 钱包。
+4. 结算成功后 API 返回 HTTP 200、付费内容和 `PAYMENT-RESPONSE`；交易记录进入后台统计。
+
+卖方实现位于 [backend/x402_payment.py](backend/x402_payment.py)，采用 x402 v2
+`exact` EVM scheme。项目也演示了买方 Agent 使用 AgentCore Payments 在预算约束内
+购买付费来源；买方支付能力与卖方收款端点是不同角色，外部 Facilitator 负责协议验证
+与链上结算，不是 AWS 托管组件。
+
+当前演示使用 **Base Sepolia 测试网 USDC**，默认报价为 `0.002 USDC`。
+测试网结算验证了支付与交付链路，不代表主网收入或真实商业客户成交。
+
+### 4. GEO 与商业效果观测
+
+CloudFront Standard Logging v2 将边缘访问日志写入私有 S3，经 SQS 缓冲后由 Lambda
+生成小时聚合与 HLL 独立访客估算，写入 Aurora。管理后台展示 GEO 总览、Agent 流量、
+来源渠道、研究任务及 x402 支付请求和结算事件。边缘日志可以覆盖缓存命中的请求，
+支付等业务事件则由应用记录。
+
+| 观察对象 | 可以验证什么 | 解读边界 |
+| --- | --- | --- |
+| 内容生产与审核 | 抓取任务、研究输出、证据来源和发布结果 | 生成量不等于内容质量 |
+| Agent 访问与搜索引流 | 已识别爬虫访问、来源渠道及趋势 | 爬虫访问不等于 AI 引用或排名提升 |
+| x402 请求与结算 | 从报价请求到结算成功的转化、金额与交易记录 | HTTP 402 请求不等于付款；当前金额为测试网口径 |
+
+项目已演示数据产生、公开分发和测试网付费交付的完整流程。商业化效果应继续用
+真实买方付费转化率、复购、收入与内容生产成本衡量；AI 搜索效果应结合站长平台、
+来源归因和可验证的引用持续评估。
 
 ## 工程实践
 
@@ -18,7 +113,7 @@
 测试浏览可使用含 `Aperture` 的 User-Agent，或在浏览器地址添加 `aperture_test=1`；
 后者在当前标签页内持续禁用新增读者事件。采集器对已识别的诊断请求不再计数。
 
-## 架构
+## 代码与本地服务布局
 
 ```text
 frontend/public   公开研究网站       http://127.0.0.1:4173
