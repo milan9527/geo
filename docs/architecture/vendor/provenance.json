@@ -1,0 +1,26 @@
+{
+  "source": "https://raw.githubusercontent.com/jgraph/drawio/0f419a92c769adb5fb20f2b18053a5ae8c7e4993/src/main/webapp/stencils/aws4.xml",
+  "commit": "0f419a92c769adb5fb20f2b18053a5ae8c7e4993",
+  "upstreamSha256": "3a0ce4f9ea2d8d46129b098ebf560dc216438d7a9967de0f6ba2f5e9ba588078",
+  "selection": [
+    "application load balancer",
+    "aurora",
+    "bedrock",
+    "cloudfront",
+    "eventbridge scheduler",
+    "fargate",
+    "lambda",
+    "s3",
+    "sqs"
+  ],
+  "changes": "Nine unmodified shape definitions extracted from the draw.io AWS4 stencil library.",
+  "renderer": {
+    "mxgraphVersion": "4.2.2",
+    "source": "https://cdn.jsdelivr.net/npm/mxgraph@4.2.2/javascript/mxClient.min.js",
+    "files": {
+      "mxClient.min.js": "776997760826fa8352f3935ebe5a7be90337bc33972861530f160f47948ea43f",
+      "mxAWS4.js": "a889e235e5e8c38abf9e35b580f5add187f410046d023db13dfcc319c7cc17f8",
+      "aws4-icons.xml": "63bc63dbf96807e016745eefcf34179bb1b2e9856c31c9393f7a80f5c525509f"
+    }
+  }
+}

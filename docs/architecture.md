@@ -4,7 +4,7 @@ Aperture combines evidence-based publishing with public search discovery and pro
 
 ![AWS overview](architecture/aws-overview.png)
 
-[Open the editable diagrams](architecture/aperture-aws.drawio).
+[Open the editable diagrams](architecture/aperture-aws.drawio) · [AWS icon style and export instructions](architecture/README.md).
 
 ## Request and storage boundaries
 

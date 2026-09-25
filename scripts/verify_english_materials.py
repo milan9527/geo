@@ -48,16 +48,36 @@ def main():
             checked_links += 1
 
     drawio = ET.parse(ROOT / "docs/architecture/aperture-aws.drawio").getroot()
+    architecture = ROOT / "docs/architecture"
+    exports = json.loads((architecture / "manifest.json").read_text())
+    assert exports["sourceSha256"] == hashlib.sha256(
+        (architecture / "aperture-aws.drawio").read_bytes()).hexdigest()
     assert len(drawio) == 3
     diagram_labels = 0
+    native_aws_icons = 0
+    diagram_hashes = set()
     for diagram in drawio:
         assert diagram.find("mxGraphModel/root") is not None
+        icons = 0
         for cell in diagram.findall(".//mxCell"):
             value = cell.get("value", "")
             assert not CJK.search(value), value
             diagram_labels += bool(value)
+            style = cell.get("style", "")
+            if "shape=mxgraph.aws4.resourceIcon;" in style:
+                assert "resIcon=mxgraph.aws4." in style
+                assert "strokeColor=#FFFFFF;" in style
+                icons += 1
+        export = next(item for item in exports["pages"] if item["page"] == diagram.get("id"))
+        assert icons == export["nativeAwsIcons"] and icons > 0
+        assert export["textOverflows"] == 0
+        native_aws_icons += icons
         for suffix in (".png", ".svg"):
-            assert (ROOT / "docs/architecture" / (diagram.get("id") + suffix)).exists()
+            artifact = architecture / (diagram.get("id") + suffix)
+            digest = hashlib.sha256(artifact.read_bytes()).hexdigest()
+            assert digest == export[suffix[1:] + "Sha256"], artifact
+            if suffix == ".png":
+                diagram_hashes.add(digest)
 
     capture = json.loads((ROOT / "docs/screenshots/manifest.json").read_text())
     assert capture["temporaryAdminRemoved"] and not capture["browserErrors"]
@@ -76,6 +96,7 @@ def main():
             for name in archive.namelist() if name.startswith("ppt/media/")
         }
         assert screenshot_hashes <= embedded, "Missing or modified embedded screenshot"
+        assert diagram_hashes <= embedded, "PPTX diagrams do not match the current draw.io exports"
     native_text_boxes = 0
     for index, slide in enumerate(prs.slides):
         rendered = re.sub(r"\s+", "", pdf[index].get_text())
@@ -95,6 +116,9 @@ def main():
         "localDocumentationLinksChecked": checked_links,
         "editableDiagramPages": len(drawio),
         "englishDiagramLabels": diagram_labels,
+        "nativeAwsServiceIcons": native_aws_icons,
+        "diagramExportsMatchDrawioSource": True,
+        "pptxDiagramsMatchCurrentExports": True,
         "realEnglishScreenshots": len(screenshot_hashes),
         "screenshotHashesMatch": True,
         "allScreenshotsEmbeddedUnmodified": True,

@@ -1,0 +1,35 @@
+{
+  "source": "aperture-aws.drawio",
+  "sourceSha256": "b36237452aa4a69ac344cb0e1a047f5858db8a7771e3eb94bf0ac72205563d48",
+  "style": "Original Chinese AWS layout, translated and updated in English; native draw.io AWS4 shapes",
+  "renderer": "mxGraph 4.2.2 + draw.io mxAWS4 / Chromium / CairoSVG",
+  "pages": [
+    {
+      "page": "aws-overview",
+      "width": 1760,
+      "height": 1120,
+      "nativeAwsIcons": 13,
+      "textOverflows": 0,
+      "svgSha256": "a4f5a6e1f0eb26fbc3d77c66ba26c153c39a1e5bd34b52a516776710d23a1fdf",
+      "pngSha256": "8d47c39b1bd53d884111fd44f843d4a69831f3552257628a3603df12c3ed9778"
+    },
+    {
+      "page": "publication-pipeline",
+      "width": 1440,
+      "height": 760,
+      "nativeAwsIcons": 2,
+      "textOverflows": 0,
+      "svgSha256": "ad5332211f95f1cf857ed396ab005b64cd86f25b1c7f1f5742ce9df639a1153c",
+      "pngSha256": "d1ab5d61210cbd99be444d3b1a9444d2fe30689820785a9e6642ebd45a273f92"
+    },
+    {
+      "page": "x402-payment-flow",
+      "width": 1600,
+      "height": 1020,
+      "nativeAwsIcons": 1,
+      "textOverflows": 0,
+      "svgSha256": "71ffc5bb439237a4f76cf8091330d60b81f6b19cd10d7bc9c6c69fbe2cd977d1",
+      "pngSha256": "5fc91b91579568b78fd66cffec48940cabf4ba32f5dcceb20021d97f6e8a5f7b"
+    }
+  ]
+}
