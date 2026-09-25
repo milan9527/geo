@@ -131,8 +131,15 @@ def article_row(row, *, detailed=False):
 def payload(value):
     if isinstance(value, dict):
         value = dict(value)
+        preserved = set()
+        if "output_article_id" in value and "verification" in value:
+            preserved.update({"summary", "error_message", "topic", "article_title", "sections", "evidence", "analysisProcess", "verification", "toolTrace"})
+        if "agent_id" in value and "message" in value:
+            preserved.add("message")
         if language() == "en" and "title" in value and "slug" in value:
             header = english_headers().get(value.get("id")) or _cache().get("slugs", {}).get(value["slug"])
+            if not header:
+                preserved.update({"title", "dek", "summary", "sections", "keywords", "sources"})
             if header:
                 for key in ("title", "dek", "summary"):
                     if key in value:
@@ -147,7 +154,7 @@ def payload(value):
                     if "sources" in value:
                         value["sources"] = [{**s, "title": document["sourceTitles"][i]}
                                             for i, s in enumerate(value["sources"])]
-        return {key: item if key in {"code", "body_json", "config_json", "password", "token", "slug", "url"} else payload(item) for key, item in value.items()}
+        return {key: item if key in preserved | {"code", "body_json", "config_json", "password", "token", "slug", "url"} else payload(item) for key, item in value.items()}
     if isinstance(value, list):
         return [payload(item) for item in value]
     return text(value)

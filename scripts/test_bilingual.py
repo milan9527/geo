@@ -65,6 +65,15 @@ class TranslationTests(unittest.TestCase):
         i18n.begin_request("/api/v1/articles", {"lang": ["zh"]})
         self.assertEqual(i18n.language(), "zh")
 
+    def test_unpublished_text_and_original_evidence_are_not_fragment_translated(self):
+        i18n.begin_request("/api/admin/articles", {})
+        i18n.CACHE.set({"headers": {}, "slugs": {}})
+        draft = {"id": 1, "slug": "draft", "title": "研究标题尚未发布", "summary": "证据需要重新审核"}
+        self.assertEqual(i18n.payload(draft), draft)
+        research = {"output_article_id": 1, "verification": {"notes": "研究证据保持原文"},
+                    "analysisProcess": [{"step": "分析原始证据"}]}
+        self.assertEqual(i18n.payload(research), research)
+
     def test_scheduled_publication_fails_closed_when_translation_is_unavailable(self):
         a = article()
         store = Mock()

@@ -94,7 +94,11 @@ function renderX402Event(event) {
 }
 
 async function api(path, options = {}) {
-  const response = await fetch(`${API}${I18N.api(path)}`, {
+  const detailId = path.match(/^\/api\/admin\/articles\/(\d+)$/)?.[1];
+  const originalDraft = detailId && state.articles.find(item => item.id === Number(detailId))?.status !== "published";
+  const requestPath = originalDraft || /^\/api\/admin\/(research|jobs)(?:[/?]|$)/.test(path)
+    ? path + (path.includes("?") ? "&" : "?") + "lang=zh" : I18N.api(path);
+  const response = await fetch(`${API}${requestPath}`, {
     ...options,
     credentials: "same-origin",
     headers: { "Content-Type": "application/json", ...(options.headers || {}) },
@@ -397,7 +401,7 @@ function renderContentRows() {
   $("#contentRows").innerHTML = rows.map((item) => `
     <tr>
       <td class="select-column"><input type="checkbox" data-select-article="${item.id}" ${state.selectedArticles.has(item.id) ? "checked" : ""} aria-label="选择 ${escapeHtml(item.title)}" /></td>
-      <td><button class="content-title content-link" data-open-article="${item.id}"><strong>${escapeHtml(item.title)}</strong><span>${escapeHtml(item.author)} · /${escapeHtml(item.slug)}</span></button></td>
+      <td><button class="content-title content-link" data-open-article="${item.id}"><strong data-original-language>${escapeHtml(item.title)}</strong><span>${escapeHtml(item.author)} · /${escapeHtml(item.slug)}</span></button></td>
       <td>${escapeHtml(item.category_name)}</td><td><span class="status-pill ${escapeHtml(item.status)}">${escapeHtml(statusLabel(item.status))}</span></td>
       <td><b>${item.authority_score}</b> / 100</td><td>${fmt(item.citation_count)}</td>
       <td><span class="access-pill">${item.access_model === "open" ? "开放" : `x402 · $${item.agent_price}`}</span></td>
@@ -429,7 +433,8 @@ function renderDetailSection(section) {
   const rows = Array.isArray(section.rows) && section.rows.length
     ? `<div class="detail-table-wrap"><table><thead><tr>${(Array.isArray(section.headers) ? section.headers : []).map((cell) => `<th>${escapeHtml(cell)}</th>`).join("")}</tr></thead><tbody>${section.rows.map((row) => `<tr>${(Array.isArray(row) ? row : []).map((cell) => `<td>${escapeHtml(cell)}</td>`).join("")}</tr>`).join("")}</tbody></table></div>`
     : "";
-  return `<section><h3>${escapeHtml(section.heading || "分析")}</h3>${paragraphs}${quote}${rows}${bullets}</section>`;
+  const code = section.code ? `<pre><code>${escapeHtml(section.code)}</code></pre>` : "";
+  return `<section><h3>${escapeHtml(section.heading || "分析")}</h3>${paragraphs}${quote}${rows}${bullets}${code}</section>`;
 }
 
 function renderDetailSource(source, index) {
@@ -456,10 +461,14 @@ function publicationSummary(verification, status) {
     candidate_changed: "审核期间文章内容发生变化，需要重新审核。",
     published_catalog_changed: "审核期间已发布内容有更新，需要重新比对。",
     automatic_publication_disabled: "该次任务未启用自动发布。",
+    bilingual_review_failed: I18N.lang === "en" ? "The English edition did not pass review. The article remains under review." : "英文译稿尚未通过复核，文章保留待审核。",
+    bilingual_review_unavailable: I18N.lang === "en" ? "A reviewed English edition is required before publication." : "中英文版本都通过复核后才可发布。",
   };
   if (dedup?.published) return { title: "当前待审核", detail: "该稿曾通过自动审核；当前发布状态以内容管理为准。" };
   return {
-    title: dedup?.reason === "duplicate_content" ? "重复内容，待审核" : "质量通过，等待全文复核",
+    title: dedup?.reason?.startsWith("bilingual_review_")
+      ? (I18N.lang === "en" ? "Awaiting bilingual review" : "等待中英双语复核")
+      : dedup?.reason === "duplicate_content" ? "重复内容，待审核" : "质量通过，等待全文复核",
     detail: reasons[dedup?.reason] || "尚无完整的全文去重记录；定时任务通过全部检查后自动发布。",
   };
 }
@@ -479,6 +488,7 @@ async function openArticleDetail(articleId) {
       : [];
     $("#contentDetailEyebrow").textContent = `${article.category_name} · ${statusLabel(article.status)}`;
     $("#contentDetailTitle").textContent = article.title;
+    $("#contentDetailTitle").setAttribute("data-original-language", "");
     body.innerHTML = `
       <div class="detail-meta">
         <span>${escapeHtml(article.author)} · ${escapeHtml(article.author_role)}</span>
@@ -496,9 +506,9 @@ async function openArticleDetail(articleId) {
           </div>
         </div>
       ` : ""}
-      <p class="detail-dek">${escapeHtml(article.dek)}</p>
-      <p class="detail-summary">${escapeHtml(article.summary)}</p>
-      <div class="detail-sections">${(Array.isArray(article.sections) ? article.sections : []).map(renderDetailSection).join("")}</div>
+      <p class="detail-dek" data-original-language>${escapeHtml(article.dek)}</p>
+      <p class="detail-summary" data-original-language>${escapeHtml(article.summary)}</p>
+      <div class="detail-sections" data-original-language>${(Array.isArray(article.sections) ? article.sections : []).map(renderDetailSection).join("")}</div>
       <div class="detail-sources">
         <h3>数据与来源</h3>
         ${Array.isArray(article.sources) && article.sources.length
@@ -881,13 +891,26 @@ async function saveCrawlerSchedule(event) {
   showToast("定期时间已更新", `${result.scheduleLabel} · UTC · ${syncState}`);
 }
 
+function originalRecordLabel() {
+  return I18N.lang === "en" ? "Original research record (source language)" : "原始研究记录";
+}
+
+function jobMessage(job) {
+  const original = escapeHtml(job.message || "");
+  if (I18N.lang === "zh") return `<span data-original-language>${original}</span>`;
+  let summary = I18N.text(statusLabel(job.status));
+  if (/自动发布/.test(job.message || "")) summary = "Research published after review";
+  else if (/提交审核/.test(job.message || "")) summary = "Research submitted for review";
+  return `<span>${escapeHtml(summary)}<details class="original-record"><summary>Original log</summary><p data-original-language>${original}</p></details></span>`;
+}
+
 function renderJobs() {
   $("#pageTitle").textContent = "爬虫任务记录";
   $("#adminApp").innerHTML = `
     <section class="view-page">
       <div class="view-header"><div><h2>任务执行历史</h2><p>查看每个 Agent 的调度、吞吐与运行结果。</p></div><div class="view-actions"><button class="ghost-button" id="refreshJobs"><svg><use href="#i-refresh"></use></svg>刷新</button></div></div>
       <article class="panel"><div class="panel-header"><div><p>AURORA JOB QUEUE</p><h2>最近 20 次任务</h2></div></div>
-        <div class="job-timeline">${state.jobs.map((job) => `<div class="job-row"><i class="job-dot"></i><div><strong>${job.agent_name}</strong><span>${job.agent_kind}${job.toolTrace?.sessionId ? ` · ${job.toolTrace.provider} · ${job.toolTrace.sessionId}` : ""}</span></div><span>${job.message}</span><b class="status-pill ${job.status}">${statusLabel(job.status)}</b><small>${relativeTime(job.started_at)}</small></div>`).join("")}</div>
+        <div class="job-timeline">${state.jobs.map((job) => `<div class="job-row"><i class="job-dot"></i><div><strong>${job.agent_name}</strong><span>${job.agent_kind}${job.toolTrace?.sessionId ? ` · ${job.toolTrace.provider} · ${job.toolTrace.sessionId}` : ""}</span></div>${jobMessage(job)}<b class="status-pill ${job.status}">${statusLabel(job.status)}</b><small>${relativeTime(job.started_at)}</small></div>`).join("")}</div>
       </article>
     </section>
   `;
@@ -899,22 +922,28 @@ function renderResearch() {
     <section class="view-page">
       <div class="view-header"><div><h2>证据驱动研究稿</h2><p>查看 Agent 抓取的原始来源、分析过程、专业观点、结论与发布状态。</p></div><div class="view-actions"><button class="ghost-button" id="refreshResearch"><svg><use href="#i-refresh"></use></svg>刷新</button></div></div>
       <div class="research-output-list">
-        ${state.research.length ? state.research.map((run) => `
-          <article class="research-output-card">
+        ${state.research.length ? state.research.map((run) => {
+          const article = state.articles.find(item => item.id === run.output_article_id);
+          const publication = publicationSummary(run.verification, run.article_status);
+          const publicPath = (I18N.lang === "zh" ? "/zh" : "") + "/article/" + encodeURIComponent(run.article_slug || "");
+          return `<article class="research-output-card">
             <div class="research-output-header">
-              <div><p>${run.agent_name} · ${run.agent_kind}</p><h2>${run.article_title || run.topic}</h2><span>${run.category_slug} · ${run.evidence_count} 条证据 · ${relativeTime(run.started_at)}</span></div>
-              <span class="status-pill ${run.status === "completed" ? "running" : run.status}">${run.status === "completed" ? "已生成" : run.status === "skipped" ? "证据未变化" : run.status}</span>
+              <div><p>${escapeHtml(run.agent_name)} · ${escapeHtml(run.agent_kind)}</p><h2 data-original-language>${escapeHtml(article?.title || run.article_title || run.topic)}</h2><span>${escapeHtml(run.category_slug)} · ${run.evidence_count} 条证据 · ${relativeTime(run.started_at)}</span></div>
+              <span class="status-pill ${run.status === "completed" ? "running" : run.status}">${run.status === "completed" ? "已生成" : run.status === "skipped" ? "证据未变化" : statusLabel(run.status)}</span>
             </div>
-            <p class="research-summary">${run.summary || run.error_message || "研究任务正在执行。"}</p>
-            ${run.toolTrace?.provider ? `<div class="research-process"><h3>真实工具执行</h3><div><b>${run.toolTrace.provider}</b><span>Session ${run.toolTrace.sessionId || "n/a"}</span><p>${run.toolTrace.documents || 0} 条文档${run.toolTrace.codexThreadId ? ` · Codex Thread ${run.toolTrace.codexThreadId}` : ""}${run.toolTrace.webBotAuth ? " · Web Bot Auth" : ""}</p></div></div>` : ""}
-            ${run.verification?.status ? `<div class="research-process"><h3>证据审计</h3><div><b>${run.verification.status === "verified" ? "已通过" : "需要人工复核"} · ${run.verification.score || 0}</b><span>${run.verification.writingStyle?.name ? `${run.verification.writingStyle.name} · ` : ""}${run.verification.notes || ""}</span><p>${(run.verification.unsupportedClaims || []).join("；") || "未发现无证据支持的关键表述"}</p></div></div>` : ""}
-            ${run.verification?.publicationGate ? `<div class="research-process"><h3>发布审核</h3><div><b>${escapeHtml(publicationSummary(run.verification, run.article_status).title)}</b><span>${run.verification.publicationGate.sourceCount || 0} 条来源 · ${run.verification.publicationGate.distinctPublishers || 0} 个独立发布机构</span><p>${escapeHtml(publicationSummary(run.verification, run.article_status).detail)}</p></div></div>` : ""}
-            ${run.analysisProcess?.length ? `<div class="research-process"><h3>分析过程</h3>${run.analysisProcess.map((step, index) => `<div><b>0${index + 1} ${step.step}</b><span>${step.method}</span><p>${step.result}</p><small>${step.evidence}</small></div>`).join("")}</div>` : ""}
-            ${run.sections?.length ? `<div class="research-sections"><h3>观点与结论</h3>${run.sections.map((section) => `<div><b>${section.heading}</b>${(section.paragraphs || []).slice(0, 2).map((text) => `<p>${text}</p>`).join("")}${(section.bullets || []).length ? `<ul>${section.bullets.map((item) => `<li>${item}</li>`).join("")}</ul>` : ""}</div>`).join("")}</div>` : ""}
-            <div class="research-evidence"><h3>数据与来源</h3>${run.evidence.map((source, index) => `<a href="${source.url}" target="_blank" rel="noreferrer"><span>[S${index + 1}] ${source.publisher} · ${source.source_type}</span><b>${source.title}</b><small>${source.published_at}</small><p>${source.content_excerpt.slice(0, 260)}</p></a>`).join("")}</div>
-            ${run.output_article_id ? `<div class="research-output-footer"><span>文章 #${run.output_article_id} · ${run.article_status === "review" ? "待编辑审核" : statusLabel(run.article_status)}</span><button class="ghost-button" data-open-content>前往内容管理</button></div>` : ""}
-          </article>
-        `).join("") : '<div class="empty-state">尚无深度研究输出。运行一个爬虫 Agent 后，证据和分析会显示在这里。</div>'}
+            <div class="research-process"><h3>发布审核</h3><div><b>${escapeHtml(publication.title)}</b><p>${escapeHtml(publication.detail)}</p></div></div>
+            ${run.article_status === "published" && run.article_slug ? `<a class="ghost-button" href="https://aperture.zhangwangshu.com${publicPath}" target="_blank" rel="noopener noreferrer">${I18N.lang === "en" ? "Read English edition" : "阅读中文版本"}</a>` : ""}
+            <details class="original-record"><summary>${originalRecordLabel()}</summary><div data-original-language>
+              <p class="research-summary">${escapeHtml(run.summary || run.error_message || "")}</p>
+              ${run.toolTrace?.provider ? `<div class="research-process"><h3>工具执行 / Tools</h3><div><b>${escapeHtml(run.toolTrace.provider)}</b><span>Session ${escapeHtml(run.toolTrace.sessionId || "n/a")}</span><p>${run.toolTrace.documents || 0} documents</p></div></div>` : ""}
+              ${run.verification?.status ? `<div class="research-process"><h3>证据审计 / Evidence review</h3><div><b>${escapeHtml(run.verification.status)} · ${run.verification.score || 0}</b><span>${escapeHtml(run.verification.writingStyle?.name || "")} · ${escapeHtml(run.verification.notes || "")}</span><p>${escapeHtml((run.verification.unsupportedClaims || []).join("；"))}</p></div></div>` : ""}
+              ${run.analysisProcess?.length ? `<div class="research-process"><h3>分析过程 / Analysis</h3>${run.analysisProcess.map((step, index) => `<div><b>0${index + 1} ${escapeHtml(step.step)}</b><span>${escapeHtml(step.method)}</span><p>${escapeHtml(step.result)}</p><small>${escapeHtml(step.evidence)}</small></div>`).join("")}</div>` : ""}
+              ${run.sections?.length ? `<div class="research-sections"><h3>观点与结论 / Findings</h3>${run.sections.map(renderDetailSection).join("")}</div>` : ""}
+              <div class="research-evidence"><h3>数据与来源 / Sources</h3>${(run.evidence || []).map((source, index) => `<div>${renderDetailSource(source, index)}<p>${escapeHtml((source.content_excerpt || "").slice(0, 260))}</p></div>`).join("")}</div>
+            </div></details>
+            ${run.output_article_id ? `<div class="research-output-footer"><span>文章 #${run.output_article_id} · ${statusLabel(run.article_status)}</span><button class="ghost-button" data-open-content>前往内容管理</button></div>` : ""}
+          </article>`;
+        }).join("") : '<div class="empty-state">尚无深度研究输出。运行一个爬虫 Agent 后，证据和分析会显示在这里。</div>'}
       </div>
     </section>
   `;
