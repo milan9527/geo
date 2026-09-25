@@ -70,6 +70,12 @@ const x402EventLabels = {
   x402_service_error: "支付服务错误",
 };
 
+function eventArticleTitle(articleId, articleSlug, original) {
+  const article = state.articles.find(item => item.status === "published"
+    && ((articleId != null && item.id === Number(articleId)) || (articleSlug && item.slug === articleSlug)));
+  return article?.title || I18N.text(original);
+}
+
 function renderX402Event(event) {
   const transactionUrl = event.transactionHash
     ? safeExternalUrl(`https://sepolia.basescan.org/tx/${event.transactionHash}`)
@@ -80,7 +86,7 @@ function renderX402Event(event) {
     <div class="x402-event ${escapeHtml(event.status)}">
       <span class="x402-event-state">${escapeHtml(x402EventLabels[event.type] || event.type)}</span>
       <div>
-        <strong>${escapeHtml(event.articleTitle || event.articleSlug || "付费机器内容")}</strong>
+        <strong data-original-language>${escapeHtml(eventArticleTitle(event.articleId, event.articleSlug, event.articleTitle || event.articleSlug || "付费机器内容"))}</strong>
         <small>${escapeHtml(event.agentName)} · ${relativeTime(event.occurredAt)}</small>
       </div>
       <div class="x402-event-payment">
@@ -362,7 +368,7 @@ function renderDashboard() {
       <article class="panel">
         <div class="panel-header"><div><p>BUSINESS ACTIVITY</p><h2>最新业务事件</h2></div><span>实时</span></div>
         <div class="event-list">${state.events.slice(0,5).map((event) => `
-          <div class="event-row"><span class="event-icon"><svg><use href="#${event.visitor_type === "agent" ? "i-agent" : "i-users"}"></use></svg></span><div><strong>${event.agent_name || (event.visitor_type === "agent" ? "未知 Agent" : "人类访客")} · ${event.event_type}</strong><span>${event.article_title || "站点页面"}</span></div><small>${relativeTime(event.occurred_at)}</small></div>
+          <div class="event-row"><span class="event-icon"><svg><use href="#${event.visitor_type === "agent" ? "i-agent" : "i-users"}"></use></svg></span><div><strong>${escapeHtml(event.agent_name || (event.visitor_type === "agent" ? "未知 Agent" : "人类访客"))} · ${escapeHtml(event.event_type)}</strong><span data-original-language>${escapeHtml(eventArticleTitle(event.article_id, event.article_slug, event.article_title || "站点页面"))}</span></div><small>${relativeTime(event.occurred_at)}</small></div>
         `).join("")}</div>
       </article>
     </section>

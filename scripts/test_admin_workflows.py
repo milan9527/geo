@@ -311,6 +311,24 @@ class AdminWorkflowTests(unittest.TestCase):
         self.page.reload()
         expect(self.page.locator("#loginScreen")).to_be_visible()
 
+    def test_dashboard_events_use_the_published_edition_and_escape_original_records(self):
+        self.start(view="dashboard")
+        self.page.evaluate("""() => {
+          state.events=[{article_id:1,article_title:'历史中文标题',
+            agent_name:'<img src=x onerror=alert(1)>',event_type:'citation',
+            visitor_type:'agent',occurred_at:'2026-09-25T00:00:00Z'}];
+          state.metrics.abTest.recentEvents=[
+            {articleSlug:'published',articleTitle:'历史中文标题',type:'x402_challenge',
+             status:'challenge',agentName:'Test',occurredAt:'2026-09-25T00:00:00Z'},
+            {articleSlug:'draft',articleTitle:'待核验的原始研究',type:'x402_challenge',
+             status:'challenge',agentName:'Test',occurredAt:'2026-09-25T00:00:00Z'}];
+          renderDashboard();
+        }""")
+        expect(self.page.locator(".event-row [data-original-language]")).to_have_text("Published research")
+        expect(self.page.locator(".x402-event strong").first).to_have_text("Published research")
+        expect(self.page.locator(".x402-event strong").last).to_have_text("待核验的原始研究")
+        self.assertEqual(self.page.locator("#adminApp img").count(), 0)
+
 
 if __name__ == "__main__":
     unittest.main()
