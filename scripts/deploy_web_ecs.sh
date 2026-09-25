@@ -199,7 +199,7 @@ docker build \
 docker push "$IMAGE_URI"
 
 SCAN_FILE="${DEPLOY_TEMP_DIR}/scan.json"
-for _ in $(seq 1 30); do
+for _ in $(seq 1 120); do
   SCAN_STATUS="$(
     aws ecr describe-image-scan-findings \
       --region "$DEPLOY_REGION" \
@@ -213,6 +213,11 @@ for _ in $(seq 1 30); do
   fi
   sleep 5
 done
+
+if [ "$SCAN_STATUS" != "COMPLETE" ]; then
+  echo "Image scan is not complete (${SCAN_STATUS}); deployment was not updated." >&2
+  exit 1
+fi
 
 aws ecr describe-image-scan-findings \
   --region "$DEPLOY_REGION" \
