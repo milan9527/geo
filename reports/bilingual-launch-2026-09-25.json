@@ -1,0 +1,722 @@
+{
+  "verifiedAt": "2026-09-25T14:58:53.735776+00:00",
+  "verification": {
+    "publishedArticles": 41,
+    "publicPages": 104,
+    "preservedOriginalArticles": 41,
+    "reviewedEnglishEditions": 41,
+    "legacyRedirects": 19,
+    "bilingualPolicyRequired": true,
+    "pages": [
+      {
+        "path": "/",
+        "status": 200,
+        "language": "en",
+        "descriptionLength": 121
+      },
+      {
+        "path": "/zh/",
+        "status": 200,
+        "language": "zh-CN",
+        "descriptionLength": 53
+      },
+      {
+        "path": "/methodology",
+        "status": 200,
+        "language": "en",
+        "descriptionLength": 123
+      },
+      {
+        "path": "/zh/methodology",
+        "status": 200,
+        "language": "zh-CN",
+        "descriptionLength": 47
+      },
+      {
+        "path": "/about",
+        "status": 200,
+        "language": "en",
+        "descriptionLength": 128
+      },
+      {
+        "path": "/zh/about",
+        "status": 200,
+        "language": "zh-CN",
+        "descriptionLength": 32
+      },
+      {
+        "path": "/authors/research-desk",
+        "status": 200,
+        "language": "en",
+        "descriptionLength": 139
+      },
+      {
+        "path": "/zh/authors/research-desk",
+        "status": 200,
+        "language": "zh-CN",
+        "descriptionLength": 39
+      },
+      {
+        "path": "/editorial-policy",
+        "status": 200,
+        "language": "en",
+        "descriptionLength": 127
+      },
+      {
+        "path": "/zh/editorial-policy",
+        "status": 200,
+        "language": "zh-CN",
+        "descriptionLength": 41
+      },
+      {
+        "path": "/corrections",
+        "status": 200,
+        "language": "en",
+        "descriptionLength": 145
+      },
+      {
+        "path": "/zh/corrections",
+        "status": 200,
+        "language": "zh-CN",
+        "descriptionLength": 36
+      },
+      {
+        "path": "/category/ai",
+        "status": 200,
+        "language": "en",
+        "descriptionLength": 156
+      },
+      {
+        "path": "/zh/category/ai",
+        "status": 200,
+        "language": "zh-CN",
+        "descriptionLength": 45
+      },
+      {
+        "path": "/category/agent",
+        "status": 200,
+        "language": "en",
+        "descriptionLength": 111
+      },
+      {
+        "path": "/zh/category/agent",
+        "status": 200,
+        "language": "zh-CN",
+        "descriptionLength": 79
+      },
+      {
+        "path": "/category/cloud",
+        "status": 200,
+        "language": "en",
+        "descriptionLength": 158
+      },
+      {
+        "path": "/zh/category/cloud",
+        "status": 200,
+        "language": "zh-CN",
+        "descriptionLength": 81
+      },
+      {
+        "path": "/category/commerce",
+        "status": 200,
+        "language": "en",
+        "descriptionLength": 153
+      },
+      {
+        "path": "/zh/category/commerce",
+        "status": 200,
+        "language": "zh-CN",
+        "descriptionLength": 85
+      },
+      {
+        "path": "/category/finance",
+        "status": 200,
+        "language": "en",
+        "descriptionLength": 159
+      },
+      {
+        "path": "/zh/category/finance",
+        "status": 200,
+        "language": "zh-CN",
+        "descriptionLength": 70
+      },
+      {
+        "path": "/article/cloud-research-20260925-0415-1282",
+        "status": 200,
+        "language": "en",
+        "descriptionLength": 152
+      },
+      {
+        "path": "/zh/article/cloud-research-20260925-0415-1282",
+        "status": 200,
+        "language": "zh-CN",
+        "descriptionLength": 75
+      },
+      {
+        "path": "/article/agent-research-20260923-0312-1269",
+        "status": 200,
+        "language": "en",
+        "descriptionLength": 156
+      },
+      {
+        "path": "/zh/article/agent-research-20260923-0312-1269",
+        "status": 200,
+        "language": "zh-CN",
+        "descriptionLength": 58
+      },
+      {
+        "path": "/article/commerce-research-20260923-0116-1267",
+        "status": 200,
+        "language": "en",
+        "descriptionLength": 155
+      },
+      {
+        "path": "/zh/article/commerce-research-20260923-0116-1267",
+        "status": 200,
+        "language": "zh-CN",
+        "descriptionLength": 97
+      },
+      {
+        "path": "/article/ai-research-20260922-0015-1260",
+        "status": 200,
+        "language": "en",
+        "descriptionLength": 155
+      },
+      {
+        "path": "/zh/article/ai-research-20260922-0015-1260",
+        "status": 200,
+        "language": "zh-CN",
+        "descriptionLength": 112
+      },
+      {
+        "path": "/article/ai-research-20260923-0013-1266",
+        "status": 200,
+        "language": "en",
+        "descriptionLength": 153
+      },
+      {
+        "path": "/zh/article/ai-research-20260923-0013-1266",
+        "status": 200,
+        "language": "zh-CN",
+        "descriptionLength": 71
+      },
+      {
+        "path": "/article/ai-research-20260921-0014-1254",
+        "status": 200,
+        "language": "en",
+        "descriptionLength": 151
+      },
+      {
+        "path": "/zh/article/ai-research-20260921-0014-1254",
+        "status": 200,
+        "language": "zh-CN",
+        "descriptionLength": 87
+      },
+      {
+        "path": "/article/preserve-article-urls-301-canonical-sitemap",
+        "status": 200,
+        "language": "en",
+        "descriptionLength": 157
+      },
+      {
+        "path": "/zh/article/preserve-article-urls-301-canonical-sitemap",
+        "status": 200,
+        "language": "zh-CN",
+        "descriptionLength": 77
+      },
+      {
+        "path": "/article/ai-research-20260920-0013-1248",
+        "status": 200,
+        "language": "en",
+        "descriptionLength": 128
+      },
+      {
+        "path": "/zh/article/ai-research-20260920-0013-1248",
+        "status": 200,
+        "language": "zh-CN",
+        "descriptionLength": 93
+      },
+      {
+        "path": "/article/aurora-data-api-1mb-502-chunked-read",
+        "status": 200,
+        "language": "en",
+        "descriptionLength": 152
+      },
+      {
+        "path": "/zh/article/aurora-data-api-1mb-502-chunked-read",
+        "status": 200,
+        "language": "zh-CN",
+        "descriptionLength": 69
+      },
+      {
+        "path": "/article/cloud-research-20260919-0416-1246",
+        "status": 200,
+        "language": "en",
+        "descriptionLength": 155
+      },
+      {
+        "path": "/zh/article/cloud-research-20260919-0416-1246",
+        "status": 200,
+        "language": "zh-CN",
+        "descriptionLength": 131
+      },
+      {
+        "path": "/article/agent-research-20260919-0311-1245",
+        "status": 200,
+        "language": "en",
+        "descriptionLength": 114
+      },
+      {
+        "path": "/zh/article/agent-research-20260919-0311-1245",
+        "status": 200,
+        "language": "zh-CN",
+        "descriptionLength": 59
+      },
+      {
+        "path": "/article/ai-research-20260912-0014-1200",
+        "status": 200,
+        "language": "en",
+        "descriptionLength": 149
+      },
+      {
+        "path": "/zh/article/ai-research-20260912-0014-1200",
+        "status": 200,
+        "language": "zh-CN",
+        "descriptionLength": 96
+      },
+      {
+        "path": "/article/finance-research-20260917-0212-1232",
+        "status": 200,
+        "language": "en",
+        "descriptionLength": 129
+      },
+      {
+        "path": "/zh/article/finance-research-20260917-0212-1232",
+        "status": 200,
+        "language": "zh-CN",
+        "descriptionLength": 59
+      },
+      {
+        "path": "/article/ai-research-20260911-0014-1194",
+        "status": 200,
+        "language": "en",
+        "descriptionLength": 117
+      },
+      {
+        "path": "/zh/article/ai-research-20260911-0014-1194",
+        "status": 200,
+        "language": "zh-CN",
+        "descriptionLength": 95
+      },
+      {
+        "path": "/article/agent-research-20260911-0313-1197",
+        "status": 200,
+        "language": "en",
+        "descriptionLength": 147
+      },
+      {
+        "path": "/zh/article/agent-research-20260911-0313-1197",
+        "status": 200,
+        "language": "zh-CN",
+        "descriptionLength": 98
+      },
+      {
+        "path": "/article/cloud-research-20260909-0008-1181",
+        "status": 200,
+        "language": "en",
+        "descriptionLength": 151
+      },
+      {
+        "path": "/zh/article/cloud-research-20260909-0008-1181",
+        "status": 200,
+        "language": "zh-CN",
+        "descriptionLength": 112
+      },
+      {
+        "path": "/article/agent-research-20260909-0312-1184",
+        "status": 200,
+        "language": "en",
+        "descriptionLength": 153
+      },
+      {
+        "path": "/zh/article/agent-research-20260909-0312-1184",
+        "status": 200,
+        "language": "zh-CN",
+        "descriptionLength": 126
+      },
+      {
+        "path": "/article/agent-research-20260908-2004-1175",
+        "status": 200,
+        "language": "en",
+        "descriptionLength": 112
+      },
+      {
+        "path": "/zh/article/agent-research-20260908-2004-1175",
+        "status": 200,
+        "language": "zh-CN",
+        "descriptionLength": 101
+      },
+      {
+        "path": "/article/cloud-research-20260908-1808-1173",
+        "status": 200,
+        "language": "en",
+        "descriptionLength": 111
+      },
+      {
+        "path": "/zh/article/cloud-research-20260908-1808-1173",
+        "status": 200,
+        "language": "zh-CN",
+        "descriptionLength": 64
+      },
+      {
+        "path": "/article/commerce-research-20260908-1807-1174",
+        "status": 200,
+        "language": "en",
+        "descriptionLength": 156
+      },
+      {
+        "path": "/zh/article/commerce-research-20260908-1807-1174",
+        "status": 200,
+        "language": "zh-CN",
+        "descriptionLength": 147
+      },
+      {
+        "path": "/article/ai-research-20260908-1805-1172",
+        "status": 200,
+        "language": "en",
+        "descriptionLength": 159
+      },
+      {
+        "path": "/zh/article/ai-research-20260908-1805-1172",
+        "status": 200,
+        "language": "zh-CN",
+        "descriptionLength": 99
+      },
+      {
+        "path": "/article/cloud-research-20260908-1206-1166",
+        "status": 200,
+        "language": "en",
+        "descriptionLength": 91
+      },
+      {
+        "path": "/zh/article/cloud-research-20260908-1206-1166",
+        "status": 200,
+        "language": "zh-CN",
+        "descriptionLength": 129
+      },
+      {
+        "path": "/article/agent-research-20260908-1804-1170",
+        "status": 200,
+        "language": "en",
+        "descriptionLength": 108
+      },
+      {
+        "path": "/zh/article/agent-research-20260908-1804-1170",
+        "status": 200,
+        "language": "zh-CN",
+        "descriptionLength": 63
+      },
+      {
+        "path": "/article/ai-research-20260908-1205-1165",
+        "status": 200,
+        "language": "en",
+        "descriptionLength": 155
+      },
+      {
+        "path": "/zh/article/ai-research-20260908-1205-1165",
+        "status": 200,
+        "language": "zh-CN",
+        "descriptionLength": 106
+      },
+      {
+        "path": "/article/ai-research-20260908-0606-1128",
+        "status": 200,
+        "language": "en",
+        "descriptionLength": 115
+      },
+      {
+        "path": "/zh/article/ai-research-20260908-0606-1128",
+        "status": 200,
+        "language": "zh-CN",
+        "descriptionLength": 61
+      },
+      {
+        "path": "/article/finance-research-20260908-0008-1087",
+        "status": 200,
+        "language": "en",
+        "descriptionLength": 137
+      },
+      {
+        "path": "/zh/article/finance-research-20260908-0008-1087",
+        "status": 200,
+        "language": "zh-CN",
+        "descriptionLength": 90
+      },
+      {
+        "path": "/article/commerce-research-20260908-0006-1090",
+        "status": 200,
+        "language": "en",
+        "descriptionLength": 148
+      },
+      {
+        "path": "/zh/article/commerce-research-20260908-0006-1090",
+        "status": 200,
+        "language": "zh-CN",
+        "descriptionLength": 84
+      },
+      {
+        "path": "/article/cloud-research-20260908-0006-1089",
+        "status": 200,
+        "language": "en",
+        "descriptionLength": 158
+      },
+      {
+        "path": "/zh/article/cloud-research-20260908-0006-1089",
+        "status": 200,
+        "language": "zh-CN",
+        "descriptionLength": 94
+      },
+      {
+        "path": "/article/cloud-research-20260907-1806-1048",
+        "status": 200,
+        "language": "en",
+        "descriptionLength": 135
+      },
+      {
+        "path": "/zh/article/cloud-research-20260907-1806-1048",
+        "status": 200,
+        "language": "zh-CN",
+        "descriptionLength": 82
+      },
+      {
+        "path": "/article/finance-research-20260906-1810-884",
+        "status": 200,
+        "language": "en",
+        "descriptionLength": 96
+      },
+      {
+        "path": "/zh/article/finance-research-20260906-1810-884",
+        "status": 200,
+        "language": "zh-CN",
+        "descriptionLength": 129
+      },
+      {
+        "path": "/article/ai-research-20260906-0610-804",
+        "status": 200,
+        "language": "en",
+        "descriptionLength": 102
+      },
+      {
+        "path": "/zh/article/ai-research-20260906-0610-804",
+        "status": 200,
+        "language": "zh-CN",
+        "descriptionLength": 111
+      },
+      {
+        "path": "/article/finance-research-20260906-0026-767",
+        "status": 200,
+        "language": "en",
+        "descriptionLength": 97
+      },
+      {
+        "path": "/zh/article/finance-research-20260906-0026-767",
+        "status": 200,
+        "language": "zh-CN",
+        "descriptionLength": 109
+      },
+      {
+        "path": "/article/agent-research-20260906-0033-769",
+        "status": 200,
+        "language": "en",
+        "descriptionLength": 152
+      },
+      {
+        "path": "/zh/article/agent-research-20260906-0033-769",
+        "status": 200,
+        "language": "zh-CN",
+        "descriptionLength": 93
+      },
+      {
+        "path": "/article/ai-research-20260906-0025-766",
+        "status": 200,
+        "language": "en",
+        "descriptionLength": 134
+      },
+      {
+        "path": "/zh/article/ai-research-20260906-0025-766",
+        "status": 200,
+        "language": "zh-CN",
+        "descriptionLength": 73
+      },
+      {
+        "path": "/article/ai-research-20260905-0022-607",
+        "status": 200,
+        "language": "en",
+        "descriptionLength": 140
+      },
+      {
+        "path": "/zh/article/ai-research-20260905-0022-607",
+        "status": 200,
+        "language": "zh-CN",
+        "descriptionLength": 96
+      },
+      {
+        "path": "/article/commerce-research-20260905-0004-600",
+        "status": 200,
+        "language": "en",
+        "descriptionLength": 134
+      },
+      {
+        "path": "/zh/article/commerce-research-20260905-0004-600",
+        "status": 200,
+        "language": "zh-CN",
+        "descriptionLength": 124
+      },
+      {
+        "path": "/article/agent-research-20260905-0003-599",
+        "status": 200,
+        "language": "en",
+        "descriptionLength": 156
+      },
+      {
+        "path": "/zh/article/agent-research-20260905-0003-599",
+        "status": 200,
+        "language": "zh-CN",
+        "descriptionLength": 105
+      },
+      {
+        "path": "/article/cloud-research-20260903-0909-170",
+        "status": 200,
+        "language": "en",
+        "descriptionLength": 154
+      },
+      {
+        "path": "/zh/article/cloud-research-20260903-0909-170",
+        "status": 200,
+        "language": "zh-CN",
+        "descriptionLength": 85
+      },
+      {
+        "path": "/article/cloud-research-20260903-1005-232",
+        "status": 200,
+        "language": "en",
+        "descriptionLength": 116
+      },
+      {
+        "path": "/zh/article/cloud-research-20260903-1005-232",
+        "status": 200,
+        "language": "zh-CN",
+        "descriptionLength": 108
+      },
+      {
+        "path": "/article/agent-research-20260904-0805-494",
+        "status": 200,
+        "language": "en",
+        "descriptionLength": 150
+      },
+      {
+        "path": "/zh/article/agent-research-20260904-0805-494",
+        "status": 200,
+        "language": "zh-CN",
+        "descriptionLength": 127
+      },
+      {
+        "path": "/article/finance-research-20260904-1205-524",
+        "status": 200,
+        "language": "en",
+        "descriptionLength": 157
+      },
+      {
+        "path": "/zh/article/finance-research-20260904-1205-524",
+        "status": 200,
+        "language": "zh-CN",
+        "descriptionLength": 127
+      }
+    ],
+    "searchEnglish": true,
+    "rssLanguages": [
+      "en",
+      "zh-CN"
+    ]
+  },
+  "console": {
+    "originalDraftTitlesPreserved": 180,
+    "adminArticleCodeBlocksPreserved": 3,
+    "originalEvidencePreserved": true,
+    "languageSwitchPreservesSession": true,
+    "browserErrors": [],
+    "temporaryAdminRemoved": true
+  },
+  "deployment": {
+    "api": {
+      "taskDefinition": "arn:aws:ecs:us-east-1:632930644527:task-definition/geo-intelligence-api:37",
+      "running": 1,
+      "image": "632930644527.dkr.ecr.us-east-1.amazonaws.com/geo-intelligence-api:20260925145122-f33ed2c"
+    },
+    "runtime": {
+      "version": "50",
+      "status": "READY",
+      "autoPublish": "true",
+      "image": "632930644527.dkr.ecr.us-east-1.amazonaws.com/geo-intelligence-agent@sha256:526983ebf8589757b6a38a193238d42cfcbe8a236787b4df7b49d3eca2f26e7c"
+    },
+    "scans": {
+      "geo-intelligence-api": {
+        "status": "COMPLETE",
+        "severityCounts": {}
+      },
+      "geo-intelligence-agent": {
+        "status": "COMPLETE",
+        "severityCounts": {}
+      }
+    },
+    "assets": {
+      "public": [
+        "index.html",
+        "styles.css",
+        "app.js",
+        "BingSiteAuth.xml",
+        "google2fca4b1360d4ff6f.html",
+        "baidu_verify_codeva-RuVojl3zUC.html",
+        "growth.js",
+        "locales.js",
+        "i18n.js"
+      ],
+      "admin": [
+        "index.html",
+        "styles.css",
+        "app.js",
+        "locales.js",
+        "i18n.js"
+      ]
+    },
+    "enabledSchedules": 6,
+    "temporaryAdminUsersRemaining": 0,
+    "functions": {
+      "geo-intelligence-indexing-notifier": {
+        "revisionId": "48511c19-4669-4e9f-8926-2bd39390e216",
+        "codeSha256": "TQj/YnQwShMPdXdTh/dS2w4ChNUsNq2g1aC4vFJfaEQ="
+      },
+      "geo-intelligence-traffic-aggregator": {
+        "revisionId": "d4cc5f3e-ac77-45ef-93a9-40b6d9e2cdf8",
+        "codeSha256": "Sg+fhsn5gZLGqh1g4vyLy1V3d6duU14EEE6j2UElH0g="
+      },
+      "geo-intelligence-public-routing": {
+        "published": true
+      }
+    },
+    "indexnow": {
+      "submittedAt": "2026-09-25T14:52:00.710950+00:00",
+      "urlCount": 104,
+      "status": 200,
+      "sitemap": "https://aperture.zhangwangshu.com/sitemap.xml",
+      "languages": [
+        "en",
+        "zh-CN"
+      ]
+    }
+  },
+  "automatedRegressionTests": 77,
+  "defaultLanguage": "en",
+  "chinesePrefix": "/zh/",
+  "sourceRevision": "f33ed2c"
+}
