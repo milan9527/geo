@@ -41,9 +41,15 @@ class Page(HTMLParser):
         self.in_h1 = False
         self.article_links = 0
         self.article_paths: set[str] = set()
+        self.language = ""
+        self.alternates: dict[str, list[str]] = defaultdict(list)
 
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
         values = dict(attrs)
+        if tag == "html":
+            self.language = values.get("lang") or ""
+        if tag == "link" and values.get("rel") == "alternate" and values.get("hreflang"):
+            self.alternates[values["hreflang"]].append(values.get("href") or "")
         if tag == "link" and values.get("rel") == "canonical":
             self.canonicals.append(values.get("href") or "")
         if tag == "meta":
@@ -56,7 +62,7 @@ class Page(HTMLParser):
         if tag == "h1":
             self.h1_texts.append("")
             self.in_h1 = True
-        if tag == "a" and (values.get("href") or "").startswith("/article/"):
+        if tag == "a" and re.match(r"^/(?:zh/)?article/", values.get("href") or ""):
             self.article_links += 1
             self.article_paths.add(values["href"])
 
@@ -147,7 +153,7 @@ def audit(base: str) -> tuple[dict, list[str]]:
     urls = maps["sitemap.xml"]
     articles = maps["sitemap-articles.xml"]
     check("Article sitemap matches main sitemap",
-          set(articles) == {url for url in urls if urlparse(url).path.startswith("/article/")})
+          set(articles) == {url for url in urls if re.match(r"^/(?:zh/)?article/", urlparse(url).path)})
     report["urlCount"] = len(urls)
     report["articleCount"] = len(articles)
     for filename in ["google2fca4b1360d4ff6f.html", "BingSiteAuth.xml"]:
@@ -183,6 +189,18 @@ def audit(base: str) -> tuple[dict, list[str]]:
                 errors.append("Blocked by robots.txt")
             page = Page()
             page.feed(response["body"])
+            path = urlparse(url).path
+            english_path = re.sub(r"^/zh(?=/|$)", "", path) or "/"
+            expected_alternates = {
+                "en": [base + english_path], "zh-CN": [base + "/zh" + english_path],
+                "x-default": [base + english_path],
+            }
+            if dict(page.alternates) != expected_alternates:
+                errors.append("Missing or conflicting bilingual alternate URLs")
+            if any(target not in urls for targets in page.alternates.values() for target in targets):
+                errors.append("Alternate URL missing from sitemap")
+            if page.language != ("zh-CN" if path.startswith("/zh/") else "en"):
+                errors.append("Incorrect document language")
             if page.canonicals != [url]:
                 errors.append("Missing, duplicate, or conflicting canonical")
             if len(page.title_texts) != 1 or not page.title_texts[0].strip():
@@ -209,6 +227,7 @@ def audit(base: str) -> tuple[dict, list[str]]:
                     "titleTexts": page.title_texts,
                     "descriptions": page.descriptions,
                     "h1Texts": page.h1_texts,
+                    "language": page.language, "alternates": dict(page.alternates),
                     "descriptionLengths": [
                         {"characters": len(text), "utf8Bytes": len(text.encode("utf-8"))}
                         for text in page.descriptions
@@ -226,11 +245,13 @@ def audit(base: str) -> tuple[dict, list[str]]:
         duplicates = [group for group in groups.values() if len(group) > 1]
         check(f"Unique {label} across sitemap pages", not duplicates, duplicates)
     for bot in BOTS:
-        home = next((item for item in report["pages"] if item["url"] == base + "/" and item["bot"] == bot), {})
-        check(f"{bot}: home exposes published article links without JavaScript",
-              not articles or home.get("articleLinksInHtml", 0) > 0)
+        for prefix in ["", "/zh"]:
+            home = next((item for item in report["pages"] if item["url"] == base + prefix + "/" and item["bot"] == bot), {})
+            check(f"{bot}: {prefix or 'English'} home exposes published article links without JavaScript",
+                  not articles or home.get("articleLinksInHtml", 0) > 0)
         collections = [item for item in report["pages"] if item["bot"] == bot
-                       and (item["url"] == base + "/" or urlparse(item["url"]).path.startswith("/category/"))]
+                       and (urlparse(item["url"]).path in {"/", "/zh/"}
+                            or re.match(r"^/(?:zh/)?category/", urlparse(item["url"]).path))]
         linked = {base + path for item in collections for path in item.get("articlePathsInHtml", [])}
         check(f"{bot}: home and categories link to every published article",
               linked == set(articles),
@@ -245,7 +266,7 @@ def submit_indexnow(base: str, key: str, urls: list[str]) -> list[dict]:
     for offset in range(0, len(urls), 10000):
         batch = urls[offset:offset + 10000]
         request = Request(
-            "https://api.indexnow.org/indexnow",
+            "https://www.bing.com/indexnow",
             data=json.dumps({
                 "host": urlparse(base).netloc, "key": key,
                 "keyLocation": base + "/indexnow-key.txt", "urlList": batch,
@@ -257,7 +278,7 @@ def submit_indexnow(base: str, key: str, urls: list[str]) -> list[dict]:
         with urlopen(request, timeout=30) as response:
             if response.status not in (200, 202):
                 raise RuntimeError(f"Unexpected IndexNow status: {response.status}")
-            results.append({"httpStatus": response.status, "urlCount": len(batch)})
+            results.append({"endpoint": request.full_url, "httpStatus": response.status, "urlCount": len(batch)})
     return results
 
 

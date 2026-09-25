@@ -138,6 +138,11 @@ def payload(value):
             preserved.update({"summary", "error_message", "topic", "article_title", "sections", "evidence", "analysisProcess", "verification", "toolTrace"})
         if "agent_id" in value and "message" in value:
             preserved.add("message")
+        # Editable registry values must round-trip in their source language.
+        # Translating them in an English console response would save translated
+        # names, notes or connector configuration during an unrelated edit.
+        if "ingestion_method" in value and "publisher" in value and "url" in value:
+            preserved.update({"name", "publisher", "source_type", "notes", "config", "secret_arn"})
         if language() == "en" and "title" in value and "slug" in value:
             header = english_headers().get(value.get("id")) or _cache().get("slugs", {}).get(value["slug"])
             if not header:

@@ -811,19 +811,27 @@ async function saveDataSource(event) {
 }
 
 async function pollSourceTestBatch() {
-  state.sourceTestBatch = await api("/api/admin/data-sources/test-batch");
-  if (state.view === "sources") renderSources();
-  if (state.sourceTestBatch.running) {
-    clearTimeout(pollSourceTestBatch.timer);
-    pollSourceTestBatch.timer = setTimeout(pollSourceTestBatch, 2500);
-    return;
+  try {
+    state.sourceTestBatch = await api("/api/admin/data-sources/test-batch");
+    if (state.view === "sources") renderSources();
+    if (state.sourceTestBatch.running) {
+      clearTimeout(pollSourceTestBatch.timer);
+      pollSourceTestBatch.timer = setTimeout(pollSourceTestBatch, 2500);
+      return;
+    }
+    state.dataSources = await api("/api/admin/data-sources");
+    if (state.view === "sources") renderSources();
+    showToast(
+      "批量连通性测试完成",
+      `${state.sourceTestBatch.success} 个通过 · ${state.sourceTestBatch.failed} 个失败`,
+    );
+  } catch (error) {
+    showToast(I18N.lang === "en" ? "Source test status unavailable" : "暂时无法读取来源测试状态", error.message);
+    if (state.user && error.status !== 401) {
+      clearTimeout(pollSourceTestBatch.timer);
+      pollSourceTestBatch.timer = setTimeout(pollSourceTestBatch, 5000);
+    }
   }
-  state.dataSources = await api("/api/admin/data-sources");
-  if (state.view === "sources") renderSources();
-  showToast(
-    "批量连通性测试完成",
-    `${state.sourceTestBatch.success} 个通过 · ${state.sourceTestBatch.failed} 个失败`,
-  );
 }
 
 async function testAllDataSources() {
@@ -1064,12 +1072,32 @@ async function runAll() {
   if (state.view === "jobs") renderJobs();
 }
 
+function guardAction(action) {
+  return async event => {
+    let control = event.currentTarget?.matches?.("form")
+      ? event.currentTarget.querySelector('[type="submit"]')
+      : event.target.closest?.("button");
+    // The form's submit handler owns submit buttons; disabling them during
+    // the preceding bubbling click would cancel native form submission.
+    if (event.currentTarget === document && control?.form && control.type === "submit") control = null;
+    if (control?.dataset.pendingAction === "true") { event.preventDefault(); return; }
+    const wasDisabled = control?.disabled;
+    if (control) { control.dataset.pendingAction = "true"; control.disabled = true; }
+    try { await action(event); }
+    catch (error) {
+      showToast(I18N.lang === "en" ? "Action failed" : "操作失败", error.message || "Please try again.");
+    } finally {
+      if (control) { delete control.dataset.pendingAction; control.disabled = wasDisabled; }
+    }
+  };
+}
+
 function bindEvents() {
   $$(".nav-item").forEach((button) => button.addEventListener("click", () => switchView(button.dataset.view)));
-  $("#refreshButton").addEventListener("click", refresh);
-  $("#runAllButton").addEventListener("click", runAll);
-  $("#logoutButton").addEventListener("click", logout);
-  document.addEventListener("click", async (event) => {
+  $("#refreshButton").addEventListener("click", guardAction(refresh));
+  $("#runAllButton").addEventListener("click", guardAction(runAll));
+  $("#logoutButton").addEventListener("click", guardAction(logout));
+  document.addEventListener("click", guardAction(async (event) => {
     if (event.target.closest("[data-retry-admin]")) {
       await refresh();
       return;
@@ -1165,7 +1193,7 @@ function bindEvents() {
         showToast("数据源已删除", "历史文章引用和研究证据不受影响");
       }
     }
-    if (event.target.closest("[data-run-all]")) runAll();
+    if (event.target.closest("[data-run-all]")) await runAll();
     const settingToggle = event.target.closest("[data-setting]");
     if (settingToggle) {
       const key = settingToggle.dataset.setting;
@@ -1188,7 +1216,7 @@ function bindEvents() {
       showToast("研究输出已刷新");
     }
     if (event.target.closest("[data-open-content]")) switchView("content");
-  });
+  }));
   document.addEventListener("change", (event) => {
     const article = event.target.closest("[data-select-article]");
     if (article) {
@@ -1237,13 +1265,13 @@ function bindEvents() {
     if (event.target === $("#crawlerScheduleModal")) closeCrawlerScheduleModal();
   });
   $("#crawlerSchedulePreset").addEventListener("change", updateCrawlerScheduleFields);
-  $("#crawlerScheduleForm").addEventListener("submit", saveCrawlerSchedule);
+  $("#crawlerScheduleForm").addEventListener("submit", guardAction(saveCrawlerSchedule));
   $("#closeDataSourceModal").addEventListener("click", closeDataSourceModal);
   $("#cancelDataSourceModal").addEventListener("click", closeDataSourceModal);
   $("#dataSourceModal").addEventListener("click", (event) => {
     if (event.target === $("#dataSourceModal")) closeDataSourceModal();
   });
-  $("#dataSourceForm").addEventListener("submit", saveDataSource);
+  $("#dataSourceForm").addEventListener("submit", guardAction(saveDataSource));
   $("#sourceAuthType").addEventListener("change", () => {
     const form = $("#dataSourceForm");
     if (form.elements.authType.value !== "none") {
@@ -1251,7 +1279,7 @@ function bindEvents() {
     }
     updateSourceAuthFields();
   });
-  $("#createArticleForm").addEventListener("submit", createArticle);
+  $("#createArticleForm").addEventListener("submit", guardAction(createArticle));
 }
 
 function openArticleModal() {
@@ -1268,13 +1296,14 @@ function closeArticleModal() {
 
 async function createArticle(event) {
   event.preventDefault();
-  const form = new FormData(event.currentTarget);
+  const formElement = event.currentTarget;
+  const form = new FormData(formElement);
   const payload = Object.fromEntries(form.entries());
   const result = await api("/api/admin/articles", {
     method: "POST",
     body: JSON.stringify(payload),
   });
-  event.currentTarget.reset();
+  formElement.reset();
   closeArticleModal();
   state.articles = await api("/api/admin/articles");
   $("#contentCount").textContent = state.articles.length;
@@ -1298,7 +1327,7 @@ function exportContent() {
   link.href = url;
   link.download = `aperture-content-${new Date().toISOString().slice(0, 10)}.json`;
   link.click();
-  URL.revokeObjectURL(url);
+  setTimeout(() => URL.revokeObjectURL(url), 0);
   showToast("内容已导出", `${state.articles.length} 篇内容元数据`);
 }
 

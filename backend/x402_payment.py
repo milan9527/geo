@@ -5,6 +5,7 @@ import threading
 from dataclasses import dataclass
 from typing import Any
 from urllib.parse import parse_qs, urlparse
+from . import i18n
 
 from x402 import x402ResourceServerSync
 from x402.http import (
@@ -55,13 +56,15 @@ class HandlerAdapter:
         return self.path
 
     def get_url(self) -> str:
+        locale = self.get_query_param("lang")
+        path = self.path + ("?lang=" + locale if locale in ("en", "zh") else "")
         if X402_PUBLIC_BASE_URL:
-            return f"{X402_PUBLIC_BASE_URL}{self.path}"
+            return f"{X402_PUBLIC_BASE_URL}{path}"
         scheme = self.handler.headers.get("X-Forwarded-Proto", "https")
         host = self.handler.headers.get("X-Forwarded-Host") or self.handler.headers.get(
             "Host", "localhost"
         )
-        return f"{scheme}://{host}{self.path}"
+        return f"{scheme}://{host}{path}"
 
     def get_accept_header(self) -> str:
         return self.handler.headers.get("Accept", "")
@@ -135,7 +138,8 @@ def process_paid_request(
                 "network": X402_NETWORK,
             },
             "resource": HandlerAdapter(handler, path).get_url(),
-            "description": f"Aperture GEO 深度分析：{title}",
+            "description": (f"Aperture GEO 深度分析：{title}" if i18n.language() == "zh"
+                            else f"Aperture GEO in-depth analysis: {title}"),
             "mimeType": "application/json",
             "serviceName": "Aperture GEO",
             "tags": ["GEO", "AI research", "paid analysis"],

@@ -779,6 +779,16 @@ def submit_indexing(
         return False
 
 
+# Collection/search responses do not need article bodies. Avoid transferring
+# them through Aurora for every card; long summaries still use chunked reads.
+PUBLIC_ARTICLE_COLUMNS = """
+    a.id, a.category_id, a.slug, a.title, a.dek, a.summary, a.author, a.author_role,
+    a.read_minutes, a.published_at, a.updated_at, a.status, a.featured,
+    a.hero_style, a.authority_score, a.citation_count, a.access_model,
+    a.agent_price, a.keywords
+"""
+
+
 def public_article(row: dict, *, detailed: bool = False) -> dict:
     row = i18n.article_row(row, detailed=detailed)
     result = {
@@ -1506,10 +1516,10 @@ class ApiHandler(BaseHTTPRequestHandler):
     <div class="search-results" id="searchResults"></div>
   </div></div>
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
-  <script src="/locales.js?v=20260925-1"></script>
+  <script src="/locales.js?v=20260925-coverage"></script>
   <script src="/i18n.js?v=20260925-2"></script>
   <script src="/growth.js?v=20260925-1"></script>
-  <script src="/app.js?v=20260925-1"></script>
+  <script src="/app.js?v=20260925-coverage"></script>
 </body>
 </html>"""
 
@@ -1561,6 +1571,9 @@ class ApiHandler(BaseHTTPRequestHandler):
             self._not_found_page()
             return
         escaped_slug = quote(str(article["slug"]), safe="")
+        machine_path = f"/agent/v1/articles/{escaped_slug}"
+        machine_url = f"{PUBLIC_BASE_URL}{machine_path}?lang={i18n.language()}"
+        paid_machine_url = f"{PUBLIC_BASE_URL}{machine_path}/paid?lang={i18n.language()}"
         canonical_path = f"/article/{escaped_slug}"
         section_parts: list[str] = []
         for section in article["sections"]:
@@ -1650,7 +1663,7 @@ class ApiHandler(BaseHTTPRequestHandler):
     </div>
     <aside class="article-sidebar"><div class="sticky-sidebar">
       <div class="article-facts"><strong>RESEARCH PROFILE</strong><div class="fact-row"><span>内容权威度</span><b>{int(article["authorityScore"])} / 100</b></div><div class="fact-row"><span>证据来源</span><b>{len(article["sources"])} 个</b></div><div class="fact-row"><span>最后更新</span><b>{html.escape(str(article["updatedAt"]))}</b></div></div>
-      <div class="machine-card"><div class="machine-card-header">AGENT-READY CONTENT</div><p>开放的结构化版本包含声明、证据来源和内容许可信息。</p><a href="/agent/v1/articles/{escaped_slug}">读取 Agent JSON</a></div>
+      <div class="machine-card"><div class="machine-card-header">AGENT-READY CONTENT</div><p>开放的结构化版本包含声明、证据来源和内容许可信息。</p><a href="{machine_url}">读取 Agent JSON</a><button type="button" data-machine-url="{machine_url}">复制开放 A 页地址</button><button type="button" class="paid-machine-url" data-machine-url="{paid_machine_url}">复制 x402 B 页地址</button></div>
       <div class="source-list"><h2>主要来源</h2><ol>{source_items}</ol></div>
     </div></aside>
   </div>
@@ -1741,22 +1754,23 @@ class ApiHandler(BaseHTTPRequestHandler):
 
     def _category_page(self, slug: str) -> None:
         with connection() as conn:
+            conn.execute("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY")
             category = conn.execute(
                 "SELECT * FROM categories WHERE slug = %s", (unquote(slug),)
             ).fetchone()
             if not category:
                 self._not_found_page()
                 return
-            rows = conn.execute(
-                """
-                SELECT a.*, c.slug category_slug, c.name category_name,
+            rows = read_research_rows(conn,
+                f"""
+                SELECT {PUBLIC_ARTICLE_COLUMNS}, c.slug category_slug, c.name category_name,
                        c.eyebrow category_eyebrow, c.accent category_accent
                 FROM articles a JOIN categories c ON c.id = a.category_id
                 WHERE a.status = 'published' AND c.id = %s
-                ORDER BY a.published_at DESC
+                ORDER BY a.published_at DESC, a.id DESC
                 """,
-                (category["id"],),
-            ).fetchall()
+                (category["id"],), order_by="published_at DESC, id DESC",
+            )
         articles = [public_article(dict(row)) for row in rows]
         cards = "".join(
             '<article class="story-card"><div class="story-body"><span class="story-category">{category}</span><h2><a href="/article/{slug}" data-link>{title}</a></h2><p>{dek}</p><div class="story-footer"><span>{minutes} 分钟阅读</span><time datetime="{published}">{published}</time></div></div></article>'.format(
@@ -2233,7 +2247,12 @@ The open article and JSON-LD representation may be quoted with a link and clear 
     def _articles(self, query: dict) -> None:
         category = query.get("category", [None])[0]
         featured = query.get("featured", [None])[0]
-        limit = min(max(int(query.get("limit", ["30"])[0]), 1), 100)
+        try:
+            limit = min(max(int(query.get("limit", ["30"])[0]), 1), 100)
+            offset = max(int(query.get("offset", ["0"])[0]), 0)
+        except (ValueError, TypeError):
+            self._json({"error": "limit and offset must be integers"}, HTTPStatus.BAD_REQUEST)
+            return
         clauses = ["a.status = 'published'"]
         params: list[object] = []
         if category:
@@ -2241,20 +2260,21 @@ The open article and JSON-LD representation may be quoted with a link and clear 
             params.append(category)
         if featured in ("1", "true"):
             clauses.append("a.featured = TRUE")
-        params.append(limit)
+        params.extend([limit, offset])
         with connection() as conn:
-            rows = conn.execute(
+            conn.execute("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY")
+            rows = read_research_rows(conn,
                 f"""
-                SELECT a.*, c.slug category_slug, c.name category_name,
+                SELECT {PUBLIC_ARTICLE_COLUMNS}, c.slug category_slug, c.name category_name,
                        c.eyebrow category_eyebrow, c.accent category_accent
                 FROM articles a
                 JOIN categories c ON c.id = a.category_id
                 WHERE {' AND '.join(clauses)}
-                ORDER BY a.featured DESC, a.published_at DESC
-                LIMIT %s
+                ORDER BY a.featured DESC, a.published_at DESC, a.id DESC
+                LIMIT %s OFFSET %s
                 """,
-                params,
-            ).fetchall()
+                params, order_by="featured DESC, published_at DESC, id DESC",
+            )
         self._json([public_article(dict(row)) for row in rows])
 
     def _redirect_legacy_article(self, slug: str, prefix: str, suffix: str = "") -> bool:
@@ -2378,8 +2398,8 @@ The open article and JSON-LD representation may be quoted with a link and clear 
                 "network": X402_NETWORK,
                 "payTo": X402_PAY_TO_ADDRESS,
                 "variants": {
-                    "A": f"/agent/v1/articles/{row['slug']}",
-                    "B": f"/agent/v1/articles/{row['slug']}/paid",
+                    "A": f"/agent/v1/articles/{row['slug']}?lang={i18n.language()}",
+                    "B": f"/agent/v1/articles/{row['slug']}/paid?lang={i18n.language()}",
                 },
             },
             "accessVariant": "B" if paid else "A",
@@ -2529,18 +2549,19 @@ The open article and JSON-LD representation may be quoted with a link and clear 
             return
         pattern = f"%{term}%"
         with connection() as conn:
-            rows = conn.execute(
-                """
-                SELECT a.*, c.slug category_slug, c.name category_name,
+            conn.execute("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY")
+            rows = read_research_rows(conn,
+                f"""
+                SELECT {PUBLIC_ARTICLE_COLUMNS}, c.slug category_slug, c.name category_name,
                        c.eyebrow category_eyebrow, c.accent category_accent
                 FROM articles a JOIN categories c ON c.id = a.category_id
                 WHERE a.status = 'published'
                   AND (a.title ILIKE %s OR a.dek ILIKE %s OR a.summary ILIKE %s OR a.keywords ILIKE %s
                        OR EXISTS(SELECT 1 FROM article_translations t WHERE t.article_id=a.id AND t.content_json ILIKE %s))
-                ORDER BY a.authority_score DESC LIMIT 20
+                ORDER BY a.authority_score DESC, a.id DESC LIMIT 20
                 """,
-                (pattern, pattern, pattern, pattern, pattern),
-            ).fetchall()
+                (pattern, pattern, pattern, pattern, pattern), order_by="authority_score DESC, id DESC",
+            )
         self._json([public_article(dict(row)) for row in rows])
 
     def _track(self, payload: dict) -> None:
@@ -4134,7 +4155,10 @@ The open article and JSON-LD representation may be quoted with a link and clear 
                 return
             value = payload["value"]
             if current["value_type"] == "boolean":
-                value = "true" if bool(value) else "false"
+                if not isinstance(value, bool):
+                    self._json({"error": "Invalid boolean"}, HTTPStatus.BAD_REQUEST)
+                    return
+                value = "true" if value else "false"
             elif current["value_type"] == "integer":
                 try:
                     value = str(int(value))

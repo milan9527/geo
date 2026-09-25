@@ -75,6 +75,13 @@ class TranslationTests(unittest.TestCase):
                     "analysisProcess": [{"step": "分析原始证据"}]}
         self.assertEqual(i18n.payload(research), research)
 
+    def test_editable_registry_fields_round_trip_without_translation(self):
+        i18n.begin_request("/api/admin/data-sources", {})
+        source = {"name": "金融市场", "publisher": "研究编辑部", "source_type": "官方发布",
+                  "notes": "研究摘要", "url": "https://example.com", "ingestion_method": "feed",
+                  "config": {"literal": "金融市场"}}
+        self.assertEqual(i18n.payload(source), source)
+
     def test_scheduled_publication_fails_closed_when_translation_is_unavailable(self):
         a = article()
         store = Mock()
