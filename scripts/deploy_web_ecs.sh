@@ -192,6 +192,7 @@ aws ecr get-login-password --region "$DEPLOY_REGION" |
   docker login --username AWS --password-stdin "$REGISTRY"
 
 docker build \
+  --build-arg "OS_PACKAGES_UPDATED=$(date -u +%Y-%m-%d)" \
   --platform linux/arm64 \
   --file Dockerfile.backend \
   --tag "$IMAGE_URI" \
