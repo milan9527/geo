@@ -80,7 +80,9 @@ class Page(HTMLParser):
 
 
 def fetch(url: str, *, bot: str = "Googlebot", method: str = "GET") -> dict:
-    request = Request(url, headers={"User-Agent": BOTS[bot]}, method=method)
+    request = Request(
+        url, headers={"User-Agent": BOTS[bot] + " Aperture-Search-Audit/1.0"}, method=method,
+    )
     try:
         response = urlopen(request, timeout=30)
     except HTTPError as error:

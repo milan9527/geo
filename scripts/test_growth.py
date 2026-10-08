@@ -68,6 +68,10 @@ class GrowthTests(unittest.TestCase):
         for ua in ("curl/8.0", "python-requests/2", "HeadlessChrome", "ApertureSEOCheck", ""):
             self.assertEqual(identify_visitor(ua)[0], "agent")
         self.assertTrue(is_diagnostic("Aperture-Legacy-Verification"))
+        from scripts.check_search_indexing import fetch
+        with patch("scripts.check_search_indexing.urlopen") as request:
+            fetch("https://example.com")
+            self.assertTrue(is_diagnostic(request.call_args.args[0].get_header("User-agent")))
         self.assertEqual(identify_visitor("Mozilla/5.0 Chrome/131 Safari/537.36")[0], "human")
         self.assertEqual(identify_visitor("Googlebot")[1], "Google Search Crawler")
 

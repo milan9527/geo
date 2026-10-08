@@ -8,6 +8,10 @@ from urllib.parse import quote
 
 HOME_TITLE = "Aperture Intelligence · 面向 AI 时代的技术与商业研究"
 HOME_DESCRIPTION = "Aperture Intelligence 提供 AI、Agent、云计算、电商媒体与金融市场的深度研究。"
+CASE_STUDY_SLUGS = (
+    "aurora-data-api-1mb-502-chunked-read",
+    "preserve-article-urls-301-canonical-sitemap",
+)
 
 
 def text(value: object) -> str:
@@ -38,8 +42,10 @@ def story_card(article: dict, *, style: str = "") -> str:
 
 
 def render_home(articles: list[dict], categories: list[dict], base_url: str) -> tuple[str, list[dict]]:
-    hero = articles[0] if articles else None
-    remaining = articles[1:]
+    cases = [item for slug in CASE_STUDY_SLUGS for item in articles if item["slug"] == slug]
+    research = [item for item in articles if item["slug"] not in CASE_STUDY_SLUGS]
+    hero = research[0] if research else None
+    remaining = research[1:]
     summary = hero["summary"] if hero else "基于可追溯证据，持续研究 AI、Agent、云计算、电商媒体与金融市场。"
     hero_details = ""
     hero_visual = ""
@@ -64,6 +70,14 @@ def render_home(articles: list[dict], categories: list[dict], base_url: str) -> 
   <p>从复杂信号中提炼影响技术决策与商业价值的变量。</p>
 </div></div><div class="featured-grid">{story_card(hero, style='large')}
   <div class="side-stories">{side_stories}</div></div></section>"""
+    case_section = (
+        f"""<section class="section engineering-cases" aria-labelledby="engineering-cases-title">
+<div class="section-heading"><div><p class="section-eyebrow">ENGINEERING CASE STUDIES</p>
+<h2 id="engineering-cases-title">工程实践：问题、复现与修复</h2>
+<p>来自本站实际运行的故障与修复记录，包含复现方法、实现代码和验证结果。</p>
+</div></div><div class="case-study-grid">{"".join(story_card(item) for item in cases)}</div>
+</section>""" if cases else ""
+    )
     category_cards = "".join(
         f"""<a class="category-item" href="/category/{quote(str(category['slug']), safe='')}" data-link>
 <span class="category-index">{index:02d}</span><h3>{text(category['name'])}</h3>
@@ -85,6 +99,11 @@ def render_home(articles: list[dict], categories: list[dict], base_url: str) -> 
   <h1>理解 AI 时代的<br /><em>关键变量</em></h1>
   <p class="hero-summary">{text(summary)}</p>{hero_details}
 </div>{hero_visual}</div></section>
+{case_section}
+<section class="section home-subscribe"><div class="reader-follow">
+<h2>订阅后续研究</h2><p>通过 RSS 获取新文章，持续追踪技术变化与工程实践。</p>
+<a href="/feed.xml" type="application/rss+xml">订阅 RSS 更新</a>
+</div></section>
 {selected}{empty}
 <section class="category-band"><div class="category-band-inner"><div class="section-heading"><div>
   <p class="section-eyebrow">RESEARCH COVERAGE</p><h2>五个研究领域，一套证据标准</h2>

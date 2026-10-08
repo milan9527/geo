@@ -1067,5 +1067,9 @@
   "科技政策与证据治理研究": "Technology Policy and Evidence Governance Research",
   "工程实践": "Engineering Practice",
   "复制 x402 B 页地址": "Copy x402 B URL",
-  "复制开放 A 页地址": "Copy open A URL"
+  "复制开放 A 页地址": "Copy open A URL",
+  "工程实践：问题、复现与修复": "Engineering case studies: reproduce, fix, verify",
+  "来自本站实际运行的故障与修复记录，包含复现方法、实现代码和验证结果。": "Incidents from running this site, with reproduction steps, implementation code, and verified results.",
+  "订阅后续研究": "Follow new research",
+  "通过 RSS 获取新文章，持续追踪技术变化与工程实践。": "Get new articles in your RSS reader and follow developments in technology and engineering."
 }

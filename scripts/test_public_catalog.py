@@ -92,6 +92,19 @@ class PublicCatalogTests(unittest.TestCase):
         self.assertIn("64 篇已发布研究", markup)
         self.assertLess(max(self.sizes), 400000)
 
+    def test_home_keeps_old_case_studies_visible_without_exposing_drafts(self):
+        # Both rows fall outside the ordinary newest/featured 30. Only the
+        # published case may be included by the extra selection predicate.
+        with patch.object(self.app, "CASE_STUDY_SLUGS", ("article-1", "article-64")):
+            status, markup = self.call("_home_page")
+        page = Page()
+        page.feed(markup)
+        self.assertEqual(status, 200)
+        self.assertIn("/article/article-1", page.article_paths)
+        self.assertNotIn("/article/article-64", page.article_paths)
+        self.assertEqual(len(page.article_paths), 31)
+        self.assertLess(max(self.sizes), 400000)
+
     def test_pagination_has_no_missing_or_duplicate_rows_and_respects_filters(self):
         result = []
         for offset in [0, 30, 60]:

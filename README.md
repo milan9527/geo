@@ -18,6 +18,10 @@ Aperture is an AWS reference application for turning public sources into reviewe
 - **Measure:** CloudFront logs flow through S3, SQS, and a Lambda aggregator. The separate admin console reports approximate human/agent traffic, research jobs, reader attribution, and payment events.
 - **Agent access:** Open JSON and an x402-protected route demonstrate programmatic delivery. The seller verifies and settles payments through an external facilitator before returning paid content.
 
+Engineering notes from running this site: [fixing Aurora Data API 502 errors](https://aperture.zhangwangshu.com/article/aurora-data-api-1mb-502-chunked-read?utm_source=github&utm_medium=referral&utm_campaign=engineering_cases) and [preserving article URLs with reviewed 301 redirects](https://aperture.zhangwangshu.com/article/preserve-article-urls-301-canonical-sitemap?utm_source=github&utm_medium=referral&utm_campaign=engineering_cases).
+
+Recurring research jobs do not make x402 purchases. Internal self-purchases are blocked; external buyers can still use the public paid API.
+
 The payment demonstration uses **Base Sepolia testnet USDC**, not production revenue. Search submissions do not guarantee indexing or ranking. Some admin settings currently save preferences only; their limits are shown in the interface and [verification guide](docs/functional-verification.md).
 
 ## Install locally

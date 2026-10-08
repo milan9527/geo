@@ -41,7 +41,7 @@ from .database import USE_AURORA_DATA_API, connection, init_db, utc_now
 from . import i18n
 i18n.connection_provider = lambda: connection()
 
-from .homepage import HOME_DESCRIPTION, HOME_TITLE, render_home
+from .homepage import CASE_STUDY_SLUGS, HOME_DESCRIPTION, HOME_TITLE, render_home
 from .article_redirects import REDIRECT_PROTECTION_MESSAGE, redirect_target
 from .metrics import load_metrics_rows
 from .growth import GROWTH_EVENTS, clean_metadata, growth_summary
@@ -1540,9 +1540,13 @@ class ApiHandler(BaseHTTPRequestHandler):
                        (SELECT COUNT(*) FROM sources s WHERE s.article_id = a.id) source_count
                 FROM articles a JOIN categories c ON c.id = a.category_id
                 WHERE a.status = 'published'
+                  AND (a.slug IN (%s, %s) OR a.id IN (
+                    SELECT id FROM articles WHERE status='published'
+                    ORDER BY featured DESC,published_at DESC,id DESC LIMIT 30
+                  ))
                 ORDER BY a.featured DESC, a.published_at DESC, a.id DESC
-                LIMIT 30
-                """
+                """,
+                CASE_STUDY_SLUGS,
             ).fetchall()
             categories = conn.execute(
                 """
