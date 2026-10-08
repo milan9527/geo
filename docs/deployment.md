@@ -96,6 +96,8 @@ Runtime deployment scans its image and deploys it by digest. Without a publicati
 
 The Web script loads both environment files; the runtime script loads `.env.aws`; the bridge script uses already exported variables. Exporting both files above also makes custom runtime repository and bridge names available. The bridge deployment updates an existing Lambda function. Scheduler delivery has its own retry/DLQ policy, while Lambda asynchronous retries are disabled to reduce duplicate crawls and payment attempts.
 
+Provisioned schedules set `allowPayment: false`. The bridge and runtime also reject recurring purchase requests, including old schedule payloads containing `true`. Internal x402 source 12 was paused and detached from the commerce crawler on October 8, 2026; ordinary collection and reviewed automatic publication remain enabled. For another deployment, configure its public/origin domains through `GEO_PUBLIC_BASE_URL`, `X402_PUBLIC_BASE_URL`, or `X402_INTERNAL_HOSTS` so manual purchases cannot target those aliases.
+
 For the sample environment, after reviewing resource identifiers:
 
 ```bash

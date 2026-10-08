@@ -12,7 +12,7 @@ from datetime import datetime, timezone
 from typing import Any
 from urllib.error import HTTPError
 from urllib.parse import urlsplit
-from urllib.request import Request, urlopen
+from urllib.request import HTTPRedirectHandler, Request, build_opener, urlopen
 
 import boto3
 from bedrock_agentcore.payments import PaymentManager
@@ -696,22 +696,54 @@ def _decode_payment_header(value: str) -> dict[str, Any]:
         return {}
 
 
+def assert_external_payment_url(url: str) -> None:
+    """Never buy this deployment's own content, including its origin aliases."""
+    parsed = urlsplit(url)
+    if parsed.scheme != "https" or not parsed.hostname or parsed.username or parsed.password:
+        raise CrawlerToolError("x402 resources must use an absolute HTTPS URL without credentials")
+    internal_hosts = {
+        "aperture.zhangwangshu.com",
+        "d1tsbnft7iv51.cloudfront.net",
+        "deu7vkdd3jf5.cloudfront.net",
+        "localhost",
+    }
+    for name in ("GEO_PUBLIC_BASE_URL", "X402_PUBLIC_BASE_URL", "CRAWLER_CONTACT_URL"):
+        hostname = urlsplit(os.environ.get(name, "")).hostname
+        if hostname:
+            internal_hosts.add(hostname.lower().rstrip("."))
+    internal_hosts.update(
+        host.strip().lower().rstrip(".")
+        for host in os.environ.get("X402_INTERNAL_HOSTS", "").split(",")
+        if host.strip()
+    )
+    hostname = parsed.hostname.lower().rstrip(".")
+    if any(hostname == host or hostname.endswith("." + host) for host in internal_hosts):
+        raise CrawlerToolError("Internal x402 purchases are disabled")
+
+
+class PaymentRedirectHandler(HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        # Require a final source URL; never forward payment proofs to another
+        # endpoint or follow a public source back into our own paid API.
+        raise CrawlerToolError("x402 redirects are disabled; configure the final external URL")
+
+
 def run_x402_crawler(
     source: dict[str, Any],
     *,
     session_name: str,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
+    url = str(source["url"])
+    assert_external_payment_url(url)
     if not PAYMENT_MANAGER_ARN or not PAYMENT_CONNECTOR_ID:
         raise CrawlerToolError("AgentCore Payments configuration is incomplete")
-    url = str(source["url"])
-    if urlsplit(url).scheme != "https":
-        raise CrawlerToolError("x402 resources must use HTTPS")
+    opener = build_opener(PaymentRedirectHandler())
     request = Request(
         url,
         headers={"User-Agent": "ApertureGEOResearchBot/2.0"},
     )
     try:
-        with urlopen(request, timeout=30) as response:
+        with opener.open(request, timeout=30) as response:
             body = response.read(2_500_000)
             status = response.status
             response_headers = dict(response.headers.items())
@@ -730,6 +762,9 @@ def run_x402_crawler(
     challenge = _decode_payment_header(
         normalized_response_headers.get("payment-required", "")
     )
+    resource_url = (challenge.get("resource") or {}).get("url")
+    if resource_url:
+        assert_external_payment_url(str(resource_url))
     accepted = challenge.get("accepts") or []
     amounts = [
         int(option["amount"])
@@ -795,7 +830,7 @@ def run_x402_crawler(
             **proof_headers,
         },
     )
-    with urlopen(paid_request, timeout=45) as paid_response:
+    with opener.open(paid_request, timeout=45) as paid_response:
         paid_body = paid_response.read(2_500_000)
         paid_status = paid_response.status
         paid_headers = dict(paid_response.headers.items())

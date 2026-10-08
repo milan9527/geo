@@ -32,7 +32,12 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         "scheduleName": event.get("scheduleName"),
         "requestId": getattr(context, "aws_request_id", None),
         "executionMode": "async",
-        "allowPayment": bool(event.get("allowPayment")),
+        # Only an explicit manual run may buy external evidence. Old schedule
+        # payloads cannot silently re-enable recurring purchases.
+        "allowPayment": (
+            event.get("scheduledTime") == "admin-manual"
+            and event.get("allowPayment") is True
+        ),
         "forceAnalysis": bool(event.get("forceAnalysis")),
         "overridePaused": bool(event.get("overridePaused")),
     }

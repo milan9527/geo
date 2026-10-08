@@ -42,7 +42,7 @@ The public article and variant A JSON are open. Variant B requires x402 payment.
 
 The deployed demonstration uses Base Sepolia USDC with a default price of 0.002 USDC. The paid representation is an experiment in protocol-based delivery; the research also remains publicly available. Mainnet revenue and exclusive paid-data value are not established by this demonstration.
 
-The optional source-buying agent uses AgentCore Payments under a configured budget. That buyer capability is distinct from the seller endpoint and external facilitator.
+The optional source-buying agent uses AgentCore Payments under a configured budget. Recurring crawls never buy evidence. An explicit manual run with boolean `allowPayment: true`, or the authenticated `x402_fetch` action, can buy an external source. The buyer rejects this site's domains, configured origin aliases, internal challenge resource URLs, and redirects before forwarding payment proofs. Additional deployment aliases belong in `X402_INTERNAL_HOSTS` (comma-separated hostnames). The public seller endpoint remains available to external buyers.
 
 ## Measurement and operations
 

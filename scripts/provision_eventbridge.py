@@ -38,7 +38,7 @@ def target(crawler_slug: str, marker: str = "eventbridge") -> dict:
     api_input = {
         "crawlerSlug": crawler_slug,
         "scheduledTime": marker,
-        "allowPayment": crawler_slug == "commerce-feed-miner",
+        "allowPayment": False,
     }
     return {
         "Arn": TARGET_ARN,

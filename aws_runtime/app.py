@@ -1040,7 +1040,10 @@ def collect_evidence(
         }
 
     payment_traces: list[dict[str, Any]] = []
-    if payload.get("allowPayment"):
+    if (
+        payload.get("scheduledTime") == "admin-manual"
+        and payload.get("allowPayment") is True
+    ):
         for paid_source in profile.get("paidSources") or []:
             try:
                 paid_evidence, payment_trace = run_x402_crawler(
