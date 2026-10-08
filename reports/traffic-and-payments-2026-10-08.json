@@ -1,0 +1,512 @@
+{
+  "date": "2026-10-08",
+  "timezone": "UTC",
+  "site": "https://aperture.zhangwangshu.com",
+  "paymentStop": {
+    "stoppedAt": "2026-10-08T01:56:28.801806+00:00",
+    "schedule": "geo-commerce-feed-miner",
+    "scheduleState": "ENABLED",
+    "expression": "cron(10 5 * * ? *)",
+    "allowPayment": false,
+    "source": {
+      "id": 12,
+      "url": "https://d1tsbnft7iv51.cloudfront.net/agent/v1/articles/commerce-research-20260903-0927-212/paid",
+      "status": "paused"
+    },
+    "assignments": [
+      {
+        "agent_id": 6,
+        "source_id": 12,
+        "enabled": false
+      }
+    ],
+    "publishedArticlesChanged": false
+  },
+  "runtimeVerification": {
+    "checkedAt": "2026-10-08T02:05:43.868435+00:00",
+    "runtimeVersion": "51",
+    "runtimeStatus": "READY",
+    "runtimeImage": "632930644527.dkr.ecr.us-east-1.amazonaws.com/geo-intelligence-agent@sha256:a47bdfe83be9b792698de0d0b595d265519bcd0f1157bf3203aed30a730fde4a",
+    "healthy": true,
+    "autoPublish": true,
+    "commerceOpenSources": 8,
+    "commercePaidSources": 0,
+    "source": {
+      "id": 12,
+      "status": "paused"
+    },
+    "assignments": [
+      {
+        "agent_id": 6,
+        "source_id": 12,
+        "enabled": false
+      }
+    ],
+    "schedules": [
+      {
+        "name": "geo-evidence-verifier",
+        "state": "ENABLED",
+        "expression": "cron(10 3 * * ? *)",
+        "allowPayment": false
+      },
+      {
+        "name": "geo-render-scout",
+        "state": "ENABLED",
+        "expression": "cron(10 1 * * ? *)",
+        "allowPayment": false
+      },
+      {
+        "name": "geo-cloud-release-watch",
+        "state": "ENABLED",
+        "expression": "cron(10 4 * * ? *)",
+        "allowPayment": false
+      },
+      {
+        "name": "geo-commerce-feed-miner",
+        "state": "ENABLED",
+        "expression": "cron(10 5 * * ? *)",
+        "allowPayment": false
+      },
+      {
+        "name": "geo-market-signal",
+        "state": "ENABLED",
+        "expression": "cron(10 2 * * ? *)",
+        "allowPayment": false
+      },
+      {
+        "name": "geo-research-coder",
+        "state": "ENABLED",
+        "expression": "cron(10 0 * * ? *)",
+        "allowPayment": false
+      }
+    ],
+    "x402EventsSinceStop": [],
+    "paymentRequestsUsedForVerification": 0
+  },
+  "productionVerification": {
+    "checkedAt": "2026-10-08T02:12:02.502802+00:00",
+    "originalPublished": 49,
+    "allOriginalPagesAndContentPreserved": true,
+    "published": 49,
+    "matchingApprovedEnglishEditions": 49,
+    "totalPermanentRedirects": 46,
+    "internalSourceStatus": "paused",
+    "x402EventsSinceStop": [],
+    "jobsStartedSinceStop": [
+      {
+        "slug": "market-signal",
+        "started_at": "2026-10-08T02:10:20+00:00",
+        "status": "running"
+      }
+    ],
+    "apiTaskRevision": "39",
+    "apiDeployment": "COMPLETED",
+    "runtimeVersion": "51",
+    "imageScans": {
+      "geo-intelligence-agent": {
+        "status": "COMPLETE",
+        "high": 0,
+        "critical": 0
+      },
+      "geo-intelligence-api": {
+        "status": "COMPLETE",
+        "high": 0,
+        "critical": 0
+      }
+    }
+  },
+  "traffic": {
+    "periods": [
+      "2026-09-24/2026-09-30",
+      "2026-10-01/2026-10-07"
+    ],
+    "verifiedGoogleRequests": [
+      25,
+      30
+    ],
+    "verifiedBingRequests": [
+      68,
+      89
+    ],
+    "browserReportedPageViews": [
+      37,
+      1
+    ],
+    "browserReportedSessions": [
+      12,
+      1
+    ],
+    "browserCountLimit": "Approximate client events; earlier launch checks are included.",
+    "processedLogObjects": 299,
+    "logRecordsRead": 4726,
+    "diagnosticRequestsExcluded": 540,
+    "bing404Requests": 66,
+    "legacySlugsWith404": 56,
+    "historical404RequestsCoveredByNewRedirects": 34
+  },
+  "legacyReview": {
+    "fullTextComparisons": 112,
+    "newRedirects": 27,
+    "redirects": [
+      {
+        "oldUrl": "https://aperture.zhangwangshu.com/article/agent-research-20260903-0915-187",
+        "canonicalUrl": "https://aperture.zhangwangshu.com/article/agent-research-20260905-0003-599",
+        "chineseOldUrl": "https://aperture.zhangwangshu.com/zh/article/agent-research-20260903-0915-187",
+        "chineseCanonicalUrl": "https://aperture.zhangwangshu.com/zh/article/agent-research-20260905-0003-599",
+        "confidence": 0.92,
+        "reviewedAt": "2026-10-08T02:05:50.536801+00:00",
+        "sourceContentHash": "e766552e78b239228732d334414d41afff0032d24ccaa1f1785c6168f6a1f9f3",
+        "targetContentHash": "82d90c8db8c1f8f43e86b3eb888449baf2d88e4936c1096b0373299d2e18e9b1"
+      },
+      {
+        "oldUrl": "https://aperture.zhangwangshu.com/article/agent-research-20260903-0918-190",
+        "canonicalUrl": "https://aperture.zhangwangshu.com/article/agent-research-20260905-0003-599",
+        "chineseOldUrl": "https://aperture.zhangwangshu.com/zh/article/agent-research-20260903-0918-190",
+        "chineseCanonicalUrl": "https://aperture.zhangwangshu.com/zh/article/agent-research-20260905-0003-599",
+        "confidence": 0.94,
+        "reviewedAt": "2026-10-08T02:04:02.583478+00:00",
+        "sourceContentHash": "90b5f725b7b1f573ce878bddbad70dab03437ce16f96e9c2a4cfa18f34725a26",
+        "targetContentHash": "82d90c8db8c1f8f43e86b3eb888449baf2d88e4936c1096b0373299d2e18e9b1"
+      },
+      {
+        "oldUrl": "https://aperture.zhangwangshu.com/article/agent-research-20260903-0919-196",
+        "canonicalUrl": "https://aperture.zhangwangshu.com/article/agent-research-20260905-0003-599",
+        "chineseOldUrl": "https://aperture.zhangwangshu.com/zh/article/agent-research-20260903-0919-196",
+        "chineseCanonicalUrl": "https://aperture.zhangwangshu.com/zh/article/agent-research-20260905-0003-599",
+        "confidence": 0.94,
+        "reviewedAt": "2026-10-08T02:07:00.085362+00:00",
+        "sourceContentHash": "1c11dd1eec772fc1e0cc8932ac4753910a715ad84d09019c9dc6596bd27ee6ff",
+        "targetContentHash": "82d90c8db8c1f8f43e86b3eb888449baf2d88e4936c1096b0373299d2e18e9b1"
+      },
+      {
+        "oldUrl": "https://aperture.zhangwangshu.com/article/agent-research-20260903-0920-199",
+        "canonicalUrl": "https://aperture.zhangwangshu.com/article/agent-research-20260905-0003-599",
+        "chineseOldUrl": "https://aperture.zhangwangshu.com/zh/article/agent-research-20260903-0920-199",
+        "chineseCanonicalUrl": "https://aperture.zhangwangshu.com/zh/article/agent-research-20260905-0003-599",
+        "confidence": 0.93,
+        "reviewedAt": "2026-10-08T02:04:38.378819+00:00",
+        "sourceContentHash": "fb588a6d3762b132659dcc84950f1456f2070e944b9a0d885719d1d1a69d55b6",
+        "targetContentHash": "82d90c8db8c1f8f43e86b3eb888449baf2d88e4936c1096b0373299d2e18e9b1"
+      },
+      {
+        "oldUrl": "https://aperture.zhangwangshu.com/article/agent-research-20260903-0922-202",
+        "canonicalUrl": "https://aperture.zhangwangshu.com/article/agent-research-20260905-0003-599",
+        "chineseOldUrl": "https://aperture.zhangwangshu.com/zh/article/agent-research-20260903-0922-202",
+        "chineseCanonicalUrl": "https://aperture.zhangwangshu.com/zh/article/agent-research-20260905-0003-599",
+        "confidence": 0.93,
+        "reviewedAt": "2026-10-08T02:07:14.069577+00:00",
+        "sourceContentHash": "c589f10e2e606de7385ae4021d87fa9a451ae0e04d95e9f3ddc21eacb1696859",
+        "targetContentHash": "82d90c8db8c1f8f43e86b3eb888449baf2d88e4936c1096b0373299d2e18e9b1"
+      },
+      {
+        "oldUrl": "https://aperture.zhangwangshu.com/article/agent-research-20260903-0924-205",
+        "canonicalUrl": "https://aperture.zhangwangshu.com/article/agent-research-20260905-0003-599",
+        "chineseOldUrl": "https://aperture.zhangwangshu.com/zh/article/agent-research-20260903-0924-205",
+        "chineseCanonicalUrl": "https://aperture.zhangwangshu.com/zh/article/agent-research-20260905-0003-599",
+        "confidence": 0.94,
+        "reviewedAt": "2026-10-08T02:05:53.271420+00:00",
+        "sourceContentHash": "3274a98ae52d5faa0aead8354c437c6a56a9e6258f6bd7385f7072f768533f27",
+        "targetContentHash": "82d90c8db8c1f8f43e86b3eb888449baf2d88e4936c1096b0373299d2e18e9b1"
+      },
+      {
+        "oldUrl": "https://aperture.zhangwangshu.com/article/agent-research-20260903-0925-208",
+        "canonicalUrl": "https://aperture.zhangwangshu.com/article/agent-research-20260905-0003-599",
+        "chineseOldUrl": "https://aperture.zhangwangshu.com/zh/article/agent-research-20260903-0925-208",
+        "chineseCanonicalUrl": "https://aperture.zhangwangshu.com/zh/article/agent-research-20260905-0003-599",
+        "confidence": 0.9,
+        "reviewedAt": "2026-10-08T02:03:43.811777+00:00",
+        "sourceContentHash": "25082ff3d008f1087d8b3527d5f71b68f800870aa27b079e417141fdbfbe90c6",
+        "targetContentHash": "82d90c8db8c1f8f43e86b3eb888449baf2d88e4936c1096b0373299d2e18e9b1"
+      },
+      {
+        "oldUrl": "https://aperture.zhangwangshu.com/article/agent-research-20260904-0926-507",
+        "canonicalUrl": "https://aperture.zhangwangshu.com/article/agent-research-20260905-0003-599",
+        "chineseOldUrl": "https://aperture.zhangwangshu.com/zh/article/agent-research-20260904-0926-507",
+        "chineseCanonicalUrl": "https://aperture.zhangwangshu.com/zh/article/agent-research-20260905-0003-599",
+        "confidence": 0.98,
+        "reviewedAt": "2026-10-08T02:06:51.288406+00:00",
+        "sourceContentHash": "91f96e752ea37685aea2dfb59595828ec764083cb535ef338d08c6458c1aae4f",
+        "targetContentHash": "82d90c8db8c1f8f43e86b3eb888449baf2d88e4936c1096b0373299d2e18e9b1"
+      },
+      {
+        "oldUrl": "https://aperture.zhangwangshu.com/article/agent-research-20260905-0043-610",
+        "canonicalUrl": "https://aperture.zhangwangshu.com/article/agent-research-20260906-0033-769",
+        "chineseOldUrl": "https://aperture.zhangwangshu.com/zh/article/agent-research-20260905-0043-610",
+        "chineseCanonicalUrl": "https://aperture.zhangwangshu.com/zh/article/agent-research-20260906-0033-769",
+        "confidence": 0.96,
+        "reviewedAt": "2026-10-08T02:04:10.603660+00:00",
+        "sourceContentHash": "a33a2dc53db176fb1492debf37bc6d05cbea78099a0f8f9325ec33199886a224",
+        "targetContentHash": "c3e7914acd9f9df86f119e6c379e32eef6581d7c50f709f36d065538b2e80aec"
+      },
+      {
+        "oldUrl": "https://aperture.zhangwangshu.com/article/agent-research-20260906-0023-765",
+        "canonicalUrl": "https://aperture.zhangwangshu.com/article/agent-research-20260906-0033-769",
+        "chineseOldUrl": "https://aperture.zhangwangshu.com/zh/article/agent-research-20260906-0023-765",
+        "chineseCanonicalUrl": "https://aperture.zhangwangshu.com/zh/article/agent-research-20260906-0033-769",
+        "confidence": 0.94,
+        "reviewedAt": "2026-10-08T02:05:38.160558+00:00",
+        "sourceContentHash": "2d479470f5a7054c5550ea0a4fef1ca6e5350d3bb1d68055aceef7c4dc560834",
+        "targetContentHash": "c3e7914acd9f9df86f119e6c379e32eef6581d7c50f709f36d065538b2e80aec"
+      },
+      {
+        "oldUrl": "https://aperture.zhangwangshu.com/article/agent-research-20260906-0042-770",
+        "canonicalUrl": "https://aperture.zhangwangshu.com/article/agent-research-20260906-0033-769",
+        "chineseOldUrl": "https://aperture.zhangwangshu.com/zh/article/agent-research-20260906-0042-770",
+        "chineseCanonicalUrl": "https://aperture.zhangwangshu.com/zh/article/agent-research-20260906-0033-769",
+        "confidence": 0.98,
+        "reviewedAt": "2026-10-08T02:04:34.667673+00:00",
+        "sourceContentHash": "fb83ef2b7e2ae4b30346bce9890c6e3547c6a8094c25666d2e39205c9d954ee1",
+        "targetContentHash": "c3e7914acd9f9df86f119e6c379e32eef6581d7c50f709f36d065538b2e80aec"
+      },
+      {
+        "oldUrl": "https://aperture.zhangwangshu.com/article/agent-research-20260906-1603-871",
+        "canonicalUrl": "https://aperture.zhangwangshu.com/article/agent-research-20260906-0033-769",
+        "chineseOldUrl": "https://aperture.zhangwangshu.com/zh/article/agent-research-20260906-1603-871",
+        "chineseCanonicalUrl": "https://aperture.zhangwangshu.com/zh/article/agent-research-20260906-0033-769",
+        "confidence": 0.99,
+        "reviewedAt": "2026-10-08T02:03:34.584223+00:00",
+        "sourceContentHash": "e3c4ba399faea295d7109df7d0581a27b7ddfb9d784fc98b2a1092b517fc4bd1",
+        "targetContentHash": "c3e7914acd9f9df86f119e6c379e32eef6581d7c50f709f36d065538b2e80aec"
+      },
+      {
+        "oldUrl": "https://aperture.zhangwangshu.com/article/agent-research-20260907-0014-929",
+        "canonicalUrl": "https://aperture.zhangwangshu.com/article/agent-research-20260906-0033-769",
+        "chineseOldUrl": "https://aperture.zhangwangshu.com/zh/article/agent-research-20260907-0014-929",
+        "chineseCanonicalUrl": "https://aperture.zhangwangshu.com/zh/article/agent-research-20260906-0033-769",
+        "confidence": 0.94,
+        "reviewedAt": "2026-10-08T02:04:07.698798+00:00",
+        "sourceContentHash": "921317e798cd4ad4a5ee7495f354297eaf259032d823788c40d4de64f992cd21",
+        "targetContentHash": "c3e7914acd9f9df86f119e6c379e32eef6581d7c50f709f36d065538b2e80aec"
+      },
+      {
+        "oldUrl": "https://aperture.zhangwangshu.com/article/agent-research-20260907-0403-952",
+        "canonicalUrl": "https://aperture.zhangwangshu.com/article/agent-research-20260908-2004-1175",
+        "chineseOldUrl": "https://aperture.zhangwangshu.com/zh/article/agent-research-20260907-0403-952",
+        "chineseCanonicalUrl": "https://aperture.zhangwangshu.com/zh/article/agent-research-20260908-2004-1175",
+        "confidence": 0.91,
+        "reviewedAt": "2026-10-08T02:07:17.694933+00:00",
+        "sourceContentHash": "3a671b135544c6efa71e8856775c954e07cb122cfed5fecc9bfa45ae33cde6e4",
+        "targetContentHash": "7f8dd872e8e942840c91e28bb84a5af5078b3500906fdb6b5ca5010e9c3ce03e"
+      },
+      {
+        "oldUrl": "https://aperture.zhangwangshu.com/article/agent-research-20260907-0803-980",
+        "canonicalUrl": "https://aperture.zhangwangshu.com/article/agent-research-20260906-0033-769",
+        "chineseOldUrl": "https://aperture.zhangwangshu.com/zh/article/agent-research-20260907-0803-980",
+        "chineseCanonicalUrl": "https://aperture.zhangwangshu.com/zh/article/agent-research-20260906-0033-769",
+        "confidence": 0.99,
+        "reviewedAt": "2026-10-08T02:06:40.843513+00:00",
+        "sourceContentHash": "b5094bbc9bffc3d99cf139316f888dea91eaa3efcc37cdf76442e68d46f98c9d",
+        "targetContentHash": "c3e7914acd9f9df86f119e6c379e32eef6581d7c50f709f36d065538b2e80aec"
+      },
+      {
+        "oldUrl": "https://aperture.zhangwangshu.com/article/agent-research-20260908-0023-1092",
+        "canonicalUrl": "https://aperture.zhangwangshu.com/article/agent-research-20260906-0033-769",
+        "chineseOldUrl": "https://aperture.zhangwangshu.com/zh/article/agent-research-20260908-0023-1092",
+        "chineseCanonicalUrl": "https://aperture.zhangwangshu.com/zh/article/agent-research-20260906-0033-769",
+        "confidence": 0.99,
+        "reviewedAt": "2026-10-08T02:05:16.671097+00:00",
+        "sourceContentHash": "1ce1e989652b5237ab246a35c8e08d7f30b9222de3e770403edeec44e199196f",
+        "targetContentHash": "c3e7914acd9f9df86f119e6c379e32eef6581d7c50f709f36d065538b2e80aec"
+      },
+      {
+        "oldUrl": "https://aperture.zhangwangshu.com/article/agent-research-20260908-0254-1107",
+        "canonicalUrl": "https://aperture.zhangwangshu.com/article/agent-research-20260908-2004-1175",
+        "chineseOldUrl": "https://aperture.zhangwangshu.com/zh/article/agent-research-20260908-0254-1107",
+        "chineseCanonicalUrl": "https://aperture.zhangwangshu.com/zh/article/agent-research-20260908-2004-1175",
+        "confidence": 0.94,
+        "reviewedAt": "2026-10-08T02:05:40.395952+00:00",
+        "sourceContentHash": "5ec1e97d7a5d6339cbc9df3e062b99e065a83fa94c1dca203817c5b27fe9a513",
+        "targetContentHash": "7f8dd872e8e942840c91e28bb84a5af5078b3500906fdb6b5ca5010e9c3ce03e"
+      },
+      {
+        "oldUrl": "https://aperture.zhangwangshu.com/article/cloud-research-20260906-1807-886",
+        "canonicalUrl": "https://aperture.zhangwangshu.com/article/cloud-research-20260907-1806-1048",
+        "chineseOldUrl": "https://aperture.zhangwangshu.com/zh/article/cloud-research-20260906-1807-886",
+        "chineseCanonicalUrl": "https://aperture.zhangwangshu.com/zh/article/cloud-research-20260907-1806-1048",
+        "confidence": 0.98,
+        "reviewedAt": "2026-10-08T02:06:20.078803+00:00",
+        "sourceContentHash": "221160348a7f476e0546f36fea5eba79cae0db715ce12baf98f2722e02184979",
+        "targetContentHash": "bc5c159db53433d95e5935c8c08afc3e8884792a884ab4772b6068e7ffb1e0c6"
+      },
+      {
+        "oldUrl": "https://aperture.zhangwangshu.com/article/commerce-research-20260903-0916-189",
+        "canonicalUrl": "https://aperture.zhangwangshu.com/article/commerce-research-20260905-0004-600",
+        "chineseOldUrl": "https://aperture.zhangwangshu.com/zh/article/commerce-research-20260903-0916-189",
+        "chineseCanonicalUrl": "https://aperture.zhangwangshu.com/zh/article/commerce-research-20260905-0004-600",
+        "confidence": 0.98,
+        "reviewedAt": "2026-10-08T02:06:49.587329+00:00",
+        "sourceContentHash": "86bf5bd33754d9ad0b28f6e8bd56505433451f36209f6757f9c63ef291779c5e",
+        "targetContentHash": "57a4009a27c7d887bfe861322f998f72ba1a1deba934926064b46e5a02823c9f"
+      },
+      {
+        "oldUrl": "https://aperture.zhangwangshu.com/article/commerce-research-20260903-0925-209",
+        "canonicalUrl": "https://aperture.zhangwangshu.com/article/commerce-research-20260905-0004-600",
+        "chineseOldUrl": "https://aperture.zhangwangshu.com/zh/article/commerce-research-20260903-0925-209",
+        "chineseCanonicalUrl": "https://aperture.zhangwangshu.com/zh/article/commerce-research-20260905-0004-600",
+        "confidence": 0.97,
+        "reviewedAt": "2026-10-08T02:05:05.429198+00:00",
+        "sourceContentHash": "6a5d987e3387792b1f155c1cd21648313a24c8a0dd537ebbc716dd5457432294",
+        "targetContentHash": "57a4009a27c7d887bfe861322f998f72ba1a1deba934926064b46e5a02823c9f"
+      },
+      {
+        "oldUrl": "https://aperture.zhangwangshu.com/article/commerce-research-20260903-1033-240",
+        "canonicalUrl": "https://aperture.zhangwangshu.com/article/commerce-research-20260905-0004-600",
+        "chineseOldUrl": "https://aperture.zhangwangshu.com/zh/article/commerce-research-20260903-1033-240",
+        "chineseCanonicalUrl": "https://aperture.zhangwangshu.com/zh/article/commerce-research-20260905-0004-600",
+        "confidence": 0.98,
+        "reviewedAt": "2026-10-08T02:05:41.959261+00:00",
+        "sourceContentHash": "9328d1b973e3679f6bb27169f5658202fae4d187840bb3228fb9a72340de8d16",
+        "targetContentHash": "57a4009a27c7d887bfe861322f998f72ba1a1deba934926064b46e5a02823c9f"
+      },
+      {
+        "oldUrl": "https://aperture.zhangwangshu.com/article/commerce-research-20260905-1205-679",
+        "canonicalUrl": "https://aperture.zhangwangshu.com/article/commerce-research-20260905-0004-600",
+        "chineseOldUrl": "https://aperture.zhangwangshu.com/zh/article/commerce-research-20260905-1205-679",
+        "chineseCanonicalUrl": "https://aperture.zhangwangshu.com/zh/article/commerce-research-20260905-0004-600",
+        "confidence": 0.99,
+        "reviewedAt": "2026-10-08T02:05:24.649776+00:00",
+        "sourceContentHash": "73286dff12f975543ae79e8cc890d066541f8d4b6717a283b5b06f3f35becb1d",
+        "targetContentHash": "57a4009a27c7d887bfe861322f998f72ba1a1deba934926064b46e5a02823c9f"
+      },
+      {
+        "oldUrl": "https://aperture.zhangwangshu.com/article/commerce-research-20260906-0012-762",
+        "canonicalUrl": "https://aperture.zhangwangshu.com/article/commerce-research-20260908-0006-1090",
+        "chineseOldUrl": "https://aperture.zhangwangshu.com/zh/article/commerce-research-20260906-0012-762",
+        "chineseCanonicalUrl": "https://aperture.zhangwangshu.com/zh/article/commerce-research-20260908-0006-1090",
+        "confidence": 0.99,
+        "reviewedAt": "2026-10-08T02:07:10.705957+00:00",
+        "sourceContentHash": "89dcae84646b0238352ebb8fb24a912384c77bd060d28b521664587965636204",
+        "targetContentHash": "8cef22ef92d0b4c3661cbf93a0033cc77ca0324a26406e3ac6eb1cd465f51405"
+      },
+      {
+        "oldUrl": "https://aperture.zhangwangshu.com/article/commerce-research-20260907-0004-924",
+        "canonicalUrl": "https://aperture.zhangwangshu.com/article/commerce-research-20260905-0004-600",
+        "chineseOldUrl": "https://aperture.zhangwangshu.com/zh/article/commerce-research-20260907-0004-924",
+        "chineseCanonicalUrl": "https://aperture.zhangwangshu.com/zh/article/commerce-research-20260905-0004-600",
+        "confidence": 0.97,
+        "reviewedAt": "2026-10-08T02:03:47.987845+00:00",
+        "sourceContentHash": "f542c4f136c74b8b0aafa4674bca361d0007ac0b240cdb0e2bb488c2d7e380e3",
+        "targetContentHash": "57a4009a27c7d887bfe861322f998f72ba1a1deba934926064b46e5a02823c9f"
+      },
+      {
+        "oldUrl": "https://aperture.zhangwangshu.com/article/commerce-research-20260907-0007-928",
+        "canonicalUrl": "https://aperture.zhangwangshu.com/article/commerce-research-20260908-0006-1090",
+        "chineseOldUrl": "https://aperture.zhangwangshu.com/zh/article/commerce-research-20260907-0007-928",
+        "chineseCanonicalUrl": "https://aperture.zhangwangshu.com/zh/article/commerce-research-20260908-0006-1090",
+        "confidence": 0.99,
+        "reviewedAt": "2026-10-08T02:07:27.073436+00:00",
+        "sourceContentHash": "6f92005996b4667fffffb3a5695fd9278537415212f17d0adbe046283a6794f0",
+        "targetContentHash": "8cef22ef92d0b4c3661cbf93a0033cc77ca0324a26406e3ac6eb1cd465f51405"
+      },
+      {
+        "oldUrl": "https://aperture.zhangwangshu.com/article/commerce-research-20260907-1205-1005",
+        "canonicalUrl": "https://aperture.zhangwangshu.com/article/commerce-research-20260905-0004-600",
+        "chineseOldUrl": "https://aperture.zhangwangshu.com/zh/article/commerce-research-20260907-1205-1005",
+        "chineseCanonicalUrl": "https://aperture.zhangwangshu.com/zh/article/commerce-research-20260905-0004-600",
+        "confidence": 0.98,
+        "reviewedAt": "2026-10-08T02:03:52.079747+00:00",
+        "sourceContentHash": "0d19731f826161de80e6c921da8564deb0391f04c84deb8d5944d1a7f3f30bbe",
+        "targetContentHash": "57a4009a27c7d887bfe861322f998f72ba1a1deba934926064b46e5a02823c9f"
+      },
+      {
+        "oldUrl": "https://aperture.zhangwangshu.com/article/commerce-research-20260909-0004-1178",
+        "canonicalUrl": "https://aperture.zhangwangshu.com/article/commerce-research-20260905-0004-600",
+        "chineseOldUrl": "https://aperture.zhangwangshu.com/zh/article/commerce-research-20260909-0004-1178",
+        "chineseCanonicalUrl": "https://aperture.zhangwangshu.com/zh/article/commerce-research-20260905-0004-600",
+        "confidence": 0.96,
+        "reviewedAt": "2026-10-08T02:06:04.995964+00:00",
+        "sourceContentHash": "fadfd124d80290008d9aac9eb8469436123ab643bfac781a7c240f052b5a9554",
+        "targetContentHash": "57a4009a27c7d887bfe861322f998f72ba1a1deba934926064b46e5a02823c9f"
+      }
+    ],
+    "unresolvedOldUrls": [
+      "https://aperture.zhangwangshu.com/article/agent-research-20260903-0521-60",
+      "https://aperture.zhangwangshu.com/article/agent-research-20260903-0914-185",
+      "https://aperture.zhangwangshu.com/article/agent-research-20260905-0016-605",
+      "https://aperture.zhangwangshu.com/article/agent-research-20260906-1025-832",
+      "https://aperture.zhangwangshu.com/article/agent-research-20260908-0013-1091",
+      "https://aperture.zhangwangshu.com/article/agent-research-20260908-0413-1115",
+      "https://aperture.zhangwangshu.com/article/ai-research-20260903-1536-318",
+      "https://aperture.zhangwangshu.com/article/ai-research-20260904-1206-525",
+      "https://aperture.zhangwangshu.com/article/ai-research-20260906-1811-885",
+      "https://aperture.zhangwangshu.com/article/ai-research-20260907-0606-966",
+      "https://aperture.zhangwangshu.com/article/cloud-agent-platform-control-plane",
+      "https://aperture.zhangwangshu.com/article/cloud-research-20260903-0901-127",
+      "https://aperture.zhangwangshu.com/article/cloud-research-20260903-1205-264",
+      "https://aperture.zhangwangshu.com/article/cloud-research-20260904-1205-526",
+      "https://aperture.zhangwangshu.com/article/cloud-research-20260906-1207-846",
+      "https://aperture.zhangwangshu.com/article/cloud-research-20260907-0007-926",
+      "https://aperture.zhangwangshu.com/article/cloud-research-20260907-1207-1008",
+      "https://aperture.zhangwangshu.com/article/commerce-research-20260903-0901-126",
+      "https://aperture.zhangwangshu.com/article/commerce-research-20260903-0902-131",
+      "https://aperture.zhangwangshu.com/article/commerce-research-20260903-0903-139",
+      "https://aperture.zhangwangshu.com/article/commerce-research-20260903-0905-145",
+      "https://aperture.zhangwangshu.com/article/commerce-research-20260903-0909-171",
+      "https://aperture.zhangwangshu.com/article/commerce-research-20260906-0025-768",
+      "https://aperture.zhangwangshu.com/article/commerce-research-20260906-0607-806",
+      "https://aperture.zhangwangshu.com/article/commerce-research-20260907-1807-1049",
+      "https://aperture.zhangwangshu.com/article/finance-research-20260903-0906-153",
+      "https://aperture.zhangwangshu.com/article/finance-research-20260903-0906-164",
+      "https://aperture.zhangwangshu.com/article/finance-research-20260903-0907-163",
+      "https://aperture.zhangwangshu.com/article/finance-research-20260908-1207-1164"
+    ],
+    "httpChecksPassed": 216
+  },
+  "tests": {
+    "localTestsPassed": 50,
+    "browserProductionChecks": [
+      {
+        "width": 1440,
+        "language": "en",
+        "caseLinks": 2,
+        "rss": 200,
+        "caseNavigation": true,
+        "horizontalOverflow": false,
+        "javascriptErrors": []
+      },
+      {
+        "width": 390,
+        "language": "en",
+        "caseLinks": 2,
+        "rss": 200,
+        "caseNavigation": true,
+        "horizontalOverflow": false,
+        "javascriptErrors": []
+      },
+      {
+        "width": 390,
+        "language": "zh",
+        "caseLinks": 2,
+        "rss": 200,
+        "caseNavigation": true,
+        "horizontalOverflow": false,
+        "javascriptErrors": []
+      }
+    ]
+  },
+  "search": {
+    "passed": true,
+    "sitemapUrls": 120,
+    "articleUrls": 98,
+    "pageChecks": 360,
+    "indexnow": {
+      "batches": [
+        {
+          "endpoint": "https://www.bing.com/indexnow",
+          "httpStatus": 200,
+          "urlCount": 174
+        }
+      ],
+      "canonicalUrls": 120,
+      "redirectedUrls": 54,
+      "meaning": "Notification accepted, not indexing confirmation. Google does not use IndexNow."
+    },
+    "webmasterAccounts": "Not checked: site verification files do not establish account/API access."
+  },
+  "growthChanges": [
+    "bilingual homepage engineering case studies",
+    "homepage RSS entry",
+    "attributed engineering links in the project README",
+    "diagnostic identification for search audits"
+  ]
+}

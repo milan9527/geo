@@ -4,6 +4,7 @@ These are dated observations, not live counters. Start with the latest coverage 
 
 ## Latest verification
 
+- [Internal payment stop, old URL repairs, and traffic improvements — October 8](traffic-and-payments-2026-10-08.md)
 - [Functional coverage and Bing notification — September 25](functional-coverage-2026-09-25.md)
 - [English and Chinese launch — September 25](bilingual-launch-2026-09-25.md)
 

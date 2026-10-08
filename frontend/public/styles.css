@@ -382,6 +382,8 @@ main { min-height: 70vh; }
 
 .latest-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; }
 .case-study-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
+.case-study-grid .story-visual { display: none; }
+.case-study-grid .story-card { border-top: 3px solid var(--teal); }
 .home-subscribe { padding-top: 0; padding-bottom: 0; }
 .home-subscribe .reader-follow { margin-top: 0; }
 .latest-grid .story-card { display: flex; flex-direction: column; }
