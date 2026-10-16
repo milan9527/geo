@@ -13,7 +13,8 @@ Aperture is an AWS reference application for turning public sources into reviewe
 ## How it works
 
 - **Research:** EventBridge Scheduler invokes a Lambda bridge and Bedrock AgentCore Runtime. The runtime uses a Codex SDK worker, Browser, Code Interpreter, and Bedrock inference to collect evidence and draft research.
-- **Review and publish:** Evidence quality, full-catalogue semantic deduplication, and an independently reviewed English edition must pass before automatic publication. Database guards preserve published URLs and reject missing or stale translations.
+- **Review and publish:** A focused reader question, substantive analytical value, evidence quality, full-catalogue deduplication, bilingual review, and grounded knowledge relationships must pass before automatic publication. Database guards preserve published URLs and reject missing or stale translations.
+- **Connect research:** A bilingual [knowledge map](https://aperture.zhangwangshu.com/knowledge) links questions, companies and technologies to research and cited evidence. Reviewed updates preserve existing URLs and version history. [Editorial policy and implementation](docs/editorial-knowledge.md).
 - **Serve and discover:** CloudFront serves private S3 assets and routes HTML/API requests through an ALB to an ECS Fargate API. Aurora PostgreSQL stores content and operational data. English uses the existing URLs; Chinese uses `/zh/`. SSR, JSON-LD, canonical/hreflang links, sitemaps, RSS, and IndexNow support discovery.
 - **Measure:** CloudFront logs flow through S3, SQS, and a Lambda aggregator. The separate admin console reports approximate human/agent traffic, research jobs, reader attribution, and payment events.
 - **Agent access:** Open JSON and an x402-protected route demonstrate programmatic delivery. The seller verifies and settles payments through an external facilitator before returning paid content.
@@ -71,4 +72,4 @@ Web deployment builds and scans the API image, updates ECS, uploads the frontend
 | `aws_scheduler`, `aws_indexing_notifier`, `aws_traffic_aggregator` | Scheduled invocation, search notifications, edge-log processing |
 | `scripts`, `infrastructure/aws` | Deployment, verification, maintenance, and IAM policy examples |
 
-[Publication rules](docs/bilingual-publication.md) · [API guide](docs/api.md) · [Verification](docs/functional-verification.md) · [Latest audit](reports/functional-coverage-2026-09-25.md)
+[Publication rules](docs/bilingual-publication.md) · [API guide](docs/api.md) · [Verification](docs/functional-verification.md) · [Latest audit](reports/editorial-knowledge-2026-10-16.md)

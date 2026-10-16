@@ -51,6 +51,7 @@ def build_urls(slugs: list[str], categories: list[str]) -> list[str]:
         f"{PUBLIC_BASE_URL}/category/{quote(category, safe='')}"
         for category in categories
     )
+    urls.append(f"{PUBLIC_BASE_URL}/knowledge")
     urls += [PUBLIC_BASE_URL + "/zh" + url[len(PUBLIC_BASE_URL):] for url in urls]
     return list(dict.fromkeys(urls))
 
@@ -63,6 +64,7 @@ def invalidate(slugs: list[str], categories: list[str], request_id: str) -> str:
         "/sitemap.xml",
         "/sitemap-articles.xml",
         "/feed.xml",
+        "/knowledge",
     ]
     paths += ["/zh" + path for path in paths if not path.startswith("/sitemap")]
     unique_paths = list(dict.fromkeys(paths))

@@ -8,6 +8,7 @@ These guides describe the current implementation. Earlier documents and audit re
 | [Installation and deployment](deployment.md) | Local setup, AWS prerequisites, release procedures, and verification |
 | [API reference](api.md) | Public content, language selection, machine access, and admin endpoints |
 | [Bilingual publication](bilingual-publication.md) | Quality gates, deduplication, translation integrity, and permanent URLs |
+| [Reader value and knowledge map](editorial-knowledge.md) | Topic commissioning, reviewed updates, connected evidence and backfills |
 | [Functional verification](functional-verification.md) | Test coverage, isolated checks, and known limitations |
 | [Research runtime](../agent_runtime/ARCHITECTURE.md) | Crawler generation, collection tools, evidence, and publication |
 | [AWS operations](../infrastructure/aws/README.md) | Resource inventory and operational boundaries |

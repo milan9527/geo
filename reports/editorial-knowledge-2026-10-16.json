@@ -1,0 +1,102 @@
+{
+  "verifiedAt": "2026-10-16T10:54:25+00:00",
+  "publishedPagesPreserved": 55,
+  "knowledge": {
+    "published": 55,
+    "mapped": 55,
+    "relationships": 202,
+    "nodes": 281
+  },
+  "browser": {
+    "passed": true,
+    "errors": [],
+    "temporaryAdminRemoved": true
+  },
+  "search": {
+    "passed": true,
+    "sitemapUrls": 134,
+    "articleEditionUrls": 110,
+    "pageChecks": 402,
+    "discoveryChecks": 26,
+    "indexnow": {
+      "batches": [
+        {
+          "endpoint": "https://www.bing.com/indexnow",
+          "httpStatus": 200,
+          "urlCount": 134
+        }
+      ],
+      "meaning": "Notification accepted, not a guarantee of indexing. Google does not use IndexNow."
+    }
+  },
+  "runtime": {
+    "version": "54",
+    "status": "READY",
+    "automaticPublication": true,
+    "schedules": [
+      {
+        "name": "geo-evidence-verifier",
+        "state": "ENABLED",
+        "allowPayment": false
+      },
+      {
+        "name": "geo-render-scout",
+        "state": "ENABLED",
+        "allowPayment": false
+      },
+      {
+        "name": "geo-cloud-release-watch",
+        "state": "ENABLED",
+        "allowPayment": false
+      },
+      {
+        "name": "geo-commerce-feed-miner",
+        "state": "ENABLED",
+        "allowPayment": false
+      },
+      {
+        "name": "geo-market-signal",
+        "state": "ENABLED",
+        "allowPayment": false
+      },
+      {
+        "name": "geo-research-coder",
+        "state": "ENABLED",
+        "allowPayment": false
+      }
+    ],
+    "internalPaidSourceStatus": "paused"
+  },
+  "paymentsExecuted": false,
+  "publicationTests": [
+    {
+      "suite": "test_knowledge_editorial.py",
+      "exitCode": 0
+    },
+    {
+      "suite": "test_runtime_publication.py",
+      "exitCode": 0
+    },
+    {
+      "suite": "test_bilingual.py",
+      "exitCode": 0
+    }
+  ],
+  "assetVerification": [
+    {
+      "file": "frontend/public/app.js",
+      "deployedHash": "cc56952628bc783a96cfdfdddc0fa88b3a001aa36919caeb447c0c2792bf9de4",
+      "matchesWorkspace": true
+    },
+    {
+      "file": "frontend/public/styles.css",
+      "deployedHash": "774dd090c30ee5be0651b92a9c8818efe37f352807a18e779c53b045b44dbce1",
+      "matchesWorkspace": true
+    },
+    {
+      "file": "frontend/admin/app.js",
+      "deployedHash": "46b1b149deac29747c4803886e40289330c0637d7a5e48a33c5e0c56cadf0d4b",
+      "matchesWorkspace": true
+    }
+  ]
+}

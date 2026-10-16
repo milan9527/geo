@@ -9,8 +9,10 @@ from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 try:
     from bilingual import save_english
+    import knowledge
 except ImportError:
     from backend.bilingual import save_english
+    from backend import knowledge
 
 from editorial_policy import DEDUPE_POLICY_VERSION, validate_pair
 
@@ -72,6 +74,51 @@ class PublicationStore:
     def __init__(self, sql, transaction):
         self.sql = sql
         self.transaction = transaction
+
+    def connection(self, tx=None):
+        store = self
+        class Result:
+            def __init__(self, values):
+                self.values = values
+            def fetchall(self):
+                return self.values
+            def fetchone(self):
+                return self.values[0] if self.values else None
+        class Adapter:
+            def execute(self, statement, parameters=()):
+                parts = statement.split("%s")
+                named = {f"p{i}": value for i, value in enumerate(parameters)}
+                sql = "".join(part + (f":p{i}" if i < len(parameters) else "")
+                              for i, part in enumerate(parts))
+                return Result(store.sql(sql, named, transaction_id=tx))
+        return Adapter()
+
+    def save_knowledge(self, candidate, result):
+        with self.transaction() as tx:
+            self.sql("SELECT id FROM articles WHERE id=:article_id FOR UPDATE",
+                     {"article_id": candidate["id"]}, transaction_id=tx)
+            current = self.article(candidate["id"], tx)
+            if state_identity(current) != state_identity(candidate):
+                raise ValueError("Article changed during knowledge review")
+            knowledge.save_document(self.connection(tx), current, result,
+                                    datetime.now(timezone.utc).isoformat())
+
+    def coverage(self):
+        """Small commissioning context; full texts are loaded only for review."""
+        result, after = [], 0
+        while True:
+            batch = self.sql("""SELECT a.id,a.slug,a.title,a.dek,c.slug category,a.updated_at,
+            k.document_json::jsonb->'question' question,
+            k.document_json::jsonb->'contribution' contribution,
+            (SELECT jsonb_agg(jsonb_build_object('kind',n->'kind','name',n->'name'))
+             FROM jsonb_array_elements(k.document_json::jsonb->'nodes') n) nodes
+            FROM articles a JOIN categories c ON c.id=a.category_id
+            LEFT JOIN current_article_knowledge k ON k.article_id=a.id
+            WHERE a.status='published' AND a.id>:after ORDER BY a.id LIMIT 16""", {"after": after})
+            result.extend(batch)
+            if not batch:
+                return result
+            after = batch[-1]["id"]
 
     def article(self, article_id, tx=None):
         rows = self.sql(
@@ -204,8 +251,69 @@ class PublicationStore:
             )
             return bool(result), "published" if result else "candidate_not_pending"
 
+    def commit_revision(self, candidate, public_articles, target, review):
+        if not review.get("passed") or review.get("targetHash") != content_identity(target):
+            return False, "revision_review_failed"
+        if review.get("candidateHash") != content_identity(candidate):
+            return False, "candidate_changed"
+        with self.transaction() as tx:
+            self.sql("LOCK TABLE articles, sources IN SHARE ROW EXCLUSIVE MODE", transaction_id=tx)
+            current = self.article(candidate["id"], tx)
+            if state_identity(current) != state_identity(candidate):
+                return False, "candidate_changed"
+            live = self.published(tx)
+            if {a["id"]: state_identity(a) for a in live} != {
+                a["id"]: state_identity(a) for a in public_articles
+            }:
+                return False, "published_catalog_changed"
+            if target["category_id"] != candidate["category_id"]:
+                return False, "revision_category_changed"
+            conn = self.connection(tx)
+            translation = conn.execute(
+                "SELECT * FROM article_translations WHERE article_id=%s AND locale='en'",
+                (candidate["id"],)).fetchone()
+            graph = conn.execute("SELECT * FROM article_knowledge WHERE article_id=%s",
+                                 (candidate["id"],)).fetchone()
+            if not translation or not graph:
+                return False, "revision_preparation_missing"
+            timestamp = datetime.now(timezone.utc).isoformat()
+            old_translation = conn.execute("SELECT * FROM article_translations WHERE article_id=%s",
+                                           (target["id"],)).fetchall()
+            conn.execute("""INSERT INTO article_revisions
+                (article_id,candidate_article_id,previous_json,previous_translation_json,
+                 review_json,change_summary_json,created_at) VALUES(%s,%s,%s,%s,%s,%s,%s)""",
+                (target["id"], candidate["id"], json.dumps(target, ensure_ascii=False),
+                 json.dumps(old_translation, ensure_ascii=False), json.dumps(review, ensure_ascii=False),
+                 json.dumps(review["changeSummary"], ensure_ascii=False), timestamp))
+            revised = {**candidate, "id": target["id"], "slug": target["slug"],
+                       "status": "published", "published_at": target["published_at"]}
+            save_english(conn, revised, {
+                "sourceHash": translation["source_hash"],
+                "content": json.loads(translation["content_json"]),
+                "review": json.loads(translation["review_json"]),
+                "reviewedAt": translation["updated_at"],
+            })
+            conn.execute("""UPDATE articles SET title=%s,dek=%s,summary=%s,body_json=%s,
+                keywords=%s,read_minutes=%s,authority_score=%s,citation_count=%s,updated_at=%s
+                WHERE id=%s AND status='published'""",
+                (*(candidate[k] for k in ("title", "dek", "summary", "body_json", "keywords",
+                                          "read_minutes", "authority_score", "citation_count")),
+                 timestamp, target["id"]))
+            conn.execute("DELETE FROM sources WHERE article_id=%s", (target["id"],))
+            for source in candidate["sources"]:
+                conn.execute("""INSERT INTO sources(article_id,publisher,title,url,published_at,source_type)
+                    VALUES(%s,%s,%s,%s,%s,%s)""",
+                    (target["id"], *(source[k] for k in ("publisher", "title", "url", "published_at", "source_type"))))
+            knowledge.save_document(conn, revised, {
+                "contentHash": graph["content_hash"], "sourcesHash": graph["sources_hash"],
+                "document": json.loads(graph["document_json"]), "review": json.loads(graph["review_json"]),
+            }, timestamp)
+            return True, "updated_published_article"
 
-def review_and_publish(store, article_id, expected_hash, gate, compare, *, enabled, workers=4, prepare_language=None):
+
+def review_and_publish(store, article_id, expected_hash, gate, compare, *, enabled, workers=4,
+                       prepare_language=None, prepare_knowledge=None, recompare=None,
+                       revision_target_id=None, revision_review=None):
     result = {"policyVersion": DEDUPE_POLICY_VERSION, "published": False,
               "comparedArticles": 0, "comparisons": [], "reason": "automatic_publication_disabled"}
     if not enabled:
@@ -222,16 +330,35 @@ def review_and_publish(store, article_id, expected_hash, gate, compare, *, enabl
             result["reason"] = "candidate_changed"
             return result
         public = store.published()
+        target = next((a for a in public if a["id"] == revision_target_id), None)
+        if revision_target_id is not None:
+            if (not target or not revision_review or not revision_review.get("passed")
+                    or revision_review.get("targetHash") != content_identity(target)
+                    or revision_review.get("candidateHash") != expected_hash):
+                result["reason"] = "revision_review_failed"
+                return result
         result["candidateHash"] = expected_hash
         result["publishedSnapshot"] = [
             {"articleId": a["id"], "contentHash": content_identity(a)} for a in public
         ]
         with ThreadPoolExecutor(max_workers=max(1, min(4, workers))) as pool:
-            pending = {pool.submit(compare, candidate, existing): existing for existing in public}
+            pending = {pool.submit(compare, candidate, existing): existing for existing in public
+                       if existing["id"] != revision_target_id}
             for future in as_completed(pending):
                 existing = pending[future]
                 pair = future.result()
                 validate_pair(pair, candidate["id"], existing["id"])
+                if recompare and (pair["confidence"] < .9 or pair["relation"] == "uncertain"):
+                    second = recompare(candidate, existing, pair)
+                    validate_pair(second, candidate["id"], existing["id"])
+                    # A second call is a bounded review, not repeated sampling
+                    # until one answer allows publication. Disagreement stays held.
+                    if second["relation"] == pair["relation"] and second["confidence"] >= .9:
+                        second["initialReview"] = pair
+                        pair = second
+                    else:
+                        pair = {**pair, "relation": "uncertain", "confirmedDuplicate": False,
+                                "secondReview": second}
                 result["comparisons"].append({**pair, "articleId": existing["id"], "slug": existing["slug"]})
         result["comparisons"].sort(key=lambda item: item["articleId"])
         result["comparedArticles"] = len(result["comparisons"])
@@ -252,7 +379,21 @@ def review_and_publish(store, article_id, expected_hash, gate, compare, *, enabl
         except Exception as error:
             result.update(reason="bilingual_review_failed", error=f"{type(error).__name__}: {str(error)[:500]}")
             return result
-        result["published"], result["reason"] = store.commit_publication(candidate, public)
+        if prepare_knowledge is None:
+            result["reason"] = "knowledge_review_unavailable"
+            return result
+        try:
+            result["knowledgeReview"] = prepare_knowledge(candidate)
+        except Exception as error:
+            result.update(reason="knowledge_review_failed", error=f"{type(error).__name__}: {str(error)[:500]}")
+            return result
+        if target:
+            result["published"], result["reason"] = store.commit_revision(candidate, public, target, revision_review)
+            if result["published"]:
+                result.update(articleId=target["id"], articleSlug=target["slug"],
+                              revisionCandidateId=candidate["id"])
+        else:
+            result["published"], result["reason"] = store.commit_publication(candidate, public)
     except Exception as error:
         result.update(reason="review_unavailable", error=f"{type(error).__name__}: {str(error)[:500]}")
     return result

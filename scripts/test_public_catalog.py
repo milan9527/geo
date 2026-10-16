@@ -33,6 +33,8 @@ class PublicCatalogTests(unittest.TestCase):
             for statement in SCHEMA.split(";")[:3]:
                 conn.execute(statement)
             ensure_schema(conn)
+            from backend import knowledge
+            knowledge.ensure_schema(conn)
             conn.execute("""INSERT INTO categories(slug,name,eyebrow,description,accent)
                             VALUES('ai','AI','AI','Evidence-led research and analysis','teal')""")
             for i in range(65):

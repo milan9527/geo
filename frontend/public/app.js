@@ -50,6 +50,13 @@ function renderLoadError() {
   $("#app").innerHTML = `<section class="not-found" role="alert"><h1>${text("This page is temporarily unavailable", "页面暂时无法加载")}</h1><p>${text("Please try again. Your current address has been preserved.", "请重试，当前网址已保留。")}</p><button type="button" data-retry-page>${text("Retry", "重试")}</button></section>`;
 }
 
+function focusKnowledgeMap() {
+  if (!location.hash && I18N.strip(location.pathname) === "/knowledge"
+      && new URLSearchParams(location.search).has("node")) {
+    $(".knowledge-diagram")?.scrollIntoView({ block: "center" });
+  }
+}
+
 async function renderRoute() {
   const requestId = ++navigationId;
   navigationController?.abort();
@@ -86,7 +93,7 @@ async function renderRoute() {
       let fragment = location.hash.slice(1);
       try { fragment = decodeURIComponent(fragment); } catch { /* Keep malformed fragments literal. */ }
       document.getElementById(fragment)?.scrollIntoView();
-    }
+    } else focusKnowledgeMap();
     $("#app").focus({ preventScroll: true });
     window.apertureGrowth?.startPage();
   } catch (error) {
@@ -183,6 +190,7 @@ function init() {
   if (document.body.dataset.ssr === "true") {
     I18N.apply();
     updateNavActive();
+    focusKnowledgeMap();
     window.apertureGrowth?.startPage();
   } else renderRoute();
 }

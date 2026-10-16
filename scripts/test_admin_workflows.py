@@ -72,7 +72,10 @@ class AdminWorkflowTests(unittest.TestCase):
             route.fulfill(status=503, json={"error": "Temporary save failure"})
             return
         result = None
-        if path == "/api/admin/articles/batch":
+        if path == "/api/admin/knowledge":
+            result = {"totals":{"mapped":1,"published":2,"relationships":3},
+                      "nodes":[{"id":"entity-test","name":"Test entity","articles":1}]}
+        elif path == "/api/admin/articles/batch":
             ids = body["ids"]
             if body["action"] == "delete":
                 self.articles = [a for a in self.articles if a["id"] not in ids]
@@ -143,6 +146,21 @@ class AdminWorkflowTests(unittest.TestCase):
 
     def wrote(self, method, path):
         return [c[2] for c in self.calls if c[0:2] == (method, path)]
+
+    def test_knowledge_load_is_independent_and_recovers_in_both_languages(self):
+        for language in ["en","zh"]:
+            self.start(language, view="knowledge")
+            expect(self.page.locator("#adminApp")).to_contain_text("1 / 2")
+            expect(self.page.locator('#adminApp a[href*="node=entity-test"]')).to_be_visible()
+            self.page.locator('[data-view="content"]').click()
+            self.fail.add(("GET","/api/admin/knowledge"))
+            self.page.locator('[data-view="knowledge"]').click()
+            expect(self.page.locator("#adminApp [role=alert]")).to_be_visible()
+            self.fail.clear()
+            self.page.locator('[data-view="content"]').click()
+            expect(self.page.locator("#createContent")).to_be_visible()
+            self.page.locator('[data-view="knowledge"]').click()
+            expect(self.page.locator("#adminApp")).to_contain_text("1 / 2")
 
     def test_create_draft_failure_retry_and_reset_in_both_languages(self):
         for language in ["en", "zh"]:

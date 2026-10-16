@@ -31,6 +31,8 @@ class PublicNavigationTests(unittest.TestCase):
             slug=route.rsplit('/',1)[-1];machine=BASE+'/agent/v1/articles/'+slug
             main=f'<article class="article-page"><h1>Article {slug}</h1><div class="article-content"><pre><code>print("原文 &lt;code&gt;")</code></pre></div><a href="{machine}?lang={"zh" if zh else "en"}">Agent JSON</a><button data-machine-url="{machine}?lang={"zh" if zh else "en"}">Copy A</button><button data-machine-url="{machine}/paid?lang={"zh" if zh else "en"}">Copy B</button><a href="/feed.xml" data-rss>RSS</a><a data-link href="/category/ai">AI category</a></article>'
         elif route=='/about':main='<h1>About</h1>'
+        elif route=='/knowledge':
+            main=f'<section class="knowledge-page"><h1>Knowledge map</h1><svg class="knowledge-diagram" viewBox="0 0 800 440"><a href="{prefix}/knowledge?node=next" data-link><circle cx="400" cy="220" r="27"/><text x="400" y="265">Connected evidence</text></a></svg></section>'
         else:main='<section class="not-found"><h1>Not found</h1></section>'
         meta='noindex,nofollow' if route=='/article/missing' else 'index,follow'
         schema={'@context':'https://schema.org','@type':'CollectionPage' if '/category/' in route else 'WebPage','url':BASE+path,'inLanguage':'zh-CN' if zh else 'en'}
@@ -65,6 +67,19 @@ class PublicNavigationTests(unittest.TestCase):
                 self.assertEqual(self.page.locator('script[data-page-schema]').count(),1)
                 self.page.go_back();expect(self.page.locator('#app h1')).to_have_text('Home')
                 self.page.go_forward();expect(self.page.locator('.category-articles a')).to_have_count(3)
+
+    def test_knowledge_diagram_keeps_its_canvas_size_and_links_on_desktop_and_mobile(self):
+        for prefix in ["", "/zh"]:
+            self.page.set_viewport_size({"width":1100,"height":900})
+            self.page.goto(BASE+prefix+"/knowledge?node=first",wait_until="domcontentloaded")
+            diagram=self.page.locator(".knowledge-diagram")
+            self.assertGreater(diagram.bounding_box()["height"],400)
+            self.assertEqual(diagram.locator("text").evaluate("el => getComputedStyle(el).stroke"),"none")
+            diagram.locator("a").click()
+            self.page.wait_for_url(BASE+prefix+"/knowledge?node=next")
+            self.page.set_viewport_size({"width":390,"height":844})
+            self.assertGreater(diagram.bounding_box()["height"],150)
+            self.assertTrue(self.page.evaluate("document.documentElement.scrollWidth <= innerWidth+1"))
     def test_article_code_rss_clipboard_and_language_switch(self):
         self.page.goto(BASE+'/zh/article/one',wait_until='domcontentloaded')
         expect(self.page.locator('[data-rss]')).to_have_attribute('href','/zh/feed.xml')

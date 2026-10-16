@@ -95,6 +95,14 @@ Requirements:
 - Emit exactly one JSON object on stdout with an "evidence" array.
 - Every evidence item must preserve publisher, title, url, publishedAt,
   retrievedAt, sourceType, excerpt, and data.
+- Never emit failed requests, error messages, empty listing/index stubs, or generic
+  newsroom headings as evidence. Emit an empty evidence array if no substantive
+  content is available. Extract specific dated releases, financial observations,
+  technical changes, quantitative results and limitations from the supplied pages.
+- publishedAt must come from the publisher. Use an empty string when unknown;
+  never substitute the retrieval date. Preserve the actual document URL when present.
+- Excerpts must contain substantive source text (at least 80 characters), not a
+  generated interpretation or a promise to read another page. Record scope and dates.
 - Cap response size, retries, redirects, and total downloaded bytes.
 - For financial-timeseries, calculate changes from fetched observations.
 - Include deterministic tests using saved fixtures.

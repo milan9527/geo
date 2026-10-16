@@ -41,7 +41,7 @@
       if (!admin && el.matches("a[href]") && !el.hasAttribute("hreflang")) {
         const url = new URL(el.getAttribute("href"), location.href);
         const unlocalized = strip(url.pathname);
-        if (url.origin === location.origin && (/^\/(article|category|authors)\//.test(unlocalized) || ["/", "/about", "/methodology", "/corrections", "/editorial-policy", "/feed.xml"].includes(unlocalized))) {
+        if (url.origin === location.origin && (/^\/(article|category|authors)\//.test(unlocalized) || ["/", "/about", "/knowledge", "/methodology", "/corrections", "/editorial-policy", "/feed.xml"].includes(unlocalized))) {
           el.setAttribute("href", path(unlocalized) + url.search + url.hash);
         }
       }

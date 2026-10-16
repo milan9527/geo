@@ -347,6 +347,7 @@ SSR_PATHS='[
   "article/*",
   "category/*",
   "methodology",
+  "knowledge",
   "about",
   "authors/*",
   "editorial-policy",

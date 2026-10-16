@@ -37,6 +37,8 @@ class PublicationProtectionTests(unittest.TestCase):
             ensure_article_redirects(conn)
             from backend.bilingual import ensure_schema
             ensure_schema(conn)
+            from backend import knowledge
+            knowledge.ensure_schema(conn)
             conn.execute("""INSERT INTO categories(slug,name,eyebrow,description,accent)
                             VALUES('agent','Agent 技术','AGENT','分类说明','teal')""")
         with patch("backend.database.init_db"):
@@ -69,7 +71,7 @@ class PublicationProtectionTests(unittest.TestCase):
     def setUp(self):
         # Never truncate production. Each test owns a disposable local schema.
         with self.connect() as conn:
-            conn.execute("TRUNCATE article_translations, article_redirects, sources, articles RESTART IDENTITY")
+            conn.execute("TRUNCATE article_translations, article_redirects, sources, articles RESTART IDENTITY CASCADE")
             for slug, status in [("existing", "published"), ("new-draft", "draft"), ("pending", "review")]:
                 conn.execute(
                     """INSERT INTO articles(
@@ -107,6 +109,21 @@ class PublicationProtectionTests(unittest.TestCase):
             self.assertEqual(conn.execute("SELECT status,slug FROM articles WHERE id=1").fetchone(),
                              {"status": "published", "slug": "existing"})
             self.assertEqual(conn.execute("SELECT count(*) n FROM sources WHERE article_id=1").fetchone()["n"], 1)
+
+    def test_knowledge_pages_are_bilingual_and_api_hides_unmapped_articles(self):
+        for prefix, expected in [("", "Knowledge map"), ("/zh", "知识地图")]:
+            status, page = self.request("GET", prefix + "/knowledge?q=%3Cscript%3E")
+            self.assertEqual(status, 200, page)
+            self.assertIn(f"<h1>{expected}</h1>", page)
+            self.assertIn("&lt;script&gt;", page)
+            self.assertIn(f'{prefix}/knowledge', page)
+            self.assertNotIn("new-draft", page)
+        status, body = self.request("GET", "/api/v1/knowledge?node=unknown&offset=invalid")
+        self.assertEqual(status, 200, body)
+        data = json.loads(body)
+        self.assertEqual(data["totals"]["published"], 1)
+        self.assertEqual(data["totals"]["mapped"], 0)
+        self.assertEqual(data["articles"], [])
 
     def test_corrections_preserve_url_and_reviewed_new_publication_remains_possible(self):
         with self.connect() as conn:

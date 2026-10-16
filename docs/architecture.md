@@ -12,7 +12,7 @@ Each frontend has a private S3 bucket behind its own CloudFront distribution and
 
 The Python API provides server-rendered HTML, JSON responses, administrator sessions, catalogue operations, research records, schedule management, traffic statistics, and the x402 seller endpoint. The frontends use plain JavaScript, HTML, and CSS. Local development replaces Aurora with PostgreSQL and CloudFront with the development reverse proxy in `server.py`.
 
-Aurora stores articles and their sources, reviewed English editions, permanent redirect mappings, source registrations and agent assignments, research runs and evidence, crawler jobs/artifacts, administrator sessions, settings, traffic aggregates, and business events. The implementation does not require a separate vector database or entity graph.
+Aurora stores articles and their sources, reviewed English editions, permanent redirect mappings, source registrations and agent assignments, research runs and evidence, crawler jobs/artifacts, administrator sessions, settings, traffic aggregates, and business events. Reviewed entities and directed evidence-backed relationships are stored in Aurora alongside full article revision history; no separate graph database is required.
 
 ## Research production
 
@@ -22,7 +22,7 @@ The runtime loads source registrations and assignments for each invocation. A Ty
 
 ![Publication pipeline](architecture/publication-pipeline.png)
 
-Publication requires evidence/quality checks, semantic comparison with the full published catalogue, complete English translation, and independent translation review. Model work precedes the final transaction. Before committing, the publisher rechecks the candidate and catalogue so concurrent edits cannot reuse an obsolete review.
+Publication begins with a separately reviewed professional question and reader-value assignment. It then requires factual and analytical-depth checks, semantic comparison with the full published catalogue, reviewed English translation, and reviewed knowledge extraction. Material updates can revise an existing page while preserving its URL, original publication date and archived previous version. See [editorial decisions and knowledge storage](editorial-knowledge.md). Model work precedes the final transaction. Before committing, the publisher rechecks the candidate and catalogue so concurrent edits cannot reuse an obsolete review.
 
 Database protections preserve published slugs and status, protect redirect targets, and require an approved English edition matching the source revision when bilingual policy is enabled. A rejected, uncertain, unavailable, or stale review leaves the candidate unpublished. Existing articles are not withdrawn to make room for a newer duplicate.
 

@@ -31,9 +31,11 @@ def main() -> None:
         "https://aperture.zhangwangshu.com/article/valid-article",
         "https://aperture.zhangwangshu.com/category/agent",
         "https://aperture.zhangwangshu.com/category/ai",
+        "https://aperture.zhangwangshu.com/knowledge",
         "https://aperture.zhangwangshu.com/zh/article/valid-article",
         "https://aperture.zhangwangshu.com/zh/category/agent",
         "https://aperture.zhangwangshu.com/zh/category/ai",
+        "https://aperture.zhangwangshu.com/zh/knowledge",
     ]
     lambda_function.cloudfront.create_invalidation.return_value = {"Invalidation": {"Id": "TEST"}}
     lambda_function.invalidate(slugs, categories, "test")

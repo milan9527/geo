@@ -1330,6 +1330,8 @@ def init_db() -> None:
         ensure_article_redirects(conn)
         from .bilingual import ensure_schema as ensure_bilingual_schema
         ensure_bilingual_schema(conn)
+        from .knowledge import ensure_schema as ensure_knowledge_schema
+        ensure_knowledge_schema(conn)
         category_count = conn.execute(
             "SELECT COUNT(*) AS count FROM categories"
         ).fetchone()["count"]

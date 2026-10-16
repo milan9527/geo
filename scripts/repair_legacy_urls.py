@@ -14,7 +14,8 @@ from pathlib import Path
 import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from backend.bilingual import create_english, save_english, source_hash
+from backend.bilingual import create_english, save_english, source_hash, model_json
+from backend import knowledge, editorial
 from backend.database import connection, utc_now
 from editorial_policy import DEDUPE_POLICY_VERSION
 from scripts.review_articles import (
@@ -96,7 +97,7 @@ def apply(directory, validated):
               "restored": [i for i in revisions if baseline[i]["status"] != "published"],
               "revisedPublished": [i for i in revisions if baseline[i]["status"] == "published"],
               "persistedHashes": {}, "researchRunIds": {}}
-    editions = {}
+    editions, graphs, reader_reviews, revision_reviews = {}, {}, {}, {}
     for i, article in revisions.items():
         path = directory / "english" / f"{i}.json"
         edition = read(path) if path.exists() else None
@@ -105,6 +106,27 @@ def apply(directory, validated):
             path.parent.mkdir(parents=True, exist_ok=True)
             write_json(path, edition)
         editions[i] = edition
+        graph_path = directory / "knowledge" / f"{i}.json"
+        graph = read(graph_path) if graph_path.exists() else None
+        if not graph or graph["contentHash"] != source_hash(article) or graph["sourcesHash"] != knowledge.sources_hash(article):
+            with connection() as conn:
+                grounded = knowledge.attach_evidence(conn, article)
+            graph = knowledge.create_document(grounded, model_json)
+            graph_path.parent.mkdir(parents=True, exist_ok=True)
+            write_json(graph_path, graph)
+        graphs[i] = graph
+        assignment = {**graph["document"], "action": "update" if baseline[i]["status"] == "published" else "new"}
+        evidence = [{"publisher":e["publisher"],"title":e["title"],"url":e["url"],
+                     "publishedAt":e["published_at"],"excerpt":e["content_excerpt"],
+                     "data":json.loads(e.get("data_json") or "{}")} for e in article["evidence"]]
+        reader_reviews[i] = editorial.review_reader_value(
+            {**article, "sections": json.loads(article["body_json"])}, evidence, assignment, model_json)
+        if not reader_reviews[i]["passed"]:
+            raise ValueError(f"Reader-value review failed: {i}")
+        if baseline[i]["status"] == "published":
+            revision_reviews[i] = editorial.review_revision(baseline[i],article,evidence,assignment,model_json)
+            if not revision_reviews[i]["passed"]:
+                raise ValueError(f"Published revision review failed: {i}")
     with connection() as conn:
         # Same lock order as automatic publication. No calls to a model/network
         # while these locks are held. Readers can continue to serve the site.
@@ -137,6 +159,17 @@ def apply(directory, validated):
                     "reason": operation, "catalogIds": sorted(set(final) - {i}),
                     "pairReviews": [p for p in pairs.values() if i in (p["a"], p["b"])]},
             }
+            audit["readerValue"] = reader_reviews[i]
+            if i in revision_reviews:
+                old_translation = [dict(row) for row in conn.execute(
+                    "SELECT * FROM article_translations WHERE article_id=%s", (i,)).fetchall()]
+                conn.execute("""INSERT INTO article_revisions(article_id,previous_json,
+                    previous_translation_json,review_json,change_summary_json,created_at)
+                    VALUES(%s,%s,%s,%s,%s,%s)""",
+                    (i,json.dumps(baseline[i],ensure_ascii=False),json.dumps(old_translation,ensure_ascii=False),
+                     json.dumps(revision_reviews[i],ensure_ascii=False),
+                     json.dumps(revision_reviews[i]["changeSummary"],ensure_ascii=False),now))
+                audit["revisionReview"] = revision_reviews[i]
             save_english(conn, article, editions[i])
             audit["bilingualReview"] = {k: v for k, v in editions[i].items() if k != "content"}
             conn.execute(
@@ -156,6 +189,8 @@ def apply(directory, validated):
                     (i, *(source[k] for k in ("publisher", "title", "url", "published_at", "source_type"))),
                 )
             result["persistedHashes"][i] = content_hash(load_article(conn, i))
+            knowledge.save_document(conn, load_article(conn,i), graphs[i], now)
+            audit["knowledgeReview"] = graphs[i]["review"]
             audit["persistedContentHash"] = result["persistedHashes"][i]
             run = conn.execute(
                 """INSERT INTO research_runs(agent_id,status,category_slug,topic,started_at,completed_at,

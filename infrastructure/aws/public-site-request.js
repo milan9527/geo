@@ -17,7 +17,7 @@ function handler(event) {
   }
   var page = uri.replace(/\/+$/, "");
   if (uri !== page && [
-    "/about", "/methodology", "/editorial-policy", "/corrections"
+    "/about", "/knowledge", "/methodology", "/editorial-policy", "/corrections"
   ].indexOf(page) !== -1) {
     return {
       statusCode: 301,

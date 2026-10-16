@@ -74,6 +74,8 @@ class TranslationTests(unittest.TestCase):
         research = {"output_article_id": 1, "verification": {"notes": "研究证据保持原文"},
                     "analysisProcess": [{"step": "分析原始证据"}]}
         self.assertEqual(i18n.payload(research), research)
+        self.assertEqual(i18n.payload({"en":"Financial markets","zh":"金融市场"}),
+                         {"en":"Financial markets","zh":"金融市场"})
 
     def test_editable_registry_fields_round_trip_without_translation(self):
         i18n.begin_request("/api/admin/data-sources", {})

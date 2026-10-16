@@ -25,22 +25,22 @@ Each invocation loads source profiles and assignments from Aurora `data_sources`
 
 The Codex worker uses the Amazon Bedrock provider; `BEDROCK_CODEX_MODEL` selects the model. It produces code before network retrieval is executed by the runtime tools. Generated Python passes AST checks, and crawler request wrappers apply source policies such as allowed domains, request pacing and bounded retries. Tool sessions, generated artifacts and usage are recorded for diagnosis. These controls do not imply arbitrary generated code is inherently safe.
 
-Evidence is stored with research records and source references in Aurora. The implementation does not require a separate entity graph or vector database. Model-generated conclusions remain subject to evidence and editorial review.
+Evidence, research records, source references and a reviewed entity/relationship graph are stored in Aurora. A separate graph or vector database is not required. Model-generated conclusions remain subject to evidence and editorial review.
 
 ## Publication contract
 
-1. Generate a Chinese source article from saved evidence; revise when required and independently audit it.
-2. Require sufficient source diversity, archived evidence, valid citations, complete content and the configured quality score. Unsupported facts, causal claims and placeholders block approval.
+1. Commission a specific reader question against current evidence, published coverage and recent review feedback. Choose new research, an update to an existing question, or a hold before drafting.
+2. Generate and independently audit the Chinese article. Require useful analytical depth, source diversity, archived evidence, valid citations, complete content and the configured quality score. Unsupported facts, causal claims and placeholders block approval.
 3. Compare the complete candidate with every published article, across categories and dates. Shared core content or containment can be duplicate content even when titles differ. Materially new evidence or analysis can justify a separate article.
-4. Generate the complete English edition and independently review its accuracy and completeness. Missing, failed or stale translations block publication.
-5. In the final database transaction, recheck article/source fingerprints and the published catalogue. Concurrent changes invalidate the decision rather than silently publishing stale work.
-6. Commit eligible content and notify the indexing worker. Otherwise retain the draft under review with its audit record.
+4. Generate the complete English edition and independently review its accuracy and completeness. Prepare and review the bilingual reader guide and evidence-backed knowledge relationships. Missing, failed or stale preparation blocks publication.
+5. In the final database transaction, recheck article/source fingerprints and the published catalogue. Concurrent changes invalidate the decision. Updates additionally require a material-change and history-preservation review and archive the previous article and English edition.
+6. Commit eligible content and notify the indexing worker. An update retains its existing URL and original publication date. A held topic or rejected draft retains its editorial decision for future planning.
 
 Model uncertainty and failures do not qualify for automatic publication. Semantic review reduces duplicate publication but cannot prove mathematical uniqueness. Existing published URLs remain protected even if a later review finds a problem; corrections stay at the same URL.
 
 `RESEARCH_AUTO_PUBLISH` controls scheduled publication. Runtime deployment preserves its current value unless `--auto-publish` or `--no-auto-publish` is supplied. The database independently enforces bilingual publication when `bilingual_policy.required` is enabled. Admin preference switches do not replace these controls.
 
-See [bilingual publication](../docs/bilingual-publication.md) for revision hashes and backfills, and [functional verification](../docs/functional-verification.md) for isolated regression tests.
+See [reader value and knowledge](../docs/editorial-knowledge.md), [bilingual publication](../docs/bilingual-publication.md) for revision hashes and backfills, and [functional verification](../docs/functional-verification.md) for isolated regression tests.
 
 ## Payment boundaries
 

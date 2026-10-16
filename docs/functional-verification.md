@@ -24,6 +24,7 @@ The settings page's collection/identification/access/payment switches currently 
 | Source registration/editing, credentials, assignments, connectivity polling, filtering, pause/delete, schedule editing and manual dispatch | `test_admin_workflows.py`, `test_api_workflows.py` |
 | Agent language, payment challenge, rejected payment, settlement failure/success and event recording | `test_api_workflows.py` |
 | Evidence quality, full-catalogue semantic deduplication, concurrent changes, automatic publication and index notification | `test_editorial_review.py`, `test_scheduled_publication.py`, `test_runtime_publication.py`, `test_bilingual.py`, `test_indexing_notifier.py` |
+| Topic holds, reader-value rejection, historical evidence selection, atomic revisions, graph grounding/visibility and responsive graph navigation | `test_knowledge_editorial.py`, `test_runtime_publication.py`, `test_publication_protection.py`, `test_public_navigation.py`, `test_admin_workflows.py` |
 | Human/agent traffic, attribution, diagnostic exclusions and complete statistics | `test_growth.py`, `test_traffic_aggregator.py`, `test_admin_metrics.py` |
 
 After deployment, verify public pages and existing redirects with read-only HTTP requests, compare category counts with the published catalogue, and exercise both languages in desktop/mobile browsers. Verify admin views using an authorized account; keep article/source/settings mutations in isolated tests. Check the live runtime's automatic-publication setting, enabled schedules and database bilingual policy.

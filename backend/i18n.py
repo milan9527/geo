@@ -14,7 +14,7 @@ LANGUAGE = ContextVar("aperture_language", default="zh")
 CACHE = ContextVar("aperture_language_cache", default=None)
 connection_provider = None
 PUBLIC_PATHS = ("/article/", "/category/", "/authors/")
-PUBLIC_PAGES = {"/", "/about", "/methodology", "/editorial-policy", "/corrections", "/feed.xml"}
+PUBLIC_PAGES = {"/", "/about", "/knowledge", "/methodology", "/editorial-policy", "/corrections", "/feed.xml"}
 
 
 def begin_request(path, query):
@@ -132,6 +132,8 @@ def article_row(row, *, detailed=False):
 
 def payload(value):
     if isinstance(value, dict):
+        if set(value) == {"en", "zh"}:
+            return value
         value = dict(value)
         preserved = set()
         if "output_article_id" in value and "verification" in value:

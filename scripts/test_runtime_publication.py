@@ -65,9 +65,14 @@ class RuntimePublicationTests(unittest.TestCase):
              patch.object(runtime, "article_update_candidate", return_value=None), \
              patch.object(runtime, "article_title_candidate", return_value=None), \
              patch.object(runtime, "generate_deep_research", return_value=(self.output, {})), \
+             patch.object(runtime, "commission_research", return_value={
+                 "action": "new", "question": {"en":"Execution changes", "zh":"执行变化"},
+                 "evidenceIds":[1,2], "reason":{"en":"New evidence","zh":"新增证据"}}), \
+             patch.object(runtime.editorial, "review_reader_value", return_value={"passed":True,"score":96}), \
              patch.object(runtime, "verify_research_output", return_value=self.audit), \
              patch.object(runtime, "compare_publication_pair", new=compare or Mock()), \
              patch.object(runtime, "prepare_english_publication", return_value={"approved": True}), \
+             patch.object(runtime, "prepare_knowledge_publication", return_value={"approved": True}), \
              patch.object(runtime, "submit_indexing", return_value=True) as notify:
             result = runtime.persist_research_output(
                 crawler={"id": 1, "name": "定时采集"}, job_id=1,
@@ -82,6 +87,20 @@ class RuntimePublicationTests(unittest.TestCase):
         self.store.commit_publication.assert_called_once()
         self.assertEqual(self.store.save_draft.call_args.args[0]["status"], "review")
         notify.assert_called_once_with("new-article", "agent", reason="scheduled_verified_unique")
+
+    def test_held_assignment_finishes_without_creating_another_draft(self):
+        with patch.multiple(runtime, AUTO_PUBLISH_RESEARCH=True, publication_store=self.store), \
+             patch.object(runtime,"execute_sql",side_effect=self.sql), \
+             patch.object(runtime,"commission_research",return_value={
+                 "action":"hold","reason":{"en":"No new supported contribution","zh":"没有可靠的新增价值"}}), \
+             patch.object(runtime,"generate_deep_research") as generate:
+            result=runtime.persist_research_output(
+                crawler={"id":1,"name":"Research"},job_id=1,profile={"category":"agent","topic":"Tools"},
+                evidence=self.evidence,fetch_errors=[],force_analysis=False,tool_trace={})
+        self.assertEqual(result["status"],"skipped")
+        generate.assert_not_called()
+        self.store.save_draft.assert_not_called()
+        self.store.commit_publication.assert_not_called()
 
     def test_verified_label_alone_does_not_bypass_quality_gate(self):
         self.audit["score"] = 89

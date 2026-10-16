@@ -38,7 +38,7 @@ from .analytics import (
     is_diagnostic,
 )
 from .database import USE_AURORA_DATA_API, connection, init_db, utc_now
-from . import i18n
+from . import i18n, knowledge
 i18n.connection_provider = lambda: connection()
 
 from .homepage import CASE_STUDY_SLUGS, HOME_DESCRIPTION, HOME_TITLE, render_home
@@ -878,6 +878,14 @@ class ApiHandler(BaseHTTPRequestHandler):
         if path == "/methodology":
             self._methodology_page()
             return
+        if path == "/knowledge":
+            self._knowledge_page(query)
+            return
+        if path in {"/api/v1/knowledge", "/api/admin/knowledge"}:
+            if path.startswith("/api/admin/") and not self._require_admin():
+                return
+            self._json(self._knowledge_data(query))
+            return
         if path == "/about":
             self._about_page()
             return
@@ -1395,15 +1403,27 @@ class ApiHandler(BaseHTTPRequestHandler):
                        c.eyebrow category_eyebrow, c.accent category_accent
                 FROM articles a JOIN categories c ON c.id = a.category_id
                 WHERE a.status = 'published' AND a.id != %s
-                ORDER BY CASE WHEN a.category_id = %s THEN 0 ELSE 1 END,
+                ORDER BY (SELECT count(*) FROM article_knowledge_nodes x
+                    JOIN article_knowledge_nodes y ON x.node_id=y.node_id
+                    JOIN current_article_knowledge kx ON kx.article_id=x.article_id
+                    JOIN current_article_knowledge ky ON ky.article_id=y.article_id
+                    WHERE x.article_id=%s AND y.article_id=a.id) DESC,
+                         CASE WHEN a.category_id = %s THEN 0 ELSE 1 END,
                          a.published_at DESC LIMIT 3
                 """,
-                (row["id"], row["category_id"]),
+                (row["id"], row["id"], row["category_id"]),
             ).fetchall()
+            guide = knowledge.article_document(conn, row["id"])
+            revisions = conn.execute("""SELECT created_at,change_summary_json FROM article_revisions
+                WHERE article_id=%s ORDER BY id DESC LIMIT 5""", (row["id"],)).fetchall()
         article_row = dict(row)
         article_row["sources"] = sources
         result = public_article(article_row, detailed=True)
         result["related"] = [public_article(dict(item)) for item in related]
+        result["knowledge"] = guide
+        result["revisionHistory"] = [{"date":r["created_at"],
+                                      "summary":json.loads(r["change_summary_json"])}
+                                     for r in revisions]
         return result
 
     def _navigation_html(self) -> str:
@@ -1411,13 +1431,131 @@ class ApiHandler(BaseHTTPRequestHandler):
             rows = conn.execute(
                 "SELECT slug, name FROM categories ORDER BY sort_order"
             ).fetchall()
-        return "".join(
+        return ('<a href="/knowledge" data-link>' +
+                ("知识地图" if i18n.language() == "zh" else "Knowledge map") + '</a>') + "".join(
             '<a href="/category/{slug}" data-link>{name}</a>'.format(
                 slug=quote(str(row["slug"]), safe=""),
                 name=html.escape(str(row["name"])),
             )
             for row in rows
         )
+
+    def _knowledge_data(self, query):
+        try:
+            offset = int(query.get("offset", ["0"])[0])
+        except (ValueError, TypeError):
+            offset = 0
+        with connection() as conn:
+            conn.execute("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY")
+            return knowledge.overview(conn, locale=i18n.language(),
+                                      node=query.get("node", [""])[0],
+                                      query=query.get("q", [""])[0], offset=offset)
+
+    def _reader_guide(self, guide):
+        if not guide:
+            return ""
+        lang = i18n.language()
+        labels = {"question": ("The question", "研究问题"), "audience": ("Who this helps", "适合谁读"),
+                  "decision": ("The decision it informs", "帮助作出什么判断"),
+                  "contribution": ("What you will learn", "能获得什么"),
+                  "limitation": ("Limits of the evidence", "证据边界")}
+        parts = "".join(f'<dt>{labels[key][lang == "zh"]}</dt><dd>{html.escape(guide[key][lang])}</dd>'
+                        for key in labels)
+        links = "".join(f'<a class="knowledge-chip" data-link href="/knowledge?node={quote(n["id"])}">'
+                        f'{html.escape(n["name"][lang])}</a>' for n in guide["nodes"])
+        return f'<aside class="reader-guide"><h2>{"阅读价值与关联" if lang == "zh" else "Reader guide"}</h2><dl>{parts}</dl><div class="knowledge-chips">{links}</div></aside>'
+
+    def _knowledge_page(self, query):
+        import math
+        data = self._knowledge_data(query)
+        zh = i18n.language() == "zh"
+        label = lambda en, cn: cn if zh else en
+        esc = html.escape
+        root = "/zh/knowledge" if zh else "/knowledge"
+        node = data["selected"]
+        chips = "".join(
+            f'<a class="knowledge-chip{" selected" if node and n["id"] == node["id"] else ""}" '
+            f'href="{root}?node={quote(n["id"])}" data-link>{esc(n["name"])} <small>{n["articles"]}</small></a>'
+            for n in data["nodes"])
+        relation_names = {"uses":"使用", "enables":"支持", "constrains":"约束", "changes":"改变",
+                          "measures":"衡量", "depends_on":"依赖", "competes_with":"竞争", "compares":"比较", "discusses":"讨论"}
+        stance_names = {"reported":label("Reported evidence","来源事实"),
+                        "analysis":label("Article analysis","文章分析"),
+                        "hypothesis":label("Conditional hypothesis","条件性假设")}
+        evidence = []
+        neighbours = {}
+        for edge in data["edges"]:
+            for endpoint in ("source", "target"):
+                n = edge[endpoint]
+                if n["id"] != node["id"]:
+                    neighbours[n["id"]] = n
+            relation = relation_names[edge["relation"]] if zh else edge["relation"].replace("_"," ")
+            links = ' '.join(f'<a href="{esc(self._safe_source_url(s["url"]), quote=True)}" rel="noreferrer">[S{s["number"]}] {esc(s["publisher"])}</a>'
+                             for s in edge["citations"])
+            if edge["citationRole"] == "background":
+                links = label("Background sources for the article's reasoning: ", "文章推理使用的背景来源：") + links
+            evidence.append(f'<article class="knowledge-edge"><p class="section-eyebrow">{stance_names[edge["stance"]]}</p>'
+                f'<h3><a data-link href="{root}?node={quote(edge["source"]["id"])}">{esc(edge["source"]["name"])}</a>'
+                f' → {esc(relation)} → <a data-link href="{root}?node={quote(edge["target"]["id"])}">{esc(edge["target"]["name"])}</a></h3>'
+                f'<p>{esc(edge["explanation"])}</p><details><summary>{label("Read the evidence","查看关系证据")}</summary>'
+                f'<blockquote>{esc(edge["quote"])}</blockquote><p>{links}</p>'
+                f'<a href="{esc(edge["articleUrl"], quote=True)}" data-link>{label("Read the full research","阅读完整研究")}</a></details></article>')
+        diagram = ""
+        if node:
+            neighbours = list(neighbours.values())[:12]
+            coords = {node["id"]:(400,220)}
+            for index, n in enumerate(neighbours):
+                angle = 2*math.pi*index/max(1,len(neighbours))
+                coords[n["id"]] = (400+280*math.cos(angle),220+165*math.sin(angle))
+            lines = []
+            seen = set()
+            for edge in data["edges"]:
+                a,b = edge["source"]["id"],edge["target"]["id"]
+                if a not in coords or b not in coords or (a,b) in seen:
+                    continue
+                seen.add((a,b))
+                x,y = coords[a]; u,v = coords[b]
+                distance = math.hypot(u-x,v-y)
+                lines.append(f'<line x1="{x+(u-x)*32/distance:.1f}" y1="{y+(v-y)*32/distance:.1f}" '
+                             f'x2="{u-(u-x)*32/distance:.1f}" y2="{v-(v-y)*32/distance:.1f}" marker-end="url(#arrow)"/>')
+            circles = []
+            for n in [node, *neighbours]:
+                x,y = coords[n["id"]]
+                circles.append(f'<a href="{root}?node={quote(n["id"])}" data-link><title>{esc(n["name"])}</title>'
+                               f'<circle cx="{x:.1f}" cy="{y:.1f}" r="27"/>'
+                               f'<text x="{x:.1f}" y="{y+45:.1f}" text-anchor="middle">{esc(n["name"][:28])}</text></a>')
+            diagram = f'<svg class="knowledge-diagram" viewBox="0 0 800 440" role="img" aria-label="{esc(node["name"],quote=True)}">'
+            diagram += '<defs><marker id="arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8" fill="#81958a"/></marker></defs>'
+            diagram += "".join(lines+circles)+"</svg>"
+        cards = "".join(f'<article class="knowledge-card"><p class="section-eyebrow">{esc(a["category"])}</p>'
+                       f'<h3><a href="{esc(a["url"],quote=True)}" data-link>{esc(a["title"])}</a></h3>'
+                       f'<p><strong>{esc(a["question"])}</strong></p><p>{esc(a["contribution"])}</p></article>'
+                       for a in data["articles"])
+        more = f'<a data-link href="{root}?node={quote(node["id"] if node else "")}&amp;offset={data["offset"]+12}">{label("More research →","更多研究 →")}</a>' if data["hasMore"] else ""
+        title = label("Knowledge map","知识地图")
+        description = label("Explore research through connected companies, technologies and questions. Every relationship links to its evidence.",
+                            "从公司、技术和研究问题探索关联内容，每条关系都能追溯到原文和证据。")
+        totals = data["totals"]
+        main = f'<section class="knowledge-page"><header><p class="section-eyebrow">CONNECTED RESEARCH</p><h1>{title}</h1><p>{description}</p>'
+        main += f'<p>{totals["mapped"]} / {totals["published"]} {label("articles mapped","篇文章已建立关联")} · {totals["relationships"]} {label("reviewed relationships","条已审核关系")}</p></header>'
+        main += f'<form action="{root}" method="get" class="knowledge-search"><label for="knowledgeSearch">{label("Find a company, technology or question","查找公司、技术或问题")}</label>'
+        main += f'<div><input id="knowledgeSearch" name="q" maxlength="120" value="{esc(query.get("q",[""])[0],quote=True)}"><button type="submit">{label("Search","搜索")}</button><a href="{root}" data-link>{label("Reset","重置")}</a></div></form>'
+        main += f'<nav class="knowledge-chips" aria-label="{title}">{chips or label("No matching topics.","没有匹配主题。")}</nav>'
+        if node:
+            main += f'<h2>{esc(node["name"])}</h2>{diagram}<p>{label("Select a connected node to continue exploring. Open the evidence below to distinguish reporting, analysis and hypotheses.","点击关联节点继续探索；展开下方证据，区分来源事实、文章分析和条件性假设。")}</p><div class="knowledge-edges">{"".join(evidence)}</div>'
+        elif query.get("node"):
+            main += f'<p role="status">{label("This topic has no current reviewed relationships.","此主题暂无有效的已审核关系。")}</p>'
+        main += f'<h2>{label("Connected research" if node else "Explore the research","关联研究" if node else "探索研究")}</h2><div class="knowledge-grid">{cards}</div>{more}</section>'
+        self._html(self._page_shell(title=title+" | Aperture Intelligence", description=description,
+                                   canonical_path="/knowledge", main_html=main,
+                                   schemas=[{"@context":"https://schema.org","@type":"CollectionPage",
+                                             "name":title,"description":description,
+                                             "url":PUBLIC_BASE_URL+root,
+                                             "mainEntity":{"@type":"ItemList","itemListElement":[
+                                                 {"@type":"ListItem","position":index,"url":PUBLIC_BASE_URL+a["url"],
+                                                  "name":a["title"]} for index,a in enumerate(data["articles"],1)]}}],
+                                   alternate_json_path="/api/v1/knowledge"),
+                   extra_headers={"Cache-Control":"no-store"})
 
     def _page_shell(
         self,
@@ -1653,6 +1791,12 @@ class ApiHandler(BaseHTTPRequestHandler):
             )
             for item in article["related"]
         )
+        guide_html = self._reader_guide(article.get("knowledge"))
+        if article["revisionHistory"]:
+            changes = "".join(f'<li><time>{html.escape(r["date"][:10])}</time> · '
+                              f'{html.escape(r["summary"][i18n.language()])}</li>'
+                              for r in article["revisionHistory"])
+            guide_html += f'<details class="reader-guide"><summary>{"审核更新记录" if i18n.language()=="zh" else "Reviewed updates"}</summary><ul>{changes}</ul></details>'
         main_html = f"""
 <article class="article-page">
   <header class="article-header"><div class="article-header-inner">
@@ -1662,7 +1806,7 @@ class ApiHandler(BaseHTTPRequestHandler):
     <div class="article-byline"><span><a href="/authors/research-desk"><b>{html.escape(str(article["author"]))}</b></a> · {html.escape(str(article["authorRole"]))}</span><i></i><time datetime="{html.escape(str(article["publishedAt"]), quote=True)}">{html.escape(str(article["publishedAt"]))}</time><i></i><span>{int(article["readMinutes"])} 分钟阅读</span></div>
   </div></header>
   <div class="article-layout">
-    <div class="article-content"><p class="article-summary">{html.escape(str(article["summary"]))}</p>{''.join(section_parts)}
+    <div class="article-content">{guide_html}<p class="article-summary">{html.escape(str(article["summary"]))}</p>{''.join(section_parts)}
       <div class="reader-follow"><h2>继续关注工程实践</h2><p>用 RSS 阅读器订阅新文章，或把这篇文章分享给正在解决同类问题的人。</p><a href="/feed.xml" data-rss>订阅 RSS 更新</a><button type="button" data-share-article>复制文章链接</button></div>
     </div>
     <aside class="article-sidebar"><div class="sticky-sidebar">
@@ -1835,6 +1979,14 @@ class ApiHandler(BaseHTTPRequestHandler):
             ("GEO 结构化", "输出实体、声明、证据、日期与许可元数据，使生成式引擎能够准确抽取和引用。"),
             ("持续更新", "由爬虫 Agent 监控变化，重要事实更新后触发复核并保留修订时间。"),
         ]
+        steps.insert(1, (
+            "Reader value before drafting" if i18n.language()=="en" else "生成前判断阅读价值",
+            "Name the professional reader, their decision, the question being answered and the contribution beyond existing research. Review the assignment before writing."
+            if i18n.language()=="en" else "先明确专业读者、需要作出的判断、要回答的问题和超出现有研究的新增价值；选题经过审核再生成正文。"))
+        steps.append((
+            "Explore related evidence" if i18n.language()=="en" else "沿关联探索证据",
+            "The knowledge map links companies, technologies and questions to reviewed research. Every relationship includes a quotation, sources and its status as reporting, analysis or hypothesis."
+            if i18n.language()=="en" else "知识地图把公司、技术和问题连接到已审核研究。每条关系提供原文、来源，并区分事实报道、文章分析或条件性假设。"))
         body = "".join(
             f'<div class="methodology-step"><span>{index:02d}</span><div><h2>{html.escape(title)}</h2><p>{html.escape(text)}</p></div></div>'
             for index, (title, text) in enumerate(steps, 1)
@@ -1982,8 +2134,9 @@ class ApiHandler(BaseHTTPRequestHandler):
             canonical_path="/editorial-policy",
             sections=[
                 (
-                    "先采集，后发布",
-                    "定时任务先采集证据、生成待审核稿，再检查事实、引用和全文重复。全部合格后自动发布，未通过或不确定的稿件继续等待修订。",
+                    "Commission, review, publish" if i18n.language()=="en" else "先选题审核，再生成发布",
+                    "After collecting evidence, scheduled jobs review the reader's question and new contribution. They choose new research, a reviewed update to an existing page, or a hold. Publication requires factual, reader-value, full-catalogue, bilingual and knowledge-relation reviews."
+                    if i18n.language()=="en" else "定时任务采集证据后，先审核读者的问题和新增价值，再决定新增研究、审核更新原文或暂缓。事实、阅读价值、全文去重、双语及知识关联审核全部通过才发布。",
                 ),
                 (
                     "拒绝重复内容",
@@ -2079,8 +2232,10 @@ class ApiHandler(BaseHTTPRequestHandler):
         with connection() as conn:
             articles = conn.execute(
                 """
-                SELECT a.slug, GREATEST(a.updated_at, COALESCE(t.updated_at,a.updated_at)) updated_at
+                SELECT a.slug, GREATEST(a.updated_at, COALESCE(t.updated_at,a.updated_at),
+                                       COALESCE(k.updated_at,a.updated_at)) updated_at
                 FROM articles a LEFT JOIN article_translations t ON t.article_id=a.id AND t.locale='en'
+                LEFT JOIN current_article_knowledge k ON k.article_id=a.id
                 WHERE status = 'published'
                 ORDER BY updated_at DESC
                 """
@@ -2105,6 +2260,7 @@ class ApiHandler(BaseHTTPRequestHandler):
                 [
                     (f"{PUBLIC_BASE_URL}/", latest),
                     (f"{PUBLIC_BASE_URL}/methodology", None),
+                    (f"{PUBLIC_BASE_URL}/knowledge", latest),
                     (f"{PUBLIC_BASE_URL}/about", None),
                     (f"{PUBLIC_BASE_URL}/authors/research-desk", None),
                     (f"{PUBLIC_BASE_URL}/editorial-policy", None),
@@ -2189,6 +2345,10 @@ class ApiHandler(BaseHTTPRequestHandler):
 
 ## Canonical site
 - {PUBLIC_BASE_URL}/
+
+## Connected research
+- {PUBLIC_BASE_URL}/knowledge
+- {PUBLIC_BASE_URL}/api/v1/knowledge?lang=en
 
 ## Research methodology
 - {PUBLIC_BASE_URL}/methodology
@@ -2358,6 +2518,7 @@ The open article and JSON-LD representation may be quoted with a link and clear 
                     (row["id"],),
                 ).fetchall()
             ]
+            guide = knowledge.article_document(conn, row["id"])
         row = i18n.article_row({**dict(row), "sources": sources}, detailed=True)
         sources = row["sources"]
         agent_name = (
@@ -2394,6 +2555,8 @@ The open article and JSON-LD representation may be quoted with a link and clear 
             "claims": claims,
             "sections": sections,
             "citations": sources,
+            "knowledge": guide,
+            "knowledgeMap": i18n.path_for("/knowledge"),
             "license": {
                 "model": row["access_model"],
                 "price": paid_price(row["agent_price"]),

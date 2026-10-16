@@ -852,7 +852,7 @@ def run_x402_crawler(
         "publisher": source["publisher"],
         "title": source.get("title") or "x402 paid machine-readable resource",
         "url": url,
-        "publishedAt": now()[:10],
+        "publishedAt": "",
         "retrievedAt": now(),
         "sourceType": source.get("sourceType", "x402 付费数据"),
         "excerpt": re.sub(r"\s+", " ", decoded)[:3000],

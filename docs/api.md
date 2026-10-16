@@ -57,3 +57,7 @@ Use the separate admin origin for browser sessions. `POST /api/admin/auth/login`
 New content can be created as draft or review. Manual publish shortcuts are rejected; reviewed automatic publication owns that transition. Published content cannot be deleted, withdrawn, or renamed. Source credential input is written to Secrets Manager, not returned as plaintext. Editable source fields and original research records retain their source language.
 
 Metrics support named ranges or `start`/`end` dates. Settings switches currently persist preferences only; they do not control the runtime, alerts, or automatic data cleanup. See [functional verification](functional-verification.md).
+
+## Knowledge navigation
+
+`GET /api/v1/knowledge?lang=en&node=<id>&q=<term>&offset=0` returns current reviewed published nodes, related articles, relationships and citation provenance. English is the default; use `lang=zh` for Chinese. Articles are paged in groups of 12 with `hasMore`. `/api/admin/knowledge` requires an admin session and serves the operational coverage view. See [schema and editorial policy](editorial-knowledge.md).

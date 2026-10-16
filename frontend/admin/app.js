@@ -461,6 +461,12 @@ function publicationSummary(verification, status) {
   const gate = verification?.publicationGate;
   const dedup = verification?.semanticDeduplication;
   if (status === "published") return { title: "已发布", detail: "当前文章已公开，审核依据见下方记录。" };
+  if (verification?.editorialPlan?.action === "hold") return {
+    title: I18N.lang === "en" ? "Topic held" : "选题暂缓",
+    detail: verification.editorialPlan.reason?.[I18N.lang] || "" };
+  if (verification?.readerValue?.passed === false) return {
+    title: I18N.lang === "en" ? "Reader value needs revision" : "阅读价值需要修订",
+    detail: I18N.lang === "en" ? "The draft must answer a specific reader question with useful evidence." : "稿件需用可靠证据回答具体读者的问题。" };
   if (!gate?.ready) return { title: "质量审核未通过", detail: "请根据证据审计修订；质量和全文去重均通过后才可自动发布。" };
   const reasons = {
     duplicate_content: "与已发布文章核心内容重复，保留待审核。",
@@ -471,6 +477,8 @@ function publicationSummary(verification, status) {
     automatic_publication_disabled: "该次任务未启用自动发布。",
     bilingual_review_failed: I18N.lang === "en" ? "The English edition did not pass review. The article remains under review." : "英文译稿尚未通过复核，文章保留待审核。",
     bilingual_review_unavailable: I18N.lang === "en" ? "A reviewed English edition is required before publication." : "中英文版本都通过复核后才可发布。",
+    knowledge_review_failed: I18N.lang === "en" ? "Knowledge relationships did not pass evidence review." : "知识关联尚未通过证据审核。",
+    revision_review_failed: I18N.lang === "en" ? "The proposed update did not pass the material-change and history review." : "旧文更新尚未通过实质增量与历史保留审核。",
   };
   if (dedup?.published) return { title: "当前待审核", detail: "该稿曾通过自动审核；当前发布状态以内容管理为准。" };
   return {
@@ -479,6 +487,41 @@ function publicationSummary(verification, status) {
       : dedup?.reason === "duplicate_content" ? "重复内容，待审核" : "质量通过，等待全文复核",
     detail: reasons[dedup?.reason] || "尚无完整的全文去重记录；定时任务通过全部检查后自动发布。",
   };
+}
+
+function editorialPanel(verification) {
+  const plan = verification?.editorialPlan;
+  if (!plan) return "";
+  const proposal = plan.proposedPlan || plan;
+  const label = (en, zh) => I18N.lang === "zh" ? zh : en;
+  const names = {new:label("New research","新增研究"), update:label("Update existing page","更新原网址"), hold:label("Hold topic","暂缓选题")};
+  const fields = [["question","Research question","研究问题"],["audience","Reader","面向读者"],
+    ["decision","Decision supported","支持的判断"],["whyNow","Why now","为什么现在值得读"],
+    ["contribution","New contribution","新增价值"],["reason","Editorial decision","选题判断"]];
+  return `<div class="research-process"><h3>${label("Reader value & editorial plan","阅读价值与选题审核")}</h3>
+    <div><b>${escapeHtml(names[plan.action] || plan.action)}${plan.targetArticleId ? ` · #${Number(plan.targetArticleId)}` : ""}</b>
+    ${fields.filter(([key]) => (key === "reason" ? plan : proposal)[key]?.[I18N.lang]).map(([key,en,zh]) => `<p><strong>${label(en,zh)}</strong>: ${escapeHtml((key === "reason" ? plan : proposal)[key][I18N.lang])}</p>`).join("")}
+    ${verification.readerValue ? `<p>${label("Reader-value review","阅读价值审核")}: ${verification.readerValue.passed ? label("Passed","通过") : label("Needs revision","需要修订")} · ${Number(verification.readerValue.score || 0)}/100</p>` : ""}
+    ${verification.readerValue?.reason?.[I18N.lang] ? `<p>${escapeHtml(verification.readerValue.reason[I18N.lang])}</p>` : ""}
+    ${verification.revisionReview?.changeSummary?.[I18N.lang] ? `<p>${label("Reviewed update","审核更新")}: ${escapeHtml(verification.revisionReview.changeSummary[I18N.lang])}</p>` : ""}</div></div>`;
+}
+
+async function renderKnowledge() {
+  const label = (en, zh) => I18N.lang === "zh" ? zh : en;
+  $("#pageTitle").textContent = label("Knowledge coverage","知识关联覆盖");
+  $("#adminApp").innerHTML = `<section class="panel"><p>${label("Loading reviewed relationships…","正在加载已审核关系…")}</p></section>`;
+  try {
+    const data = await api("/api/admin/knowledge");
+    if (state.view !== "knowledge") return;
+    const root = "https://aperture.zhangwangshu.com" + (I18N.lang === "zh" ? "/zh" : "") + "/knowledge";
+    $("#adminApp").innerHTML = `<section class="view-page"><div class="view-header"><div><h2>${label("Evidence-backed knowledge map","有证据的知识地图")}</h2>
+      <p>${data.totals.mapped} / ${data.totals.published} ${label("published articles mapped","篇已发布文章建立关联")} · ${data.totals.relationships} ${label("reviewed relationships","条已审核关系")}</p>
+      <p>${label("Only reviewed relationships matching the current published revision appear publicly. Old URLs are preserved; updates retain an audit history.","只有与当前已发布版本匹配的已审核关系才会公开。旧网址持续保留，更新保存历史审核记录。")}</p></div>
+      <a class="ghost-button" href="${root}" target="_blank" rel="noopener">${label("Explore knowledge map","探索知识地图")}</a></div>
+      <article class="panel"><div class="view-actions" style="flex-wrap:wrap;padding:24px">${data.nodes.map(n => `<a class="ghost-button" href="${root}?node=${encodeURIComponent(n.id)}" target="_blank" rel="noopener">${escapeHtml(n.name)} · ${n.articles}</a>`).join("")}</div></article></section>`;
+  } catch (error) {
+    if (state.view === "knowledge") $("#adminApp").innerHTML = `<section class="panel" role="alert"><p>${label("Knowledge data is temporarily unavailable. Reopen this view to retry.","知识关联暂时无法读取，请重新打开此页面重试。")} ${escapeHtml(error.message)}</p></section>`;
+  }
 }
 
 async function openArticleDetail(articleId) {
@@ -515,6 +558,7 @@ async function openArticleDetail(articleId) {
         </div>
       ` : ""}
       <p class="detail-dek" data-original-language>${escapeHtml(article.dek)}</p>
+      ${editorialPanel(article.verification)}
       <p class="detail-summary" data-original-language>${escapeHtml(article.summary)}</p>
       <div class="detail-sections" data-original-language>${(Array.isArray(article.sections) ? article.sections : []).map(renderDetailSection).join("")}</div>
       <div class="detail-sources">
@@ -945,9 +989,10 @@ function renderResearch() {
           return `<article class="research-output-card">
             <div class="research-output-header">
               <div><p>${escapeHtml(run.agent_name)} · ${escapeHtml(run.agent_kind)}</p><h2 data-original-language>${escapeHtml(article?.title || run.article_title || run.topic)}</h2><span>${escapeHtml(run.category_slug)} · ${run.evidence_count} 条证据 · ${relativeTime(run.started_at)}</span></div>
-              <span class="status-pill ${run.status === "completed" ? "running" : run.status}">${run.status === "completed" ? "已生成" : run.status === "skipped" ? "证据未变化" : statusLabel(run.status)}</span>
+              <span class="status-pill ${run.status === "completed" ? "running" : run.status}">${run.verification?.editorialPlan?.action === "hold" ? (I18N.lang === "en" ? "Topic held" : "选题暂缓") : run.status === "completed" ? "已生成" : run.status === "skipped" ? "证据未变化" : statusLabel(run.status)}</span>
             </div>
             <div class="research-process"><h3>发布审核</h3><div><b>${escapeHtml(publication.title)}</b><p>${escapeHtml(publication.detail)}</p></div></div>
+            ${editorialPanel(run.verification)}
             ${run.article_status === "published" && run.article_slug ? `<a class="ghost-button" href="https://aperture.zhangwangshu.com${publicPath}" target="_blank" rel="noopener noreferrer">${I18N.lang === "en" ? "Read English edition" : "阅读中文版本"}</a>` : ""}
             <details class="original-record"><summary>${originalRecordLabel()}</summary><div data-original-language>
               <p class="research-summary">${escapeHtml(run.summary || run.error_message || "")}</p>
@@ -1000,6 +1045,8 @@ function renderSettings() {
 
 async function switchView(view) {
   state.view = view;
+  const knowledgeLabel = document.querySelector('[data-view="knowledge"] span');
+  if (knowledgeLabel) knowledgeLabel.textContent = I18N.lang === "zh" ? "知识地图" : "Knowledge map";
   $$(".nav-item").forEach((item) => item.classList.toggle("active", item.dataset.view === view));
   if (state.loadError) {
     renderDataLoadError();
@@ -1008,6 +1055,7 @@ async function switchView(view) {
   if (view === "dashboard") renderDashboard();
   if (view === "content") renderContent();
   if (view === "research") renderResearch();
+  if (view === "knowledge") await renderKnowledge();
   if (view === "crawlers") renderCrawlers();
   if (view === "sources") renderSources();
   if (view === "jobs") renderJobs();

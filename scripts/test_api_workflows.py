@@ -37,6 +37,8 @@ class ApiWorkflowTests(unittest.TestCase):
                 if sql.strip():
                     conn.execute(sql)
             ensure_schema(conn)
+            from backend import knowledge
+            knowledge.ensure_schema(conn)
             conn.execute("""INSERT INTO categories VALUES(1,'ai','AI','AI','Evidence-led research','teal',0);
                 INSERT INTO crawler_agents(id,name,slug,kind,industries,status,schedule)
                 VALUES(1,'Research','research','Browser','[]','running','0 * * * *');
