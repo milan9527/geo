@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 """Editorial rejection, evidence grounding, graph visibility and atomic revision regressions."""
 from copy import deepcopy
+import importlib
 import json
 import sys
 from pathlib import Path
 import unittest
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from backend import editorial, knowledge, bilingual
 from aws_runtime.publication import PublicationStore, content_identity, review_and_publish
@@ -56,6 +57,22 @@ class EditorialTests(unittest.TestCase):
             "evidenceDriven":True,"analyticalDepth":True,"deliversContribution":True,"issues":[],"reason":bi()})
         self.assertFalse(editorial.review_reader_value({},[],{},call)["passed"])
 
+    def test_useful_standalone_guide_does_not_need_a_graph(self):
+        article={"title":"标题","dek":"说明","summary":"摘要","keywords":"[]",
+                 "body_json":json.dumps([{"paragraphs":["正文事实与论证说明来源，并给出边界条件[S1]"]}]),
+                 "sources":[{"title":"source"}]}
+        value=graph(article)
+        value["document"].update(nodes=[],edges=[])
+        call=Mock(side_effect=[value["document"],value["review"]])
+        result=knowledge.create_document(article,call)
+        self.assertEqual(result["document"]["nodes"],[])
+        self.assertTrue(result["review"]["approved"])
+        # Optional graph coverage does not waive review of the guide itself.
+        rejected={**value["review"],"supported":False,"issues":["Invented reader benefit"]}
+        call=Mock(side_effect=[value["document"],rejected,value["document"],rejected])
+        with self.assertRaises(ValueError):
+            knowledge.create_document(article,call)
+
     def test_commission_rejection_holds_before_writing(self):
         plan={k:bi() for k in ("question","audience","decision","whyNow","contribution","outline","reason")}
         plan.update(action="new",targetArticleId=None,evidenceIds=[1,2],relatedArticleIds=[])
@@ -64,6 +81,46 @@ class EditorialTests(unittest.TestCase):
         call=Mock(side_effect=[plan,review,plan,review])
         self.assertEqual(editorial.commission_topic("finance",evidence,[],[],call)["action"],"hold")
         self.assertEqual(call.call_count,4)
+
+
+class ReadingPresentationTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        with patch("backend.database.init_db"):
+            cls.app=importlib.import_module("backend.app")
+
+    def test_reading_paths_show_grounded_value_in_both_languages(self):
+        handler=object.__new__(self.app.ApiHandler)
+        guide={k:{"en":"Actual contribution","zh":"实际研究贡献"}
+               for k in ("question","audience","decision","contribution","limitation")}
+        guide["nodes"]=[]
+        context={"question":{"en":"How does recovery work?","zh":"如何恢复失败任务？"},
+                 "contribution":{"en":"Explains retry boundaries","zh":"解释重试的适用边界"},
+                 "topics":[{"name":{"en":"Recovery <script>","zh":"任务恢复 <script>"}}]}
+        related=[{"slug":"recovery","title":"Recovery","dek":"Summary",
+                  "category":{"name":"Agent"},"readingContext":context}]
+        for path,locale in [("/article/current","en"),("/zh/article/current","zh")]:
+            with self.subTest(locale=locale):
+                self.app.i18n.begin_request(path,{})
+                guide_html=handler._reader_guide(guide,related)
+                html=handler._related_reading(related)
+                destination="/zh/article/recovery" if locale=="zh" else "/article/recovery"
+                self.assertIn(f'href="{destination}"',guide_html)
+                self.assertIn(context["question"][locale],guide_html)
+                self.assertIn(context["contribution"][locale],html)
+                self.assertIn("&lt;script&gt;",html)
+                self.assertNotIn("<script>",html)
+                self.assertNotIn("knowledge-chips",guide_html)
+
+    def test_fallback_suggestions_do_not_claim_a_knowledge_connection(self):
+        handler=object.__new__(self.app.ApiHandler)
+        self.app.i18n.begin_request("/article/current",{})
+        html=handler._related_reading([{"slug":"other","title":"Other","dek":"Summary",
+                                      "category":{"name":"Cloud"},"readingContext":None}])
+        self.assertIn("More research",html)
+        self.assertNotIn("Shared context",html)
+        self.assertNotIn("Build a fuller picture",html)
+        self.assertEqual(handler._related_reading([]),"")
 
 
 class RevisionTests(SqlPublicationTests):
@@ -117,6 +174,28 @@ class RevisionTests(SqlPublicationTests):
             self.assertEqual(len(selected["edges"]),1)
             conn.execute("UPDATE sources SET title='Changed source' WHERE article_id=%s",(article["id"],))
             self.assertIsNone(knowledge.article_document(conn,article["id"]))
+
+    def test_reading_connections_exclude_drafts_stale_and_unrelated_articles(self):
+        origin=self.draft("origin");article=self.store.article(origin["id"]);self.prepare(article)
+        self.store.commit_publication(article,[])
+        target=self.draft("cross-category",category=2);other=self.store.article(target["id"]);self.prepare(other)
+        self.store.commit_publication(other,self.store.published())
+        pending=self.draft("pending");self.prepare(self.store.article(pending["id"]))
+        isolated=self.draft("isolated");standalone=self.store.article(isolated["id"]);self.prepare(standalone)
+        with self.connect() as conn:
+            value=graph(standalone);value["document"].update(nodes=[],edges=[])
+            knowledge.save_document(conn,standalone,value,"2026-10-16")
+        self.store.commit_publication(standalone,self.store.published())
+        with self.connect() as conn:
+            paths=knowledge.reading_connections(conn,article["id"])
+            self.assertEqual([p["article_id"] for p in paths],[other["id"]])
+            self.assertEqual(len(paths[0]["topics"]),2)
+            self.assertEqual(paths[0]["contribution"],bi())
+            self.assertEqual(knowledge.reading_connections(conn,standalone["id"]),[])
+            # New published research is also discovered from the older article.
+            self.assertEqual(knowledge.reading_connections(conn,other["id"])[0]["article_id"],article["id"])
+            conn.execute("UPDATE sources SET title='Changed source' WHERE article_id=%s",(other["id"],))
+            self.assertEqual(knowledge.reading_connections(conn,article["id"]),[])
 
     def test_revision_preserves_url_date_and_history(self):
         first=self.draft("permanent");target=self.store.article(first["id"]);self.prepare(target)

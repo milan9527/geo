@@ -499,6 +499,17 @@ main { min-height: 70vh; }
 .related-band { padding: 70px 0; background: #f3f5f2; border-top: 1px solid var(--line); }
 .related-inner { width: min(var(--max), calc(100% - 48px)); margin: auto; }
 .related-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; }
+.reading-preview { margin-top: 22px; padding-top: 18px; border-top: 1px solid #d5dfd0; }
+.reading-preview h3 { margin: 0 0 10px; font-size: 17px; }
+.reading-preview ul { margin: 0; padding-left: 20px; }
+.reading-preview li { margin: 10px 0; line-height: 1.6; }
+.reading-preview a { color: #234b36; text-underline-offset: 3px; overflow-wrap: anywhere; }
+.reader-guide details { margin-top: 18px; }
+.reader-guide summary { cursor: pointer; color: #456c43; line-height: 1.6; }
+.related-grid .story-body p { display: block; overflow: visible; -webkit-line-clamp: unset; }
+.related-grid .reading-context { font-size: 13px; color: #456c43; }
+.related-grid .reading-question { color: #25372b; font-size: 14px; line-height: 1.7; font-weight: 600; }
+.related-grid .reading-value { font-size: 14px; line-height: 1.7; }
 
 .methodology-page { background: #fff; }
 .methodology-hero { padding: 90px 0; color: #fff; background: #10202e; }

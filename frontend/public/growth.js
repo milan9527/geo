@@ -91,7 +91,7 @@
   document.addEventListener("click", (event) => {
     const link = event.target.closest("a");
     if (link?.getAttribute("href")?.match(/^\/(?:zh\/)?feed\.xml$/)) track("rss_click");
-    if (link?.closest(".related-band") && currentPage?.slug) track("related_click");
+    if (link?.closest(".related-band, .reading-preview") && currentPage?.slug) track("related_click");
     if (event.target.closest("[data-share-article]")) {
       const canonical = document.querySelector('link[rel="canonical"]')?.href || location.origin + location.pathname;
       navigator.clipboard.writeText(canonical).then(() => {

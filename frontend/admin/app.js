@@ -477,7 +477,7 @@ function publicationSummary(verification, status) {
     automatic_publication_disabled: "该次任务未启用自动发布。",
     bilingual_review_failed: I18N.lang === "en" ? "The English edition did not pass review. The article remains under review." : "英文译稿尚未通过复核，文章保留待审核。",
     bilingual_review_unavailable: I18N.lang === "en" ? "A reviewed English edition is required before publication." : "中英文版本都通过复核后才可发布。",
-    knowledge_review_failed: I18N.lang === "en" ? "Knowledge relationships did not pass evidence review." : "知识关联尚未通过证据审核。",
+    knowledge_review_failed: I18N.lang === "en" ? "Reader guide or optional knowledge connections did not pass review." : "导读或所提供的知识关联尚未通过审核。",
     revision_review_failed: I18N.lang === "en" ? "The proposed update did not pass the material-change and history review." : "旧文更新尚未通过实质增量与历史保留审核。",
   };
   if (dedup?.published) return { title: "当前待审核", detail: "该稿曾通过自动审核；当前发布状态以内容管理为准。" };
@@ -515,7 +515,7 @@ async function renderKnowledge() {
     if (state.view !== "knowledge") return;
     const root = "https://aperture.zhangwangshu.com" + (I18N.lang === "zh" ? "/zh" : "") + "/knowledge";
     $("#adminApp").innerHTML = `<section class="view-page"><div class="view-header"><div><h2>${label("Evidence-backed knowledge map","有证据的知识地图")}</h2>
-      <p>${data.totals.mapped} / ${data.totals.published} ${label("published articles mapped","篇已发布文章建立关联")} · ${data.totals.relationships} ${label("reviewed relationships","条已审核关系")}</p>
+      <p>${data.totals.mapped} / ${data.totals.published} ${label("published articles with reviewed reader guides","篇已发布文章已有审核导读")} · ${data.totals.relationships} ${label("reviewed relationships","条已审核关系")}</p>
       <p>${label("Only reviewed relationships matching the current published revision appear publicly. Old URLs are preserved; updates retain an audit history.","只有与当前已发布版本匹配的已审核关系才会公开。旧网址持续保留，更新保存历史审核记录。")}</p></div>
       <a class="ghost-button" href="${root}" target="_blank" rel="noopener">${label("Explore knowledge map","探索知识地图")}</a></div>
       <article class="panel"><div class="view-actions" style="flex-wrap:wrap;padding:24px">${data.nodes.map(n => `<a class="ghost-button" href="${root}?node=${encodeURIComponent(n.id)}" target="_blank" rel="noopener">${escapeHtml(n.name)} · ${n.articles}</a>`).join("")}</div></article></section>`;

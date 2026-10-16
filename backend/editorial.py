@@ -3,7 +3,7 @@ import json
 import re
 from datetime import datetime, timezone
 
-POLICY = "2026-10-16-reader-value-v1"
+POLICY = "2026-10-16-reader-value-v2"
 AUDIENCES = {
     "ai": "AI researchers and engineering leads choosing models, evaluations, and deployment approaches",
     "agent": "Agent engineers assessing execution, interoperability, reliability, security, and operating cost",
@@ -91,6 +91,9 @@ Use dated events, measured differences, mechanisms with boundary conditions, rep
 calculations, or a specific case. A different headline, daily price tick, extra company names,
 generic risk reminders, or "AI spending is not cash returns" is not an independent contribution.
 Use the coverage graph and recent rejection reasons to avoid repeating failed angles.
+Help the reader connect the finding to a broader mechanism, a meaningful comparison or a
+practical consequence where evidence supports it. Related articles are optional: select only
+useful context, not a link quota. A standalone question can be valuable without a graph connection.
 Choose new for an independently supportable question; update for material progress on an
 existing question (retain its URL and relevant history); hold if neither is justified.
 For update, name the actual published target and precisely what new evidence changes.
@@ -172,6 +175,9 @@ calculation where appropriate, and usable conclusions with boundaries. Reject ge
 industry summaries, padded unrelated sources, repeated caveats posing as analysis, and
 claims that the reader merely "should watch future data". Do not require a bullish conclusion.
 Every material factual claim and reader recommendation must be supported by supplied evidence.
+Check that the reader can understand why the finding matters and how it relates to the relevant
+mechanism, alternatives or consequences. Do not require links, graph edges or a fixed section
+template; judge the explanation, not the number of connections.
 Return {"approved":bool,"score":0-100,"focused":bool,"decisionUseful":bool,
 "evidenceDriven":bool,"analyticalDepth":bool,"deliversContribution":bool,
 "issues":["specific defects; empty if none"],"reason":{"en":"","zh":""}}.

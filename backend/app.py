@@ -1397,29 +1397,37 @@ class ApiHandler(BaseHTTPRequestHandler):
                     (row["id"],),
                 ).fetchall()
             ]
+            connections = knowledge.reading_connections(conn, row["id"])
+            connection_by_id = {item["article_id"]: item for item in connections}
+            related_filter = (
+                "a.id IN (" + ",".join("%s" for _ in connections) + ")"
+                if connections else "a.id != %s"
+            )
             related = conn.execute(
                 """
                 SELECT a.*, c.slug category_slug, c.name category_name,
                        c.eyebrow category_eyebrow, c.accent category_accent
                 FROM articles a JOIN categories c ON c.id = a.category_id
-                WHERE a.status = 'published' AND a.id != %s
-                ORDER BY (SELECT count(*) FROM article_knowledge_nodes x
-                    JOIN article_knowledge_nodes y ON x.node_id=y.node_id
-                    JOIN current_article_knowledge kx ON kx.article_id=x.article_id
-                    JOIN current_article_knowledge ky ON ky.article_id=y.article_id
-                    WHERE x.article_id=%s AND y.article_id=a.id) DESC,
-                         CASE WHEN a.category_id = %s THEN 0 ELSE 1 END,
-                         a.published_at DESC LIMIT 3
+                WHERE a.status = 'published' AND """ + related_filter + """
+                ORDER BY CASE WHEN a.category_id = %s THEN 0 ELSE 1 END,
+                         a.published_at DESC,a.id DESC LIMIT 3
                 """,
-                (row["id"], row["id"], row["category_id"]),
+                (*connection_by_id, row["category_id"]) if connections
+                else (row["id"], row["category_id"]),
             ).fetchall()
+            if connections:
+                order = {item["article_id"]: index for index, item in enumerate(connections)}
+                related.sort(key=lambda item: order[item["id"]])
             guide = knowledge.article_document(conn, row["id"])
             revisions = conn.execute("""SELECT created_at,change_summary_json FROM article_revisions
                 WHERE article_id=%s ORDER BY id DESC LIMIT 5""", (row["id"],)).fetchall()
         article_row = dict(row)
         article_row["sources"] = sources
         result = public_article(article_row, detailed=True)
-        result["related"] = [public_article(dict(item)) for item in related]
+        result["related"] = [
+            {**public_article(dict(item)), "readingContext": connection_by_id.get(item["id"])}
+            for item in related
+        ]
         result["knowledge"] = guide
         result["revisionHistory"] = [{"date":r["created_at"],
                                       "summary":json.loads(r["change_summary_json"])}
@@ -1451,7 +1459,7 @@ class ApiHandler(BaseHTTPRequestHandler):
                                       node=query.get("node", [""])[0],
                                       query=query.get("q", [""])[0], offset=offset)
 
-    def _reader_guide(self, guide):
+    def _reader_guide(self, guide, related=()):
         if not guide:
             return ""
         lang = i18n.language()
@@ -1459,11 +1467,56 @@ class ApiHandler(BaseHTTPRequestHandler):
                   "decision": ("The decision it informs", "帮助作出什么判断"),
                   "contribution": ("What you will learn", "能获得什么"),
                   "limitation": ("Limits of the evidence", "证据边界")}
-        parts = "".join(f'<dt>{labels[key][lang == "zh"]}</dt><dd>{html.escape(guide[key][lang])}</dd>'
-                        for key in labels)
-        links = "".join(f'<a class="knowledge-chip" data-link href="/knowledge?node={quote(n["id"])}">'
+        def fields(keys):
+            return "".join(f'<dt>{labels[key][lang == "zh"]}</dt><dd>{html.escape(guide[key][lang])}</dd>'
+                           for key in keys)
+        parts = fields(("question", "contribution"))
+        detail = fields(("audience", "decision", "limitation"))
+        links = "".join(f'<a class="knowledge-chip" data-link href="{i18n.path_for("/knowledge")}?node={quote(n["id"])}">'
                         f'{html.escape(n["name"][lang])}</a>' for n in guide["nodes"])
-        return f'<aside class="reader-guide"><h2>{"阅读价值与关联" if lang == "zh" else "Reader guide"}</h2><dl>{parts}</dl><div class="knowledge-chips">{links}</div></aside>'
+        questions = "".join(
+            f'<li><a data-link href="{i18n.path_for("/article/" + quote(item["slug"], safe=""))}">'
+            f'{html.escape(item["readingContext"]["question"][lang])}</a></li>'
+            for item in related if item.get("readingContext")
+        )
+        preview = (f'<div class="reading-preview"><h3>{"关联问题" if lang == "zh" else "Related questions"}</h3>'
+                   f'<ul>{questions}</ul></div>') if questions else ""
+        chips = f'<div class="knowledge-chips">{links}</div>' if links else ""
+        return (f'<aside class="reader-guide"><h2>{"这篇文章的价值" if lang == "zh" else "Why this matters"}</h2>'
+                f'<dl>{parts}</dl><details><summary>{"读者、决策与证据边界" if lang == "zh" else "Audience, decisions and evidence limits"}</summary>'
+                f'<dl>{detail}</dl></details>{preview}{chips}</aside>')
+
+    def _related_reading(self, articles):
+        if not articles:
+            return ""
+        lang = i18n.language()
+        zh = lang == "zh"
+        cards = []
+        for item in articles:
+            context = item.get("readingContext")
+            if context:
+                topics = " · ".join(n["name"][lang] for n in context["topics"][:3])
+                body = (
+                    f'<p class="reading-context"><strong>{"共同讨论" if zh else "Shared context"}:</strong> {html.escape(topics)}</p>'
+                    f'<p class="reading-question">{html.escape(context["question"][lang])}</p>'
+                    f'<p class="reading-value"><strong>{"接着读能了解" if zh else "What you can learn"}:</strong> '
+                    f'{html.escape(context["contribution"][lang])}</p>'
+                )
+            else:
+                body = f'<p>{html.escape(str(item["dek"]))}</p>'
+            path = i18n.path_for("/article/" + quote(str(item["slug"]), safe=""))
+            cards.append(
+                f'<a class="story-card" href="{path}" data-link><div class="story-body">'
+                f'<span class="story-category">{html.escape(str(item["category"]["name"]))}</span>'
+                f'<h3>{html.escape(str(item["title"]))}</h3>{body}</div></a>'
+            )
+        connected = any(item.get("readingContext") for item in articles)
+        title = ("延伸理解" if zh else "Build a fuller picture") if connected else ("继续阅读" if zh else "More research")
+        return (
+            '<section class="related-band" id="connected-reading"><div class="related-inner">'
+            f'<div class="section-heading"><div><p class="section-eyebrow">CONTINUE READING</p><h2>{title}</h2>'
+            f'</div></div><div class="related-grid">{"".join(cards)}</div></div></section>'
+        )
 
     def _knowledge_page(self, query):
         import math
@@ -1537,7 +1590,7 @@ class ApiHandler(BaseHTTPRequestHandler):
                             "从公司、技术和研究问题探索关联内容，每条关系都能追溯到原文和证据。")
         totals = data["totals"]
         main = f'<section class="knowledge-page"><header><p class="section-eyebrow">CONNECTED RESEARCH</p><h1>{title}</h1><p>{description}</p>'
-        main += f'<p>{totals["mapped"]} / {totals["published"]} {label("articles mapped","篇文章已建立关联")} · {totals["relationships"]} {label("reviewed relationships","条已审核关系")}</p></header>'
+        main += f'<p>{totals["mapped"]} / {totals["published"]} {label("articles with reviewed reader guides","篇文章已有审核导读")} · {totals["relationships"]} {label("reviewed relationships","条已审核关系")}</p></header>'
         main += f'<form action="{root}" method="get" class="knowledge-search"><label for="knowledgeSearch">{label("Find a company, technology or question","查找公司、技术或问题")}</label>'
         main += f'<div><input id="knowledgeSearch" name="q" maxlength="120" value="{esc(query.get("q",[""])[0],quote=True)}"><button type="submit">{label("Search","搜索")}</button><a href="{root}" data-link>{label("Reset","重置")}</a></div></form>'
         main += f'<nav class="knowledge-chips" aria-label="{title}">{chips or label("No matching topics.","没有匹配主题。")}</nav>'
@@ -1782,16 +1835,8 @@ class ApiHandler(BaseHTTPRequestHandler):
             )
             for source in article["sources"]
         )
-        related = "".join(
-            '<a class="story-card" href="/article/{slug}" data-link><div class="story-body"><span class="story-category">{category}</span><h3>{title}</h3><p>{dek}</p></div></a>'.format(
-                slug=quote(str(item["slug"]), safe=""),
-                category=html.escape(str(item["category"]["name"])),
-                title=html.escape(str(item["title"])),
-                dek=html.escape(str(item["dek"])),
-            )
-            for item in article["related"]
-        )
-        guide_html = self._reader_guide(article.get("knowledge"))
+        related = self._related_reading(article["related"])
+        guide_html = self._reader_guide(article.get("knowledge"), article["related"])
         if article["revisionHistory"]:
             changes = "".join(f'<li><time>{html.escape(r["date"][:10])}</time> · '
                               f'{html.escape(r["summary"][i18n.language()])}</li>'
@@ -1815,7 +1860,7 @@ class ApiHandler(BaseHTTPRequestHandler):
       <div class="source-list"><h2>主要来源</h2><ol>{source_items}</ol></div>
     </div></aside>
   </div>
-  <section class="related-band"><div class="related-inner"><div class="section-heading"><div><p class="section-eyebrow">CONTINUE READING</p><h2>相关研究</h2></div></div><div class="related-grid">{related}</div></div></section>
+  {related}
 </article>"""
         organization_id = f"{PUBLIC_BASE_URL}/#organization"
         schemas = [
@@ -2135,8 +2180,8 @@ class ApiHandler(BaseHTTPRequestHandler):
             sections=[
                 (
                     "Commission, review, publish" if i18n.language()=="en" else "先选题审核，再生成发布",
-                    "After collecting evidence, scheduled jobs review the reader's question and new contribution. They choose new research, a reviewed update to an existing page, or a hold. Publication requires factual, reader-value, full-catalogue, bilingual and knowledge-relation reviews."
-                    if i18n.language()=="en" else "定时任务采集证据后，先审核读者的问题和新增价值，再决定新增研究、审核更新原文或暂缓。事实、阅读价值、全文去重、双语及知识关联审核全部通过才发布。",
+                    "After collecting evidence, scheduled jobs review the reader's question and new contribution. They choose new research, a reviewed update to an existing page, or a hold. Publication requires factual, reader-value, full-catalogue, bilingual and reader-guide reviews. Knowledge connections are optional and must be supported when included."
+                    if i18n.language()=="en" else "定时任务采集证据后，先审核读者的问题和新增价值，再决定新增研究、审核更新原文或暂缓。事实、阅读价值、全文去重、双语及导读审核全部通过才发布。知识关联按内容需要提供，展示时必须有证据支持。",
                 ),
                 (
                     "拒绝重复内容",

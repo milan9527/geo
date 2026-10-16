@@ -10,7 +10,7 @@ except ImportError:
     from bilingual import source_document, source_hash
     from editorial import bilingual
 
-POLICY = "2026-10-16-evidence-graph-v1"
+POLICY = "2026-10-16-reader-context-v2"
 RELATIONS = {"uses", "enables", "constrains", "changes", "measures", "depends_on", "competes_with", "compares", "discusses"}
 NODE_TYPES = {"entity", "concept", "question"}
 
@@ -88,10 +88,10 @@ def validate_document(article, document):
     for key in ("question", "audience", "decision", "contribution", "limitation"):
         bilingual(document.get(key), key)
     nodes, edges = document.get("nodes"), document.get("edges")
-    if not isinstance(nodes, list) or not 2 <= len(nodes) <= 10:
-        raise ValueError("Knowledge document needs 2–10 grounded nodes")
-    if not isinstance(edges, list) or not 1 <= len(edges) <= 16:
-        raise ValueError("Knowledge document needs 1–16 supported relationships")
+    if not isinstance(nodes, list) or not 0 <= len(nodes) <= 10:
+        raise ValueError("Knowledge document allows up to 10 grounded nodes")
+    if not isinstance(edges, list) or not 0 <= len(edges) <= 16:
+        raise ValueError("Knowledge document allows up to 16 supported relationships")
     text = re.sub(r"\s+", "", "\n".join(_strings(source_document(article))))
     references = {}
     for node in nodes:
@@ -155,8 +155,11 @@ Use citationRole=background for those supporting inputs, direct for sources that
 the reported relationship itself. Never turn 'if' into 'only if' or a discussion into causality.
 An archive retrieved after the article revision cannot establish availability at its earlier
 cutoff; state that provenance limit if such evidence is used. Prefer contemporaneous evidence.
-Do not infer a relationship merely because two names occur together. Select 2–6 specific nodes and
-1–6 useful relationships. Prefer fewer fully supported relationships. Prose fields must have both en and zh. Return:
+Do not infer a relationship merely because two names occur together. Select up to 6 specific nodes
+and up to 6 useful relationships. Nodes and edges may be empty: an article's reader value does not
+depend on fitting a graph or connecting to another article. Keep useful concepts even when no
+edge is justified. The guide must explain what understanding or decision this article improves,
+using its actual findings rather than claiming generic importance. Prose fields must have both en and zh. Return:
 {"question":{"en":"","zh":""},"audience":{"en":"","zh":""},
 "decision":{"en":"","zh":""},"contribution":{"en":"","zh":""},
 "limitation":{"en":"","zh":""},
@@ -191,7 +194,7 @@ Return the complete same JSON shape. Remove unsupported relationships, narrow la
 preserve conditional language, and explicitly attribute the author's analysis/hypotheses
 to the original article with bibliography citations marked as background where appropriate.
 Allowed relations: uses, enables, constrains, changes, measures, depends_on, competes_with,
-compares, discusses. Keep at least two grounded nodes and one supported relationship.
+compares, discusses. Omit unsupported nodes or relationships; either list may be empty.
 Do not repair a missing source by inventing evidence. Quotes must remain exact article text.
 """ + json.dumps({"context":context,"knowledge":document,"requiredCorrections":review},ensure_ascii=False),
                         max_tokens=5000)
@@ -268,6 +271,39 @@ def article_document(conn, article_id):
     row = conn.execute("SELECT document_json FROM current_article_knowledge WHERE article_id=%s",
                        (article_id,)).fetchone()
     return json.loads(row["document_json"]) if row else None
+
+
+def reading_connections(conn, article_id, limit=3):
+    """Explain shared context using current reviewed guides, without inventing pairwise claims."""
+    rows = conn.execute("""
+        SELECT a.id article_id,
+            target.document_json::jsonb->'question' question,
+            target.document_json::jsonb->'contribution' contribution,
+            jsonb_agg(jsonb_build_object('id',n.id,'kind',n.kind,
+                'name',jsonb_build_object('en',n.name_en,'zh',n.name_zh))
+                ORDER BY CASE n.kind WHEN 'question' THEN 0 WHEN 'concept' THEN 1 ELSE 2 END,
+                n.name_en,n.id) topics
+        FROM article_knowledge_nodes own
+        JOIN current_article_knowledge origin ON origin.article_id=own.article_id
+        JOIN article_knowledge_nodes other ON other.node_id=own.node_id
+            AND other.article_id<>own.article_id
+        JOIN current_article_knowledge target ON target.article_id=other.article_id
+        JOIN articles a ON a.id=other.article_id
+        JOIN knowledge_nodes n ON n.id=own.node_id
+        WHERE own.article_id=%s
+        GROUP BY a.id,target.document_json
+        ORDER BY count(*) FILTER (WHERE n.kind IN ('question','concept')) DESC,
+            count(*) DESC,a.published_at DESC,a.id DESC
+        LIMIT %s
+        """, (article_id, max(1, min(int(limit), 3)))).fetchall()
+    result = []
+    for row in rows:
+        item = dict(row)
+        for key in ("question", "contribution", "topics"):
+            if isinstance(item[key], str):
+                item[key] = json.loads(item[key])
+        result.append(item)
+    return result
 
 
 def overview(conn, *, locale="en", node="", query="", offset=0):
